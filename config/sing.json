@@ -680,7 +680,7 @@
 				"warp-out"
             ],
 			"url": "https://captive.apple.com/generate_204",
-			"interval": "5",
+			"interval": "5m",
 			"tolerance": 150,
             "interrupt_exist_connections": true
         },
