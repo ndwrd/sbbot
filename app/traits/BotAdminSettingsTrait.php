@@ -414,6 +414,14 @@ public function configMenu()
             ],
         ];
         if ($conf['domain']) {
+            $data[] = [
+                [
+                    'text'          => $this->i18n('change subdomains'),
+                    'callback_data' => '/regenSubdomains',
+                ],
+            ];
+        }
+        if ($conf['domain']) {
             if ($cert = $this->nginxGetTypeCert()) {
                 switch ($cert) {
                     case 'letsencrypt':

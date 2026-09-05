@@ -96,10 +96,10 @@
         {
             "name": "anytls",
             "type": "anytls",
-            "server": "anytls.~domain~",
+            "server": "~anytls_domain~",
             "port": 443,
             "password": "~password~",
-            "sni": "anytls.~domain~"
+            "sni": "~anytls_domain~"
         }
     ],
     "proxy-groups": [

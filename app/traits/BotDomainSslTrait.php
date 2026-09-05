@@ -30,11 +30,35 @@ public function addDomain($domain, $nomenu = false)
         if (!empty($domain)) {
             $conf = $this->getPacConf();
             $conf['domain'] = idn_to_ascii($domain);
+            $conf = $this->ensureProtocolSubdomains($conf);
             $this->setPacConf($conf);
             $this->cloakNginx();
         }
         if (empty($nomenu)) {
             sleep(3);
+            $this->menu('config');
+        }
+    }
+
+public function ensureProtocolSubdomains(array $conf)
+    {
+        // Поддомены naive/anytls намеренно случайные (не "naive.domain"/"anytls.domain") —
+        // буквальное имя протокола в SNI/DNS сразу выдаёт censor'у, что тут за сервис.
+        $conf['naiveSubdomain']  = $conf['naiveSubdomain']  ?: bin2hex(random_bytes(4));
+        $conf['anytlsSubdomain'] = $conf['anytlsSubdomain'] ?: bin2hex(random_bytes(4));
+        return $conf;
+    }
+
+public function regenSubdomains()
+    {
+        $conf = $this->getPacConf();
+        $conf['naiveSubdomain']  = bin2hex(random_bytes(4));
+        $conf['anytlsSubdomain'] = bin2hex(random_bytes(4));
+        $this->setPacConf($conf);
+        $this->cloakNginx();
+        if ($conf['domain'] && $this->nginxGetTypeCert() == 'letsencrypt') {
+            $this->setSSL('letsencrypt');
+        } else {
             $this->menu('config');
         }
     }
@@ -109,10 +133,12 @@ public function setSSL($name)
             case 'letsencrypt':
                 $out[] = 'Install certificate:';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
+                $conf = $this->ensureProtocolSubdomains($conf);
                 $adguardClient = $conf['adguardkey'] ? "-d {$conf['adguardkey']}.{$conf['domain']}" : '';
-                // naive/anytls живут на своих поддоменах (см. cloakNginx()/upstream.conf) —
-                // сертификат должен покрывать их SAN-записями, иначе TLS-хендшейк не пройдёт.
-                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d naive.{$conf['domain']} -d anytls.{$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
+                // naive/anytls живут на своих (случайных, не протокол-именованных) поддоменах
+                // (см. cloakNginx()/upstream.conf) — сертификат должен покрывать их SAN-записями,
+                // иначе TLS-хендшейк не пройдёт.
+                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d {$conf['naiveSubdomain']}.{$conf['domain']} -d {$conf['anytlsSubdomain']}.{$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
                 if ($code > 0) {
                     $this->send($this->input['chat'], "ERROR\n" . implode("\n", $out));
                     break;
@@ -259,7 +285,12 @@ public function cloakNginx()
         $template = file_get_contents('/config/nginx_default.conf');
         // $template = preg_replace('~server_name ip~', "server_name {$this->ip}", $template);
         $template = preg_replace('~server_name domain~', "server_name " . ($conf['domain'] ? " *.{$conf['domain']} {$conf['domain']}" : '_'), $template);
-        $template = preg_replace('~server_name naive\.domain~', "server_name naive.{$conf['domain']}", $template);
+        $before = $conf;
+        $conf   = $this->ensureProtocolSubdomains($conf);
+        if ($conf !== $before) {
+            $this->setPacConf($conf);
+        }
+        $template = preg_replace('~server_name naive\.domain~', "server_name {$conf['naiveSubdomain']}.{$conf['domain']}", $template);
         if ($conf['domain'] && $conf['letsencrypt']) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
             foreach (['domain', 'naive', 'anytls'] as $tag) {
@@ -292,7 +323,7 @@ public function cloakNginx()
 
         if ($conf['domain']) {
             $up = file_get_contents('/config/upstream.conf');
-            $up = preg_replace('~#anytls.+#anytls~s', "#anytls\nanytls.{$conf['domain']} ng-anytls;\n#anytls", $up);
+            $up = preg_replace('~#anytls.+#anytls~s', "#anytls\n{$conf['anytlsSubdomain']}.{$conf['domain']} ng-anytls;\n#anytls", $up);
             file_put_contents('/config/upstream.conf', $up);
             $this->ssh('nginx -s reload 2>&1', 'up');
         }

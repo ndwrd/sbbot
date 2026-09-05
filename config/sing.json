@@ -98,24 +98,24 @@
         {
             "type": "naive",
             "tag": "naive-out",
-            "server": "naive.~domain~",
+            "server": "~naive_domain~",
             "server_port": 443,
             "username": "~email~",
             "password": "~password~",
             "tls": {
                 "enabled": true,
-                "server_name": "naive.~domain~"
+                "server_name": "~naive_domain~"
             }
         },
         {
             "type": "anytls",
             "tag": "anytls-out",
-            "server": "anytls.~domain~",
+            "server": "~anytls_domain~",
             "server_port": 443,
             "password": "~password~",
             "tls": {
                 "enabled": true,
-                "server_name": "anytls.~domain~"
+                "server_name": "~anytls_domain~"
             }
         },
         {

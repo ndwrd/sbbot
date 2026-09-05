@@ -943,6 +943,8 @@ public function templates($type)
             <code>~dnspath~</code>
             <code>~uid~</code>
             <code>~password~</code>
+            <code>~naive_domain~</code>
+            <code>~anytls_domain~</code>
             <code>~domain~</code>
             <code>~directdomain~</code>
             <code>~cdndomain~</code>
@@ -1838,6 +1840,8 @@ public function subscription($return = false)
             '~uid~'          => $uid,
             '~password~'     => $password,
             '~domain~'       => $domain,
+            '~naive_domain~'  => "{$pac['naiveSubdomain']}.{$pac['domain']}",
+            '~anytls_domain~' => "{$pac['anytlsSubdomain']}.{$pac['domain']}",
             '~directdomain~' => $pac['domain'],
             '~cdndomain~'    => $pac['linkdomain'],
             '~short_id~'     => $xr['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0],

@@ -354,6 +354,9 @@ public function action()
             case preg_match('~^/addNipdomain$~', $this->input['callback'], $m):
                 $this->addNipdomain();
                 break;
+            case preg_match('~^/regenSubdomains$~', $this->input['callback'], $m):
+                $this->regenSubdomains();
+                break;
             case preg_match('~^/(?P<action>change|delete)(?P<typelist>\w+) (?P<arg>\d+)(?: (?P<page>\d+))?$~', $this->input['callback'], $m):
                 $this->listPacChange($m['typelist'], $m['action'], $m['arg'], $m['page'] ?: 0);
                 break;
@@ -745,9 +748,18 @@ public function menu($type = false, $arg = false, $return = false)
 
                     $main[] = "<blockquote>";
                     $main[] = "Domains:";
-                    $main[] = $conf['domain'] . (in_array($conf['domain'], $certs) ? ' (ssl: ' . date('Y-m-d H:i:s', $ssl_expiry) . ')' : '');
+                    $main[] = "General: {$conf['domain']}";
+                    if (!empty($conf['naiveSubdomain'])) {
+                        $main[] = "Naive: {$conf['naiveSubdomain']}.{$conf['domain']}";
+                    }
+                    if (!empty($conf['anytlsSubdomain'])) {
+                        $main[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
+                    }
                     if (!empty($conf['adguardkey'])) {
-                        $main[] = "{$conf['adguardkey']}.{$conf['domain']}" . (in_array("{$conf['adguardkey']}.{$conf['domain']}", $certs) ? ' (ssl: ' . date('Y-m-d H:i:s', $ssl_expiry) . ')' : '') . ' adguard DOT';
+                        $main[] = "{$conf['adguardkey']}.{$conf['domain']} adguard DOT";
+                    }
+                    if (in_array($conf['domain'], $certs)) {
+                        $main[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
                     }
                     $main[] = "</blockquote>";
                 } else {
