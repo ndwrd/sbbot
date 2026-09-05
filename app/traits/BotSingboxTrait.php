@@ -122,6 +122,10 @@ public function buildSingboxConfig($pac)
             'tag'         => 'naive-in',
             'listen'      => '0.0.0.0',
             'listen_port' => 8444,
+            // network: tcp — TLS терминируется на ng, до sing-box доходит только
+            // обычный HTTP/2 по TCP; QUIC(UDP)-листенер naive требует TLS всегда,
+            // поэтому его нужно явно отключить, иначе sing-box не стартует.
+            'network'     => 'tcp',
             'users'       => array_map(fn ($u) => ['username' => $u['name'], 'password' => $u['password']], $protocolUsers),
             'tls'         => ['enabled' => false],
         ];
