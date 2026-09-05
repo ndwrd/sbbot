@@ -771,15 +771,11 @@ public function menu($type = false, $arg = false, $return = false)
                     $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
                     $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
                     $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
-                    $this->i18n($this->ssh('pgrep dnstt', 'dnstt') ? 'on' : 'off') . ' ' . $this->i18n('dnstt'),
-                    $this->i18n($this->warpStatus()) . ' ' . $this->i18n('warp'),
                 ],
                 [
                     $this->i18n('on') . ' 443',
                     $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
                     $this->i18n($ports['ad']['enable'] ? 'on' : 'off') . ($ports['ad']['enable'] ? ' ' . $ports['ad']['port'] : 'port unavailable'),
-                    $this->i18n($ports['dnstt']['enable'] ? 'on' : 'off') . ($ports['dnstt']['enable'] ? ' ' . $ports['dnstt']['port'] : 'port unavailable'),
-                    '',
                 ],
             ]);
             $main[] = '';
@@ -817,16 +813,6 @@ public function menu($type = false, $arg = false, $return = false)
                             [
                                 'text'          => $this->i18n('ad_title'),
                                 'callback_data' => "/menu adguard",
-                            ],
-                        ],
-                        [
-                            [
-                                'text'          => $this->i18n('DNSTT'),
-                                'callback_data' => "/dnstt",
-                            ],
-                            [
-                                'text'          => $this->i18n('warp'),
-                                'callback_data' => "/warp",
                             ],
                         ],
                         [
