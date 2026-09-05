@@ -733,8 +733,9 @@
             "username": "~email~",
             "password": "~password~",
             "insecure_concurrency": 3,
-            "udp_over_tcp": false,
+            "udp_over_tcp": true,
             "quic": false,
+            "tcp_fast_open": true,
             "tls": {
                 "enabled": true,
                 "server_name": "~naive_domain~"
