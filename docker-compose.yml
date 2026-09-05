@@ -10,7 +10,7 @@ networks:
         ipam:
             config:
                 - subnet: 10.10.0.0/24
-    xray:
+    internal:
         ipam:
             config:
                 - subnet: 10.10.1.0/24
@@ -38,7 +38,7 @@ services:
             - 443:443/tcp
             - 443:443/udp
         hostname: upstream
-        container_name: upstream-${VER}
+        container_name: gateway-${VER}
         depends_on:
             ng:
                 condition: service_healthy
@@ -77,7 +77,7 @@ services:
         ports:
             - 80:80
         hostname: nginx
-        container_name: nginx-${VER}
+        container_name: web-${VER}
         env_file:
             - path: ./.env
               required: true # default
@@ -88,7 +88,7 @@ services:
         networks:
             default:
                 ipv4_address: 10.10.0.2
-            xray:
+            internal:
                 ipv4_address: 10.10.1.2
         logging: *default-logging
         depends_on:
@@ -136,7 +136,7 @@ services:
             - path: ./override.env
               required: false
         hostname: php
-        container_name: php-${VER}
+        container_name: app-${VER}
         # restart: unless-stopped
         stop_grace_period: 1s
         command: ["/bin/sh", "/start_php.sh"]
@@ -181,7 +181,7 @@ services:
             - path: ./override.env
               required: false
         hostname: service
-        container_name: service-${VER}
+        container_name: worker-${VER}
         # restart: unless-stopped
         stop_grace_period: 1s
         command: ["/bin/sh", "/start_service.sh"]
@@ -216,7 +216,7 @@ services:
             - ./logs/:/logs/
             - ./scripts/start_ad.sh:/start_ad.sh
         hostname: adguard
-        container_name: adguard-${VER}
+        container_name: dns-${VER}
         depends_on:
             php:
                 condition: service_healthy
@@ -245,7 +245,7 @@ services:
             - ./config/mtprotosecret:/mtprotosecret
             - ./logs/:/logs/
         hostname: telegram
-        container_name: mtproto-${VER}
+        container_name: relay-${VER}
         depends_on:
             php:
                 condition: service_healthy
@@ -279,7 +279,7 @@ services:
         ports:
             - 8443:8443/udp
         hostname: singbox
-        container_name: singbox-${VER}
+        container_name: core-${VER}
         depends_on:
             php:
                 condition: service_healthy
@@ -293,7 +293,7 @@ services:
         networks:
             default:
                 ipv4_address: 10.10.0.19
-            xray:
+            internal:
                 ipv4_address: 10.10.1.19
         logging: *default-logging
     wp:
@@ -316,7 +316,7 @@ services:
             - ./scripts/start_wp.sh:/start_wp.sh
             - warp:/etc/warp
         hostname: warp
-        container_name: warp-${VER}
+        container_name: net-${VER}
         command: ["/bin/sh", "/start_wp.sh"]
         depends_on:
             php:
@@ -346,7 +346,7 @@ services:
             - ./config/dnstt:/dnstt
             - ./scripts/start_dnstt.sh:/start_dnstt.sh
         hostname: dnstt
-        container_name: dnstt-${VER}
+        container_name: tunnel-${VER}
         depends_on:
             php:
                 condition: service_healthy

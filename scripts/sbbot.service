@@ -1,5 +1,5 @@
 [Unit]
-Description=VPN: Docker Compose Application Service
+Description=sbbot: Docker Compose Application Service
 Requires=docker.service
 After=docker.service
 [Service]

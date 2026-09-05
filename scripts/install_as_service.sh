@@ -1,4 +1,4 @@
 path=`pwd`
-sed "s|path|$path|g" "$path/scripts/vpnbot.service" > /etc/systemd/system/vpnbot.service
+sed "s|path|$path|g" "$path/scripts/sbbot.service" > /etc/systemd/system/sbbot.service
 systemctl daemon-reload
-systemctl enable vpnbot
+systemctl enable sbbot
