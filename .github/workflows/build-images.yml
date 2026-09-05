@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       sing_box_version:
-        description: 'sing-box tag to build for vpnbot-sbx (blank = dockerfile default)'
+        description: 'sing-box tag to build for the sbx image (blank = dockerfile default)'
         required: false
         default: ''
 
@@ -87,5 +87,5 @@ jobs:
           push: true
           build-args: ${{ steps.args.outputs.value }}
           tags: |
-            ghcr.io/${{ steps.repo.outputs.value }}/vpnbot-${{ matrix.name }}:latest
-            ghcr.io/${{ steps.repo.outputs.value }}/vpnbot-${{ matrix.name }}:${{ github.sha }}
+            ghcr.io/${{ steps.repo.outputs.value }}/${{ matrix.name }}:latest
+            ghcr.io/${{ steps.repo.outputs.value }}/${{ matrix.name }}:${{ github.sha }}
