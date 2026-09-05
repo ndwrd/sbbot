@@ -36,8 +36,10 @@ public function restartSingbox($c, $norestart = false)
         if (empty($norestart)) {
             $this->collectSession();
             file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            $this->ssh('pkill sing-box', 'sbx');
-            $this->ssh('sing-box run -c /sing.json > /dev/null 2>&1 &', 'sbx');
+            // SIGHUP = sing-box's own graceful reload (validates the new config, then
+            // swaps instances with a shutdown grace period for existing connections)
+            // instead of a hard kill; falls back to a cold start if nothing is running yet.
+            $this->ssh('pkill -HUP sing-box || (sing-box run -c /sing.json > /dev/null 2>&1 &)', 'sbx');
         } else {
             file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         }
