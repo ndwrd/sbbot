@@ -35,8 +35,8 @@ tg: # консоль сервиса
 	docker compose exec tg /bin/bash
 dnstt: # консоль сервиса
 	docker compose exec dnstt /bin/sh
-xr: # консоль сервиса
-	docker compose exec xr /bin/sh
+sbx: # консоль сервиса
+	docker compose exec sbx /bin/sh
 service: # консоль сервиса
 	docker compose exec service /bin/sh
 delete:
