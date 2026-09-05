@@ -3,6 +3,10 @@ ARG image
 FROM golang:1.24-alpine AS build
 ARG SING_BOX_VERSION=v1.14.0
 ARG TAGS="with_quic with_utls with_acme with_clash_api with_wireguard with_reality_server with_v2ray_api"
+# sing-box's go.mod can require a newer Go than this base image ships (e.g. v1.14.0
+# needs >=1.25.5 while this image has 1.24.x) — auto lets Go fetch that toolchain
+# on demand instead of hard-failing with "go.mod requires go >= X".
+ENV GOTOOLCHAIN=auto
 RUN apk add --no-cache git ca-certificates \
     && mkdir -p /out \
     && git clone --depth 1 --branch ${SING_BOX_VERSION} https://github.com/SagerNet/sing-box /sing-box \
