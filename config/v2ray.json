@@ -108,7 +108,7 @@
             {
                 "type": "field",
                 "outboundTag": "~outbound~",
-                "domain": "~pac~"
+                "domain": "~domains~"
             },
             {
                 "type": "field",

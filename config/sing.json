@@ -729,7 +729,7 @@
             "tag": "naive-out",
             "server": "~naive_domain~",
             "server_port": 443,
-            "username": "~email~",
+            "username": "~username~",
             "password": "~password~",
             "insecure_concurrency": 3,
             "udp_over_tcp": true,
@@ -793,11 +793,11 @@
                 "addruleset": true,
                 "createruleset": [
                     {
-                        "name": "pac",
+                        "name": "domains",
                         "interval": "600s",
                         "rules": [
                             {
-                                "domain_suffix": "~pac~"
+                                "domain_suffix": "~domains~"
                             }
                         ]
                     }

@@ -150,11 +150,11 @@
         },
         {
             "type": "RULE-SET",
-            "list": "~pac~",
+            "list": "~domains~",
             "action": "PROXY",
             "interval": 60,
             "behavior": "classical",
-            "name": "pac"
+            "name": "domains"
         },
         {
             "type": "RULE-SET",

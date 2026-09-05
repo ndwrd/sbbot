@@ -87,7 +87,7 @@ public function adguardSingboxClients()
                     'schedule' => ['time_zone' => date_default_timezone_get()],
                     'ids'      => [],
                 ],
-                'name'                        => $v['email'],
+                'name'                        => $v['username'],
                 'ids'                         => [$v['id']],
                 'tags'                        => [],
                 'upstreams'                   => [],

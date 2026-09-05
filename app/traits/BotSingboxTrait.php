@@ -56,7 +56,7 @@ public function buildSingboxConfig($pac)
             }
             $u = [
                 'uuid' => $v['id'],
-                'name' => $v['email'] ?? $v['id'],
+                'name' => $v['username'] ?? $v['id'],
             ];
             if ($transport == 'Reality') {
                 $u['flow'] = 'xtls-rprx-vision';
@@ -112,7 +112,7 @@ public function buildSingboxConfig($pac)
             if (empty($v['id']) || !empty($v['off']) || empty($v['password'])) {
                 continue;
             }
-            $protocolUsers[] = ['name' => $v['email'] ?? $v['id'], 'password' => $v['password']];
+            $protocolUsers[] = ['name' => $v['username'] ?? $v['id'], 'password' => $v['password']];
         }
 
         $inbounds = [$inbound];
@@ -205,9 +205,9 @@ public function addXrUser()
     {
         $r = $this->send(
             $this->input['chat'],
-            "@{$this->input['username']} enter name",
+            "@{$this->input['username']} enter description",
             $this->input['message_id'],
-            reply: 'enter name:description:uuid:password [,name:description:uuid:password]',
+            reply: 'enter description:username:uuid:password [,description:username:uuid:password] (description required, username auto-generated if omitted)',
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message'  => $this->input['message_id'],
@@ -299,7 +299,7 @@ public function dw($u, $t)
         $_GET['t']              = $t;
         $_SERVER['SERVER_NAME'] = $this->getDomain($pac['transport'] != 'Reality');
         $conf                   = $this->subscription(1);
-        $this->sendFile($this->input['from'], new CURLStringFile($conf, $c['email'] . ($t == 'cl' ? '_mihomo.yaml' :($t == 'si' ? '_singbox.json' : '_v2ray.json'))));
+        $this->sendFile($this->input['from'], new CURLStringFile($conf, $c['username'] . ($t == 'cl' ? '_mihomo.yaml' :($t == 'si' ? '_singbox.json' : '_v2ray.json'))));
     }
 
 public function timerXr($k)
@@ -657,7 +657,7 @@ public function linkVless($i, $s = false)
             case 1:
                 return "v2rayng://install-config?url=$v2#{$c['inbounds'][0]['settings']['clients'][$i]['id']}";
             case 2:
-                return "sing-box://import-remote-profile/?url={$si}#{$c['inbounds'][0]['settings']['clients'][$i]['email']}";
+                return "sing-box://import-remote-profile/?url={$si}#{$c['inbounds'][0]['settings']['clients'][$i]['username']}";
 
             default:
                 switch ($pac['transport']) {
@@ -669,7 +669,7 @@ public function linkVless($i, $s = false)
                                     . "&sid={$c['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0]}"
                                     . "&type=tcp"
                                     . "&flow=xtls-rprx-vision"
-                                    . "#{$c['inbounds'][0]['settings']['clients'][$i]['email']}";
+                                    . "#{$c['inbounds'][0]['settings']['clients'][$i]['username']}";
                         break;
 
                     default:
@@ -680,7 +680,7 @@ public function linkVless($i, $s = false)
                                     . "&sni=$domain"
                                     . "&fp=chrome"
                                     . "&type=ws"
-                                    . "#{$c['inbounds'][0]['settings']['clients'][$i]['email']}";
+                                    . "#{$c['inbounds'][0]['settings']['clients'][$i]['username']}";
                         break;
                 }
                 return $link;
@@ -712,27 +712,33 @@ public function addxrus($users)
         $users = array_map(fn ($e) => trim($e), explode(',', $users));
         $users = array_map(fn ($e) => explode(':', $e), $users);
         foreach ($c['inbounds'][0]['settings']['clients'] as $k => $v) {
-            $uuids[]  = $v['id'];
-            $emails[] = $v['email'];
+            $uuids[]     = $v['id'];
+            $usernames[] = $v['username'];
         }
         foreach ($users as $user) {
-            $description = $user[1] ?? '';
+            $description = $user[0] ?? '';
+            $username    = $user[1] ?? '';
             $uuid        = $user[2] ?? '';
             $password    = $user[3] ?? '';
-            $uuid        = $uuid ?: trim($this->ssh('sing-box generate uuid', 'sbx'));
-            $password    = $password ?: trim($this->ssh('openssl rand -base64 16', 'sbx'));
-            if (in_array($uuid, $uuids ?: []) || in_array($user[0], $emails ?: [])) {
-                $this->send($this->input['chat'], "user {$user[0]} already exists");
+            if ($description === '') {
+                $this->send($this->input['chat'], 'description is required');
+                return $this->singbox();
+            }
+            // username — 8-символьный hex (буквы+цифры), тот же принцип анти-фингерпринта,
+            // что и у naiveSubdomain/anytlsSubdomain: он же naive-username, он же имя конфига.
+            $username = $username ?: bin2hex(random_bytes(4));
+            $uuid     = $uuid ?: trim($this->ssh('sing-box generate uuid', 'sbx'));
+            $password = $password ?: trim($this->ssh('openssl rand -base64 16', 'sbx'));
+            if (in_array($uuid, $uuids ?: []) || in_array($username, $usernames ?: [])) {
+                $this->send($this->input['chat'], "user {$username} already exists");
                 return $this->singbox();
             }
             $client = [
-                'id'       => $uuid,
-                'email'    => $user[0],
-                'password' => $password,
+                'id'          => $uuid,
+                'username'    => $username,
+                'description' => $description,
+                'password'    => $password,
             ];
-            if ($description !== '') {
-                $client['description'] = $description;
-            }
             if ($p['transport'] == 'Reality') {
                 $client['flow'] = 'xtls-rprx-vision';
             }
@@ -790,7 +796,7 @@ public function switchXr($i, $nm = 0, $time = false)
 public function renXrUs($name, $i)
     {
         $c = $this->getSingbox();
-        $c['inbounds'][0]['settings']['clients'][$i]['email'] = $name;
+        $c['inbounds'][0]['settings']['clients'][$i]['username'] = $name;
         $this->restartSingbox($c);
         $this->adguardSingboxClients();
         $this->userXr($i);
@@ -954,26 +960,22 @@ public function templates($type)
         $text[] = "Menu -> " . $this->i18n('vless') . " -> " . $this->i18n($type) . " templates";
         $text[] = <<<TEXT
             <code>~outbound~</code>
-            <code>~pac~</code>
-            <code>~package~</code>
-            <code>~process~</code>
             <code>~subnet~</code>
-            <code>~block~</code>
+            <code>~domains~</code>
+            <code>~process~</code>
+            <code>~package~</code>
             <code>~warp~</code>
+            <code>~block~</code>
             <code>~dns~</code>
             <code>~dnspath~</code>
+            <code>~wspath~</code>
             <code>~uid~</code>
             <code>~password~</code>
+            <code>~username~</code>
+            <code>~ip~</code>
+            <code>~domain~</code>
             <code>~naive_domain~</code>
             <code>~anytls_domain~</code>
-            <code>~domain~</code>
-            <code>~directdomain~</code>
-            <code>~cdndomain~</code>
-            <code>~short_id~</code>
-            <code>~email~</code>
-            <code>~public_key~</code>
-            <code>~server_name~</code>
-            <code>~ip~</code>
             TEXT;
         $templates = $pac["{$type}templates"];
 
@@ -1109,7 +1111,7 @@ public function singbox($page = 0)
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
             $data[]   = [
                 [
-                    'text'          => "{$v['email']}" . (!empty($v['description']) ? " — {$v['description']}" : '') . ($time ? ": $time" : ''),
+                    'text'          => "{$v['username']}" . (!empty($v['description']) ? " — {$v['description']}" : '') . ($time ? ": $time" : ''),
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1298,7 +1300,7 @@ public function templateUser($type, $i)
     {
         $c         = $this->getSingbox();
         $pac       = $this->getPacConf();
-        $text[]    = "Menu -> " . $this->i18n('vless') . " -> {$c['inbounds'][0]['settings']['clients'][$i]['email']}\n";
+        $text[]    = "Menu -> " . $this->i18n('vless') . " -> {$c['inbounds'][0]['settings']['clients'][$i]['username']}\n";
         $templates = $pac["{$type}templates"];
         $data[]    = [
             [
@@ -1343,19 +1345,19 @@ public function userXr($i)
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
 
-        $text[] = "Menu -> " . $this->i18n('vless') . " -> {$c['email']}\n";
+        $text[] = "Menu -> " . $this->i18n('vless') . " -> {$c['username']}\n";
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
             $text[] = "<a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>subscription</a>";
         }
         $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
 
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['email']}'>import://v2rayng</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['email']}'>import://sing-box</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=st&s={$c['id']}#{$c['email']}'>import://streisand</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=h&s={$c['id']}#{$c['email']}'>import://hiddify</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['email']}'>import://karing</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['email']}'>import://mihomo</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['email']}'>import://rabbit-hole</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['username']}'>import://v2rayng</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['username']}'>import://sing-box</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=st&s={$c['id']}#{$c['username']}'>import://streisand</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=h&s={$c['id']}#{$c['username']}'>import://hiddify</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['username']}'>import://karing</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['username']}'>import://mihomo</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['username']}'>import://rabbit-hole</a>";
 
         $si = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
             'h' => $hash,
@@ -1493,9 +1495,9 @@ public function sub()
                 if (empty($v['off'])) {
                     $flag = false;
                 }
-                $uid    = $v['id'];
-                $email  = $v['email'];
-                $expire = $v['time'];
+                $uid      = $v['id'];
+                $username = $v['username'];
+                $expire   = $v['time'];
                 break;
             }
         }
@@ -1560,7 +1562,7 @@ public function subscription($return = false)
                 }
                 $template = base64_decode($v["{$type}template"]);
                 $uid      = $v['id'];
-                $email    = $v['email'];
+                $username = $v['username'];
                 $password = $v['password'] ?? '';
                 break;
             }
@@ -1603,7 +1605,7 @@ public function subscription($return = false)
                     header("Location: hiddify://install-config/?url=$si");
                     exit;
                 case 'c':
-                    header("Location: clash://install-config/?url=$cl&overwrite=no&name=$email");
+                    header("Location: clash://install-config/?url=$cl&overwrite=no&name=$username");
                     exit;
                 case 'rh':
                     header("Location: rabbithole://add/$cl");
@@ -1857,7 +1859,7 @@ public function subscription($return = false)
                 break;
         }
         $c = json_decode($this->replaceTags(json_encode($c), [
-            '"~pac~"'        => json_encode(array_keys(array_filter($pac['includelist'] ?: []))),
+            '"~domains~"'    => json_encode(array_keys(array_filter($pac['includelist'] ?: []))),
             '"~block~"'      => json_encode(array_keys(array_filter($pac['blocklist'] ?: []))),
             '"~warp~"'       => json_encode(array_keys(array_filter($pac['warplist'] ?: []))),
             '"~process~"'    => json_encode(array_keys(array_filter($pac['processlist'] ?: []))),
@@ -1871,10 +1873,8 @@ public function subscription($return = false)
             '~domain~'       => $domain,
             '~naive_domain~'  => "{$pac['naiveSubdomain']}.{$pac['domain']}",
             '~anytls_domain~' => "{$pac['anytlsSubdomain']}.{$pac['domain']}",
-            '~directdomain~' => $pac['domain'],
-            '~cdndomain~'    => $pac['linkdomain'],
             '~short_id~'     => $xr['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0],
-            '~email~'        => $email,
+            '~username~'     => $username,
             '~public_key~'   => $pac['reality']['publicKey'],
             '~server_name~'  => $xr['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0],
             '~ip~'           => $this->ip,
