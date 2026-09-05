@@ -56,6 +56,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: repository (lowercase, GHCR requires it)
+        id: repo
+        shell: bash
+        run: echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: build args
         id: args
         shell: bash
@@ -82,5 +87,5 @@ jobs:
           push: true
           build-args: ${{ steps.args.outputs.value }}
           tags: |
-            ghcr.io/${{ github.repository }}/vpnbot-${{ matrix.name }}:latest
-            ghcr.io/${{ github.repository }}/vpnbot-${{ matrix.name }}:${{ github.sha }}
+            ghcr.io/${{ steps.repo.outputs.value }}/vpnbot-${{ matrix.name }}:latest
+            ghcr.io/${{ steps.repo.outputs.value }}/vpnbot-${{ matrix.name }}:${{ github.sha }}

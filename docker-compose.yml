@@ -20,7 +20,7 @@ volumes:
 
 services:
     up:
-        image: ghcr.io/ndwrd/testbot/vpnbot-ng:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-ng:latest
         build:
             context: dockerfile
             dockerfile: nginx.dockerfile
@@ -56,7 +56,7 @@ services:
                 ipv4_address: 10.10.0.10
         logging: *default-logging
     ng:
-        image: ghcr.io/ndwrd/testbot/vpnbot-ng:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-ng:latest
         build:
             context: dockerfile
             dockerfile: nginx.dockerfile
@@ -104,7 +104,7 @@ services:
             timeout: 5s
             retries: 3
     php:
-        image: ghcr.io/ndwrd/testbot/vpnbot-php:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-php:latest
         build:
             dockerfile: dockerfile/php.dockerfile
             args:
@@ -155,7 +155,7 @@ services:
             timeout: 5s
             retries: 5
     service:
-        image: ghcr.io/ndwrd/testbot/vpnbot-php:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-php:latest
         build:
             dockerfile: dockerfile/php.dockerfile
             args:
@@ -201,7 +201,7 @@ services:
             - sbx
             - dnstt
     ad:
-        image: ghcr.io/ndwrd/testbot/vpnbot-ad:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-ad:latest
         build:
             dockerfile: dockerfile/adguard.dockerfile
             args:
@@ -236,7 +236,7 @@ services:
         entrypoint: ["/bin/sh", "/start_ad.sh"]
         logging: *default-logging
     tg:
-        image: ghcr.io/ndwrd/testbot/vpnbot-tg:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-tg:latest
         build:
             dockerfile: dockerfile/telegram.dockerfile
         volumes:
@@ -265,7 +265,7 @@ services:
                 ipv4_address: 10.10.0.8
         logging: *default-logging
     sbx:
-        image: ghcr.io/ndwrd/testbot/vpnbot-sbx:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-sbx:latest
         build:
             dockerfile: dockerfile/singbox.dockerfile
             args:
@@ -296,7 +296,7 @@ services:
                 ipv4_address: 10.10.1.19
         logging: *default-logging
     wp:
-        image: ghcr.io/ndwrd/testbot/vpnbot-wg:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-wg:latest
         build:
             dockerfile: dockerfile/wireguard.dockerfile
             args:
@@ -332,7 +332,7 @@ services:
                 ipv4_address: 10.10.0.13
         logging: *default-logging
     dnstt:
-        image: ghcr.io/ndwrd/testbot/vpnbot-dnstt:latest
+        image: ghcr.io/ndwrd/sbbot/vpnbot-dnstt:latest
         build:
             dockerfile: dockerfile/dnstt.dockerfile
             args:
