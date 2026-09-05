@@ -88,7 +88,7 @@
             "type": "hysteria2",
             "tag": "hysteria2-out",
             "server": "~domain~",
-            "server_port": 8443,
+            "server_port": 443,
             "password": "~password~",
             "tls": {
                 "enabled": true,

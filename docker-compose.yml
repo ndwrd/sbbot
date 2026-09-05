@@ -36,7 +36,6 @@ services:
             - ./logs/:/logs/
         ports:
             - 443:443/tcp
-            - 443:443/udp
         hostname: upstream
         container_name: gateway-${VER}
         depends_on:
@@ -277,7 +276,7 @@ services:
             - ./certs/:/certs/
             - ./logs:/logs
         ports:
-            - 8443:8443/udp
+            - 443:443/udp
         hostname: singbox
         container_name: core-${VER}
         depends_on:

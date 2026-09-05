@@ -89,7 +89,7 @@
             "name": "hysteria2",
             "type": "hysteria2",
             "server": "~domain~",
-            "port": 8443,
+            "port": 443,
             "password": "~password~",
             "sni": "~domain~"
         },

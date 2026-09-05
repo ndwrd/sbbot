@@ -133,7 +133,7 @@ public function buildSingboxConfig($pac)
             'type'        => 'hysteria2',
             'tag'         => 'hysteria2-in',
             'listen'      => '0.0.0.0',
-            'listen_port' => 8443,
+            'listen_port' => 443,
             'users'       => $protocolUsers,
             'tls'         => [
                 'enabled'          => true,
