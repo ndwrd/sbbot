@@ -7,13 +7,17 @@ x-logging:
 
 networks:
     default:
+        enable_ipv6: true
         ipam:
             config:
                 - subnet: 10.10.0.0/24
+                - subnet: fd00:10:10:0::/64
     internal:
+        enable_ipv6: true
         ipam:
             config:
                 - subnet: 10.10.1.0/24
+                - subnet: fd00:10:10:1::/64
 volumes:
     adguard:
     warp:
