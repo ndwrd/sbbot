@@ -70,6 +70,12 @@ public function buildSingboxConfig($pac)
             'listen'      => '0.0.0.0',
             'listen_port' => 443,
             'users'       => $users,
+            // multiplex поддерживает только vless среди наших протоколов (naive/hysteria2/
+            // anytls мультиплексируются на своём транспортном уровне и такого поля не имеют).
+            'multiplex'   => [
+                'enabled' => true,
+                'padding' => true,
+            ],
         ];
 
         if ($transport == 'Reality') {
@@ -121,12 +127,23 @@ public function buildSingboxConfig($pac)
         ];
 
         $inbounds[] = [
-            'type'        => 'anytls',
-            'tag'         => 'anytls-in',
-            'listen'      => '0.0.0.0',
-            'listen_port' => 8445,
-            'users'       => $protocolUsers,
-            'tls'         => ['enabled' => false],
+            'type'           => 'anytls',
+            'tag'            => 'anytls-in',
+            'listen'         => '0.0.0.0',
+            'listen_port'    => 8445,
+            'users'          => $protocolUsers,
+            'padding_scheme' => [
+                'stop=8',
+                '0=30-30',
+                '1=100-400',
+                '2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000',
+                '3=9-9,500-1000',
+                '4=500-1000',
+                '5=500-1000',
+                '6=500-1000',
+                '7=500-1000',
+            ],
+            'tls'            => ['enabled' => false],
         ];
 
         $inbounds[] = [

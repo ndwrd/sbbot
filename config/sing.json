@@ -669,12 +669,26 @@
             "type": "direct",
             "tag": "direct"
         },
-        {
+		{
+            "type": "urltest",
             "tag": "~outbound~",
+            "outbounds": [
+                "vless-out",
+                "hysteria2-out",
+                "naive-out",
+                "anytls-out",
+				"warp-out"
+            ],
+			"url": "https://captive.apple.com/generate_204",
+			"interval": "5",
+			"tolerance": 150,
+            "interrupt_exist_connections": true
+        },
+        {
+            "tag": "vless-out",
             "type": "vless",
             "server": "~domain~",
             "server_port": 443,
-            "flow": "xtls-rprx-vision",
             "tls": {
                 "enabled": true,
                 "insecure": false,
@@ -690,7 +704,15 @@
                 }
             },
             "uuid": "~uid~",
-            "tcp_fast_open": true
+            "tcp_fast_open": true,
+            "multiplex": {
+                "enabled": true,
+                "protocol": "smux",
+                "max_connections": 3,
+                "min_streams": 4,
+                "max_streams": 0,
+                "padding": true
+            }
         },
         {
             "type": "hysteria2",
@@ -710,6 +732,9 @@
             "server_port": 443,
             "username": "~email~",
             "password": "~password~",
+            "insecure_concurrency": 3,
+            "udp_over_tcp": false,
+            "quic": false,
             "tls": {
                 "enabled": true,
                 "server_name": "~naive_domain~"
@@ -725,6 +750,13 @@
                 "enabled": true,
                 "server_name": "~anytls_domain~"
             }
+        },
+		{
+            "type": "socks",
+            "tag": "warp-out",
+            "server": "10.10.0.13",
+            "server_port": 1080,
+            "detour": "vless-out"
         }
     ],
     "route": {
@@ -740,6 +772,14 @@
             {
                 "protocol": "dns",
                 "action": "hijack-dns"
+            },
+			{
+				"clash_mode": "Direct",
+                "outbound": "direct"
+            },
+			{
+				"clash_mode": "Global",
+                "outbound": "~outbound~"
             },
             {
                 "ip_is_private": true,
