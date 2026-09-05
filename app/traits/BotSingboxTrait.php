@@ -946,7 +946,7 @@ public function templates($type)
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/singbox",
+                'callback_data' => "/templatesMenu",
             ],
         ];
         $this->update(
@@ -994,20 +994,6 @@ public function singbox($page = 0)
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
         $text[] = 'transport: ' . ($p['transport'] ?: 'Websocket');
-        $st = $this->getSingboxStats();
-        $td = $this->getBytes($st['global']['download'] + $st['session']['download']);
-        $tu = $this->getBytes($st['global']['upload'] + $st['session']['upload']);
-        $text[] = "↓$td  ↑$tu";
-        $data[] = [
-            [
-                'text'          => $this->i18n('reset stats'),
-                'callback_data' => '/resetXrStats',
-            ],
-            [
-                'text'          => $this->i18n('reset monthly') . ": " . $this->i18n(!empty($this->getPacConf()['reset_monthly']) ? 'on' : 'off'),
-                'callback_data' => '/switchMonthlyStats',
-            ],
-        ];
         $data[] = [
             [
                 'text'          => $this->i18n('main outbound name: ') . ($p['outbound'] ?? 'proxy'),
@@ -1016,32 +1002,12 @@ public function singbox($page = 0)
         ];
         $data[] = [
             [
-                'text'          => $p['linkdomain'] ?? $this->i18n('cdn'),
-                'callback_data' => '/addLinkDomain',
-            ],
-        ];
-        $data[] = [
-            [
-                'text'          => $this->i18n('v2ray templates'),
-                'callback_data' => "/templates v2ray",
-            ],
-            [
-                'text'          => $this->i18n('sing-box templates'),
-                'callback_data' => "/templates sing",
-            ],
-            [
-                'text'          => $this->i18n('mihomo templates'),
-                'callback_data' => "/templates clash",
-            ],
-        ];
-        $data[] = [
-            [
                 'text'          => $this->i18n('routes'),
                 'callback_data' => "/routes",
             ],
             [
-                'text'          => $this->i18n('tun lists'),
-                'callback_data' => "/tun",
+                'text'          => $this->i18n('templates'),
+                'callback_data' => "/templatesMenu",
             ],
         ];
         $on = $off = 0;
@@ -1061,12 +1027,10 @@ public function singbox($page = 0)
         $page    = $page == -2 ? $all - 1 : $page;
         $clients = $page != -1 ? array_slice($clients, $page * $this->limit, $this->limit, true) : $clients;
         foreach ($clients as $k => $v) {
-            $download = $this->getBytes($st['users'][$k]['global']['download'] + $st['users'][$k]['session']['download']);
-            $upload   = $this->getBytes($st['users'][$k]['global']['upload'] + $st['users'][$k]['session']['upload']);
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
             $data[]   = [
                 [
-                    'text'          => "{$v['email']}" . ($time ? ": $time" : '') . " (↓$download  ↑$upload)",
+                    'text'          => "{$v['email']}" . ($time ? ": $time" : ''),
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1106,6 +1070,38 @@ public function singbox($page = 0)
             [
                 'text'          => $this->i18n('back'),
                 'callback_data' => "/menu",
+            ],
+        ];
+        $this->update(
+            $this->input['chat'],
+            $this->input['message_id'],
+            implode("\n", $text ?: ['...']),
+            $data ?: false,
+        );
+    }
+
+public function templatesMenu()
+    {
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('templates');
+
+        $data = [
+            [[
+                'text'          => 'Xray',
+                'callback_data' => "/templates v2ray",
+            ]],
+            [[
+                'text'          => 'Sing-box',
+                'callback_data' => "/templates sing",
+            ]],
+            [[
+                'text'          => 'Mihomo',
+                'callback_data' => "/templates clash",
+            ]],
+        ];
+        $data[] = [
+            [
+                'text'          => $this->i18n('back'),
+                'callback_data' => "/singbox",
             ],
         ];
         $this->update(

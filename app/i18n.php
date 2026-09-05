@@ -270,8 +270,8 @@ $i = [
         'ru' => 'очистить',
     ],
     'vless'  => [
-        'en' => 'Vless',
-        'ru' => 'Vless',
+        'en' => 'Sing-box',
+        'ru' => 'Sing-box',
     ],
     'clash'  => [
         'en' => 'mihomo',

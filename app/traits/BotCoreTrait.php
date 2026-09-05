@@ -192,9 +192,6 @@ public function action()
             case preg_match('~^/addSubdomain$~', $this->input['callback'], $m):
                 $this->addSubdomain();
                 break;
-            case preg_match('~^/addLinkDomain$~', $this->input['callback'], $m):
-                $this->addLinkDomain();
-                break;
             case preg_match('~^/id$~', $this->input['message'], $m):
                 $this->send($this->input['chat'], "your id: {$this->input['from']}\nchat id: {$this->input['chat']}", $this->input['message_id']);
                 break;
@@ -377,6 +374,9 @@ public function action()
                 break;
             case preg_match('~^/singbox(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->singbox($m[1] ?: 0);
+                break;
+            case preg_match('~^/templatesMenu$~', $this->input['callback'], $m):
+                $this->templatesMenu();
                 break;
             case preg_match('~^/xtlsblock(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->xtlsblock($m[1] ?: 0);

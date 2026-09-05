@@ -217,33 +217,6 @@ public function addSubdomain()
         ];
     }
 
-public function addLinkDomain()
-    {
-        $r = $this->send(
-            $this->input['chat'],
-            "@{$this->input['username']} enter domain for link",
-            $this->input['message_id'],
-            reply: 'enter domain for link',
-        );
-        $_SESSION['reply'][$r['result']['message_id']] = [
-            'start_message' => $this->input['message_id'],
-            'callback'      => 'setLinkDomain',
-            'args'          => [],
-        ];
-    }
-
-public function setLinkDomain($text)
-    {
-        $c = $this->getPacConf();
-        if (empty($text)) {
-            unset($c['linkdomain']);
-        } else {
-            $c['linkdomain'] = trim($text);
-        }
-        $this->setPacConf($c);
-        $this->singbox();
-    }
-
 public function setSubdomain($text)
     {
         $c = $this->getPacConf();
