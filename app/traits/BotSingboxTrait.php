@@ -1022,29 +1022,6 @@ public function singbox($page = 0)
         ];
         $data[] = [
             [
-                'text'          => $this->i18n('RLTY') . ' ' . ($p['transport'] == 'Reality' ? $this->i18n('on') : $this->i18n('off')),
-                'callback_data' => "/changeTransport Reality",
-            ],
-            [
-                'text'          => $this->i18n('WS') . ' ' . ($p['transport'] == 'Websocket' ? $this->i18n('on') : $this->i18n('off')),
-                'callback_data' => "/changeTransport Websocket",
-            ],
-        ];
-
-        if ($p['transport'] == 'Reality') {
-            $data[] = [
-                [
-                    'text'          => $this->i18n('changeFakeDomain'),
-                    'callback_data' => "/changeFakeDomain",
-                ],
-                [
-                    'text'          => $this->i18n('selfFakeDomain'),
-                    'callback_data' => "/selfFakeDomain",
-                ],
-            ];
-        }
-        $data[] = [
-            [
                 'text'          => $this->i18n('v2ray templates'),
                 'callback_data' => "/templates v2ray",
             ],
