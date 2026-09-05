@@ -1,15 +1,15 @@
 <?php
 
-trait BotXrayTrait
+trait BotSingboxTrait
 {
-public function restartXray($c, $norestart = false)
+public function restartSingbox($c, $norestart = false)
     {
         // Виртуальный вид (та же форма, что был у xray.json) сохраняется в pac.json —
         // sing-box падает на неизвестных полях (off/time/template), поэтому книга
         // клиентов и sing-box-конфиг теперь разные файлы. См. план перехода на sing-box.
         $clients = array_values($c['inbounds'][0]['settings']['clients'] ?? []);
         $pac     = $this->getPacConf();
-        $pac['xrayClients'] = $clients;
+        $pac['singboxClients'] = $clients;
 
         $reality = $c['inbounds'][0]['streamSettings']['realitySettings'] ?? [];
         if (array_key_exists('serverNames', $reality)) {
@@ -25,10 +25,10 @@ public function restartXray($c, $norestart = false)
             $pac['reality']['privateKey'] = $reality['privateKey'];
         }
         if (array_key_exists('outbounds', $c)) {
-            $pac['xrayOutbounds'] = $c['outbounds'];
+            $pac['singboxOutbounds'] = $c['outbounds'];
         }
         if (isset($c['routing']['rules'])) {
-            $pac['xrayRoutingRules'] = $c['routing']['rules'];
+            $pac['singboxRoutingRules'] = $c['routing']['rules'];
         }
         $this->setPacConf($pac);
 
@@ -48,7 +48,7 @@ public function buildSingboxConfig($pac)
         $hash      = $this->getHashBot();
         $transport = $pac['transport'] ?? 'Websocket';
         $users     = [];
-        foreach ($pac['xrayClients'] ?? [] as $v) {
+        foreach ($pac['singboxClients'] ?? [] as $v) {
             if (empty($v['id']) || !empty($v['off'])) {
                 continue;
             }
@@ -99,7 +99,7 @@ public function buildSingboxConfig($pac)
             ['type' => 'direct', 'tag' => 'direct'],
             ['type' => 'block', 'tag' => 'block'],
         ];
-        foreach ($pac['xrayOutbounds'] ?? [] as $o) {
+        foreach ($pac['singboxOutbounds'] ?? [] as $o) {
             $outbounds[] = $o;
         }
 
@@ -116,7 +116,7 @@ public function buildSingboxConfig($pac)
             'inbounds'  => [$inbound],
             'outbounds' => $outbounds,
             'route'     => [
-                'rules' => $pac['xrayRoutingRules'] ?? [],
+                'rules' => $pac['singboxRoutingRules'] ?? [],
                 'final' => 'direct',
             ],
             'experimental' => [
@@ -165,15 +165,15 @@ public function renameXrUser($i)
         ];
     }
 
-public function xrayStatsUser()
+public function singboxStatsUser()
     {
         // Живой сбор статистики через sing-box v2ray_api временно не реализован
         // (нужен отдельный gRPC-клиент внутри sbx) — заглушка по согласованному плану,
-        // getXrayStats()/setXrayStats() продолжают отдавать последнее сохранённое значение.
+        // getSingboxStats()/setSingboxStats() продолжают отдавать последнее сохранённое значение.
         return;
     }
 
-public function checkResetXrayStats()
+public function checkResetSingboxStats()
     {
         $pac = $this->getPacConf();
         if (!empty($pac['reset_monthly'])) {
@@ -194,11 +194,11 @@ public function checkResetXrayStats()
                 $lastScheduledReset = $start + ($periodsElapsed * $period);
 
                 // Проверяем, делали ли уже сброс в этом периоде
-                $lastResetTime = $pac['last_reset_xray_time'] ?? 0;
+                $lastResetTime = $pac['last_reset_singbox_time'] ?? 0;
 
                 // Если последний сброс был сделан до начала текущего периода - делаем сброс
                 if ($lastResetTime < $lastScheduledReset) {
-                    $pac['last_reset_xray_time'] = $now;
+                    $pac['last_reset_singbox_time'] = $now;
                     $this->setPacConf($pac);
                     $this->resetXrStats(1);
                     require dirname(__DIR__) . '/config.php';
@@ -213,7 +213,7 @@ public function checkResetXrayStats()
 public function shutdownClientXr()
     {
         try {
-            $c = $this->getXray();
+            $c = $this->getSingbox();
             foreach ($c['inbounds'][0]['settings']['clients'] as $k => $v) {
                 if (!empty($v['time']) && ($v['time'] < time())) {
                     $this->switchXr($k, 1);
@@ -226,7 +226,7 @@ public function shutdownClientXr()
 public function dw($u, $t)
     {
         $pac                    = $this->getPacConf();
-        $c                      = $this->getXray()['inbounds'][0]['settings']['clients'][$u];
+        $c                      = $this->getSingbox()['inbounds'][0]['settings']['clients'][$u];
         $_GET['s']              = $c['id'];
         $_GET['t']              = $t;
         $_SERVER['SERVER_NAME'] = $this->getDomain($pac['transport'] != 'Reality');
@@ -256,11 +256,11 @@ public function backXtlsList($type, $page = 0)
                 $this->xtlsproxy($page);
                 break;
             case 'blocklist':
-                $this->xrayUpdateRules();
+                $this->singboxUpdateRules();
                 $this->xtlsblock($page);
                 break;
             case 'warplist':
-                $this->xrayUpdateRules();
+                $this->singboxUpdateRules();
                 $this->xtlswarp($page);
                 break;
             case 'processlist':
@@ -289,10 +289,10 @@ public function backXtlsList($type, $page = 0)
         }
     }
 
-public function xrayUpdateRules()
+public function singboxUpdateRules()
     {
         $c  = $this->getPacConf();
-        $xr = $this->getXray();
+        $xr = $this->getSingbox();
         $xr['outbounds'] = [
             [
                 'type'        => 'socks',
@@ -334,7 +334,7 @@ public function xrayUpdateRules()
         );
 
         $xr['routing']['rules'] = $rules;
-        $this->restartXray($xr);
+        $this->restartSingbox($xr);
     }
 
 public function tunpackagemode()
@@ -355,7 +355,7 @@ public function tunprocessmode()
 
 public function tunpackage($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('package');
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('package');
 
         [$data] = $this->listPac('tunpackage', $page, 'tunpackage');
         $data[] = [
@@ -374,7 +374,7 @@ public function tunpackage($page = 0)
 
 public function tunprocess($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('process');
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('process');
 
         [$data] = $this->listPac('tunprocess', $page, 'tunprocess');
         $data[] = [
@@ -393,7 +393,7 @@ public function tunprocess($page = 0)
 
 public function xtlsblock($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> block list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> block list';
 
         [$data] = $this->listPac('blocklist', $page, 'xtlsblock');
         $data[] = [
@@ -412,7 +412,7 @@ public function xtlsblock($page = 0)
 
 public function xtlswarp($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> warp list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> warp list';
 
         [$data] = $this->listPac('warplist', $page, 'xtlswarp');
         $data[] = [
@@ -433,7 +433,7 @@ public function xtlsproxy($page = 0)
     {
         $_SESSION['proxylistentry'] = 1;
         $p = $this->getPacConf();
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> proxy list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> proxy list';
         [$data] = $this->listPac('includelist', $page, 'xtlsproxy');
         $data[] = [
             [
@@ -483,7 +483,7 @@ public function processOutbound()
 
 public function xtlsapp($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> package list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> package list';
 
         [$data] = $this->listPac('packagelist', $page, 'xtlsapp');
         $p      = $this->getPacConf();
@@ -503,7 +503,7 @@ public function xtlsapp($page = 0)
 
 public function xtlsprocess($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> process list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> process list';
 
         [$data] = $this->listPac('processlist', $page, 'xtlsprocess');
         $data[] = [
@@ -522,7 +522,7 @@ public function xtlsprocess($page = 0)
 
 public function xtlssubnet($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> subnet';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> subnet';
 
         [$data] = $this->listPac('subnetlist', $page, 'xtlssubnet');
         $data[] = [
@@ -541,7 +541,7 @@ public function xtlssubnet($page = 0)
 
 public function xtlsrulesset($page = 0)
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('routes') . ' -> rulesset list';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> rulesset list';
 
         [$data, $tmp] = $this->listPac('rulessetlist', $page, 'xtlsrulesset', 1);
         $text = array_merge($text, $tmp ?: []);
@@ -564,12 +564,12 @@ public function switchMonthlyStats()
         $c = $this->getPacConf();
         $c['reset_monthly'] = $c['reset_monthly'] ? 0 : 1;
         $this->setPacConf($c);
-        $this->xray();
+        $this->singbox();
     }
 
-public function linkXray($i, $s = false)
+public function linkVless($i, $s = false)
     {
-        $c      = $this->getXray();
+        $c      = $this->getSingbox();
         $pac    = $this->getPacConf();
         $domain = $this->getDomain($pac['transport'] != 'Reality');
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
@@ -597,7 +597,7 @@ public function linkXray($i, $s = false)
                         $link = "vless://{$c['inbounds'][0]['settings']['clients'][$i]['id']}@$domain:443"
                                     . "?security=reality"
                                     . "&sni={$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}"
-                                    . "&fp=chrome&pbk={$pac['xray']}"
+                                    . "&fp=chrome&pbk={$pac['reality']['publicKey']}"
                                     . "&sid={$c['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0]}"
                                     . "&type=tcp"
                                     . "&flow=xtls-rprx-vision"
@@ -622,24 +622,24 @@ public function linkXray($i, $s = false)
 
 public function delxr($i)
     {
-        $r  = $this->getXray();
-        $st = $this->getXrayStats();
+        $r  = $this->getSingbox();
+        $st = $this->getSingboxStats();
         foreach ($r['inbounds'][0]['settings']['clients'] as $k => $v) {
             if ($i == $k) {
                 unset($r['inbounds'][0]['settings']['clients'][$k]);
                 unset($st['users'][$k]);
-                $this->setXrayStats($st);
-                $this->restartXray($r);
-                $this->adguardXrayClients();
+                $this->setSingboxStats($st);
+                $this->restartSingbox($r);
+                $this->adguardSingboxClients();
                 break;
             }
         }
-        $this->xray();
+        $this->singbox();
     }
 
 public function addxrus($users)
     {
-        $c     = $this->getXray();
+        $c     = $this->getSingbox();
         $p     = $this->getPacConf();
         $users = array_map(fn ($e) => trim($e), explode(',', $users));
         $users = array_map(fn ($e) => explode(':', $e), $users);
@@ -651,7 +651,7 @@ public function addxrus($users)
             $uuid = $user[1] ?: trim($this->ssh('sing-box generate uuid', 'sbx'));
             if (in_array($uuid, $uuids ?: []) || in_array($user[0], $emails ?: [])) {
                 $this->send($this->input['chat'], "user {$user[0]} already exists");
-                return $this->xray();
+                return $this->singbox();
             }
             $c['inbounds'][0]['settings']['clients'][] = $p['transport'] != 'Reality' ? [
                     'id'    => $uuid,
@@ -662,18 +662,18 @@ public function addxrus($users)
                     'email' => $user[0],
             ];
         }
-        $this->restartXray($c);
-        $this->adguardXrayClients();
+        $this->restartSingbox($c);
+        $this->adguardSingboxClients();
         if (count($users) == 1) {
             $this->userXr(count($c['inbounds'][0]['settings']['clients']) - 1);
         } else {
-            $this->xray();
+            $this->singbox();
         }
     }
 
 public function setTimerXr($time, $i)
     {
-        $c = $this->getXray();
+        $c = $this->getSingbox();
         if (empty($time)) {
             unset($c['inbounds'][0]['settings']['clients'][$i]['time']);
         } else {
@@ -684,7 +684,7 @@ public function setTimerXr($time, $i)
             }
             $c['inbounds'][0]['settings']['clients'][$i]['time'] = $time;
         }
-        $this->restartXray($c, 1);
+        $this->restartSingbox($c, 1);
         if (!empty($c['inbounds'][0]['settings']['clients'][$i]['off'])) {
             $this->switchXr($i, 0, 1);
         } else {
@@ -694,7 +694,7 @@ public function setTimerXr($time, $i)
 
 public function switchXr($i, $nm = 0, $time = false)
     {
-        $c = $this->getXray();
+        $c = $this->getSingbox();
         if (empty($time)) {
             unset($c['inbounds'][0]['settings']['clients'][$i]['time']);
         }
@@ -705,7 +705,7 @@ public function switchXr($i, $nm = 0, $time = false)
             $c['inbounds'][0]['settings']['clients'][$i]['id'] = $c['inbounds'][0]['settings']['clients'][$i]['off'];
             unset($c['inbounds'][0]['settings']['clients'][$i]['off']);
         }
-        $this->restartXray($c);
+        $this->restartSingbox($c);
         if (empty($nm)) {
             $this->userXr($i);
         }
@@ -713,37 +713,37 @@ public function switchXr($i, $nm = 0, $time = false)
 
 public function renXrUs($name, $i)
     {
-        $c = $this->getXray();
+        $c = $this->getSingbox();
         $c['inbounds'][0]['settings']['clients'][$i]['email'] = $name;
-        $this->restartXray($c);
-        $this->adguardXrayClients();
+        $this->restartSingbox($c);
+        $this->adguardSingboxClients();
         $this->userXr($i);
     }
 
-public function getXrayStats()
+public function getSingboxStats()
     {
-        return json_decode(file_get_contents('/config/xray.stats'), true) ?: [];
+        return json_decode(file_get_contents('/config/singbox.stats'), true) ?: [];
     }
 
-public function setXrayStats($x)
+public function setSingboxStats($x)
     {
-        file_put_contents('/config/xray.stats', json_encode($x));
+        file_put_contents('/config/singbox.stats', json_encode($x));
     }
 
 public function resetXrUser($i)
     {
-        $c = $this->getXrayStats();
+        $c = $this->getSingboxStats();
         unset($c['users'][$i]);
-        $this->restartXray($this->getXray());
+        $this->restartSingbox($this->getSingbox());
         $this->userXr($i);
     }
 
 public function resetXrStats($nomenu = false)
     {
-        $this->restartXray($this->getXray());
-        $this->setXrayStats([]);
+        $this->restartSingbox($this->getSingbox());
+        $this->setSingboxStats([]);
         if (empty($nomenu)) {
-            $this->xray();
+            $this->singbox();
         }
     }
 
@@ -752,7 +752,7 @@ public function listXr($i)
         $c = $this->getPacConf();
         $c['xtlslist'] = $i;
         $this->setPacConf($c);
-        $this->xray();
+        $this->singbox();
     }
 
 public function templateAdd($type)
@@ -875,7 +875,7 @@ public function templates($type)
         $pac    = $this->getPacConf();
         $domain = $this->getDomain();
         $hash   = $this->getHashBot();
-        $text[] = "Menu -> " . $this->i18n('xray') . " -> " . $this->i18n($type) . " templates";
+        $text[] = "Menu -> " . $this->i18n('vless') . " -> " . $this->i18n($type) . " templates";
         $text[] = <<<TEXT
             <code>~outbound~</code>
             <code>~pac~</code>
@@ -946,7 +946,7 @@ public function templates($type)
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/xray",
+                'callback_data' => "/singbox",
             ],
         ];
         $this->update(
@@ -982,19 +982,19 @@ public function setMainOutbound($text)
             unset($pac['outbound']);
         }
         $this->setPacConf($pac);
-        $this->xray();
+        $this->singbox();
     }
 
-public function xray($page = 0)
+public function singbox($page = 0)
     {
-        $c      = $this->getXray();
+        $c      = $this->getSingbox();
         $p      = $this->getPacConf();
-        $text[] = "Menu -> " . $this->i18n('xray');
+        $text[] = "Menu -> " . $this->i18n('vless');
         if (!empty($c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0])) {
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
         $text[] = 'transport: ' . ($p['transport'] ?: 'Websocket');
-        $st = $this->getXrayStats();
+        $st = $this->getSingboxStats();
         $td = $this->getBytes($st['global']['download'] + $st['session']['download']);
         $tu = $this->getBytes($st['global']['upload'] + $st['session']['upload']);
         $text[] = "↓$td  ↑$tu";
@@ -1098,15 +1098,15 @@ public function xray($page = 0)
             $data[] = [
                 [
                     'text'          => '<<',
-                    'callback_data' => "/xray " . ($page - 1 >= 0 ? $page - 1 : $all - 1),
+                    'callback_data' => "/singbox " . ($page - 1 >= 0 ? $page - 1 : $all - 1),
                 ],
                 [
                     'text'          => $page + 1,
-                    'callback_data' => "/xray $page",
+                    'callback_data' => "/singbox $page",
                 ],
                 [
                     'text'          => '>>',
-                    'callback_data' => "/xray " . ($page < $all - 1 ? $page + 1 : 0),
+                    'callback_data' => "/singbox " . ($page < $all - 1 ? $page + 1 : 0),
                 ],
             ];
         }
@@ -1141,7 +1141,7 @@ public function xray($page = 0)
 
 public function routes()
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> routes';
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> routes';
 
         $data = [
             [[
@@ -1176,7 +1176,7 @@ public function routes()
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/xray",
+                'callback_data' => "/singbox",
             ],
         ];
         $this->update(
@@ -1189,7 +1189,7 @@ public function routes()
 
 public function tun()
     {
-        $text[] = "Menu -> " . $this->i18n('xray') . ' -> ' . $this->i18n('tun lists');
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('tun lists');
 
         $c = $this->getPacConf();
 
@@ -1218,7 +1218,7 @@ public function tun()
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/xray",
+                'callback_data' => "/singbox",
             ],
         ];
         $this->update(
@@ -1232,21 +1232,21 @@ public function tun()
 public function choiceTemplate($arg)
     {
         $arg = explode('_', $arg);
-        $c   = $this->getXray();
+        $c   = $this->getSingbox();
         if (!empty($arg[2])) {
             $c['inbounds'][0]['settings']['clients'][$arg[1]]["{$arg[0]}template"] = $arg[2];
         } else {
             unset($c['inbounds'][0]['settings']['clients'][$arg[1]]["{$arg[0]}template"]);
         }
-        $this->restartXray($c, 1);
+        $this->restartSingbox($c, 1);
         $this->userXr($arg[1]);
     }
 
 public function templateUser($type, $i)
     {
-        $c         = $this->getXray();
+        $c         = $this->getSingbox();
         $pac       = $this->getPacConf();
-        $text[]    = "Menu -> " . $this->i18n('xray') . " -> {$c['inbounds'][0]['settings']['clients'][$i]['email']}\n";
+        $text[]    = "Menu -> " . $this->i18n('vless') . " -> {$c['inbounds'][0]['settings']['clients'][$i]['email']}\n";
         $templates = $pac["{$type}templates"];
         $data[]    = [
             [
@@ -1284,18 +1284,18 @@ public function templateUser($type, $i)
 
 public function userXr($i)
     {
-        $xray   = $this->getXray();
+        $xray   = $this->getSingbox();
         $c      = $xray['inbounds'][0]['settings']['clients'][$i];
         $pac    = $this->getPacConf();
         $domain = $this->getDomain($pac['transport'] != 'Reality');
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
 
-        $text[] = "Menu -> " . $this->i18n('xray') . " -> {$c['email']}\n";
+        $text[] = "Menu -> " . $this->i18n('vless') . " -> {$c['email']}\n";
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
             $text[] = "<a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>subscription</a>";
         }
-        $text[] = "<pre><code>{$this->linkXray($i)}</code></pre>\n";
+        $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
 
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['email']}'>import://v2rayng</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['email']}'>import://sing-box</a>";
@@ -1321,11 +1321,11 @@ public function userXr($i)
             's' => $c['id'],
         ]));
 
-        $text[] = "\nxray config: <pre><code>$xr</code></pre>";
+        $text[] = "\nv2ray config: <pre><code>$xr</code></pre>";
         $text[] = "sing-box config: <pre><code>$si</code></pre>";
         $text[] = "mihomo config: <pre><code>$cl</code></pre>";
 
-        $st       = $this->getXrayStats();
+        $st       = $this->getSingboxStats();
         $download = $this->getBytes($st['users'][$i]['global']['download'] + $st['users'][$i]['session']['download']);
         $upload   = $this->getBytes($st['users'][$i]['global']['upload'] + $st['users'][$i]['session']['upload']);
         $data[]   = [
@@ -1392,15 +1392,15 @@ public function userXr($i)
         $data[] = [
             [
                 'text'          => $this->i18n('qr short'),
-                'callback_data' => "/qrXray $i",
+                'callback_data' => "/qrVless $i",
             ],
             [
                 'text'          => $this->i18n('qr v2ray'),
-                'callback_data' => "/qrXray {$i}_1",
+                'callback_data' => "/qrVless {$i}_1",
             ],
             [
                 'text'          => $this->i18n('qr singbox'),
-                'callback_data' => "/qrXray {$i}_2",
+                'callback_data' => "/qrVless {$i}_2",
             ],
         ];
         $data[] = [
@@ -1416,7 +1416,7 @@ public function userXr($i)
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/xray",
+                'callback_data' => "/singbox",
             ],
         ];
         $this->update(
@@ -1429,9 +1429,9 @@ public function userXr($i)
 
 public function sub()
     {
-        $xr     = $this->getXray();
+        $xr     = $this->getSingbox();
         $pac    = $this->getPacConf();
-        $st     = $this->getXrayStats();
+        $st     = $this->getSingboxStats();
         $domain = $_GET['cdn'] ?: ($_SERVER['SERVER_NAME'] ?: $this->getDomain($pac['transport'] != 'Reality'));
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
@@ -1468,7 +1468,7 @@ public function sub()
             't' => 'cl',
             's' => $uid,
         ]));
-        $vless   = $this->linkXray($k);
+        $vless   = $this->linkVless($k);
         $_GET['s'] = $uid;
         foreach ([
           'xray'    => 's',
@@ -1496,7 +1496,7 @@ public function subscription($return = false)
         }
         $pac    = $this->getPacConf();
         $domain = $_GET['cdn'] ?: ($_SERVER['SERVER_NAME'] ?: $this->getDomain($pac['transport'] != 'Reality'));
-        $xr     = $this->getXray();
+        $xr     = $this->getSingbox();
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
 
@@ -1811,7 +1811,7 @@ public function subscription($return = false)
             '~cdndomain~'    => $pac['linkdomain'],
             '~short_id~'     => $xr['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0],
             '~email~'        => $email,
-            '~public_key~'   => $pac['xray'],
+            '~public_key~'   => $pac['reality']['publicKey'],
             '~server_name~'  => $xr['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0],
             '~ip~'           => $this->ip,
             '~outbound~'     => $outbound,
@@ -2133,14 +2133,14 @@ public function createRuleSet($route, $uid, $domain)
         return $route;
     }
 
-public function getXray()
+public function getSingbox()
     {
         $pac = $this->getPacConf();
         return [
             'inbounds' => [
                 [
                     'settings' => [
-                        'clients' => $pac['xrayClients'] ?? [],
+                        'clients' => $pac['singboxClients'] ?? [],
                     ],
                     'streamSettings' => [
                         'realitySettings' => [
@@ -2152,8 +2152,8 @@ public function getXray()
                     ],
                 ],
             ],
-            'outbounds' => $pac['xrayOutbounds'] ?? [],
-            'routing'   => ['rules' => $pac['xrayRoutingRules'] ?? []],
+            'outbounds' => $pac['singboxOutbounds'] ?? [],
+            'routing'   => ['rules' => $pac['singboxRoutingRules'] ?? []],
         ];
     }
 
@@ -2175,16 +2175,16 @@ public function changeFakeDomain()
 
 public function setFakeDomain($domain, $self = false)
     {
-        $c = $this->getXray();
+        $c = $this->getSingbox();
         $p = $this->getPacConf();
         $c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0] = $domain;
         $c['inbounds'][0]['streamSettings']['realitySettings']['dest'] = $self ? "10.10.1.2:443" : "$domain:443";
         $p['reality']['domain'] = $domain;
         $p['reality']['destination'] = $self ? "10.10.1.2:443" : "$domain:443";
         $this->setPacConf($p);
-        $this->restartXray($c);
+        $this->restartSingbox($c);
         $this->setUpstreamDomain($domain);
-        $this->xray();
+        $this->singbox();
     }
 
 public function selfFakeDomain()
@@ -2200,7 +2200,7 @@ public function selfFakeDomain()
 public function changeTransport($transport)
     {
         $p = $this->getPacConf();
-        $x = $this->getXray();
+        $x = $this->getSingbox();
         $h = $this->getHashBot();
 
         $p['reality']['domain']      = $p['reality']['domain'] ?: 'yandex.ru';
@@ -2211,14 +2211,14 @@ public function changeTransport($transport)
         $p['reality']['destination'] = $x['inbounds'][0]['streamSettings']['realitySettings']['dest'] ?? $p['reality']['destination'];
         $p['reality']['shortId']     = $x['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0] ?? $p['reality']['shortId'];
 
-        if (empty($p['xray'])) {
+        if (empty($p['reality']['publicKey'])) {
             $shortId = trim($this->ssh('openssl rand -hex 8', 'sbx'));
             $keys    = $this->ssh('sing-box generate reality-keypair', 'sbx');
             preg_match('~PrivateKey:\s*([^\s]+)~', $keys, $m);
             $private = trim($m[1] ?? '');
             preg_match('~PublicKey:\s*([^\s]+)~', $keys, $m);
             $public = trim($m[1] ?? '');
-            $p['xray'] = $public;
+            $p['reality']['publicKey'] = $public;
             $p['reality']['shortId']    = $shortId;
             $p['reality']['privateKey'] = $private;
         }
@@ -2272,7 +2272,7 @@ public function changeTransport($transport)
             : 't'
         );
         $this->setPacConf($p);
-        $this->restartXray($x);
-        $this->xray();
+        $this->restartSingbox($x);
+        $this->singbox();
     }
 }

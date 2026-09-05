@@ -241,7 +241,7 @@ public function setLinkDomain($text)
             $c['linkdomain'] = trim($text);
         }
         $this->setPacConf($c);
-        $this->xray();
+        $this->singbox();
     }
 
 public function setSubdomain($text)
@@ -309,8 +309,8 @@ public function cloakNginx()
         $template = preg_replace('~(/webapp|/pac|/adguard|/ws|location /dns-query)~', '${1}' . $h, $template);
         file_put_contents('/config/nginx.conf', $template);
         // путь /ws$hash считается заново в buildSingboxConfig() из getHashBot() при каждом
-        // restartXray() — достаточно один раз перегенерировать конфиг после смены hash.
-        $this->restartXray($this->getXray());
+        // restartSingbox() — достаточно один раз перегенерировать конфиг после смены hash.
+        $this->restartSingbox($this->getSingbox());
 
         return $this->ssh('nginx -s reload', 'ng');
     }

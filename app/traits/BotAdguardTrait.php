@@ -68,9 +68,9 @@ public function adguardreset()
         $this->menu('adguard');
     }
 
-public function adguardXrayClients()
+public function adguardSingboxClients()
     {
-        $xr = $this->getXray();
+        $xr = $this->getSingbox();
         $ad = yaml_parse_file($this->adguard);
         foreach ($xr['inbounds'][0]['settings']['clients'] as $k => $v) {
             $tmp[] = [
@@ -326,7 +326,7 @@ public function adgFillAllowedClients($delete = false)
             if (!empty($pac['adguardkey'])) {
                 $c['dns']['allowed_clients'][] = $pac['adguardkey'];
             }
-            if (!empty($xr = $this->getXray())) {
+            if (!empty($xr = $this->getSingbox())) {
                 foreach ($xr['inbounds'][0]['settings']['clients'] as $v) {
                     $c['dns']['allowed_clients'][] = $v['id'];
                 }

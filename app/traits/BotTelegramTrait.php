@@ -15,10 +15,10 @@ public function sendQr($name, $code, $title = false)
         unlink($qr_file);
     }
 
-public function qrXray($i, $s = false)
+public function qrVless($i, $s = false)
     {
-        $link    = $this->linkXray($i, $s);
-        $qr_file = dirname(__DIR__) . "/qr/xray.png";
+        $link    = $this->linkVless($i, $s);
+        $qr_file = dirname(__DIR__) . "/qr/vless.png";
         exec("qrencode -t png -o $qr_file '$link'");
         $r = $this->sendPhoto(
             $this->input['chat'],
@@ -29,7 +29,7 @@ public function qrXray($i, $s = false)
         if ($this->getPacConf()['blinkmenu']) {
             $this->delete($this->input['chat'], $this->input['message_id']);
             $this->input['message_id'] = $this->send($this->input['chat'], '.')['result']['message_id'];
-            $this->xray();
+            $this->singbox();
         }
     }
 

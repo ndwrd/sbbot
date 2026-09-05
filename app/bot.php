@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/traits/BotCoreTrait.php';
 require_once __DIR__ . '/traits/BotMtprotoTrait.php';
-require_once __DIR__ . '/traits/BotXrayTrait.php';
+require_once __DIR__ . '/traits/BotSingboxTrait.php';
 require_once __DIR__ . '/traits/BotPacTrait.php';
 require_once __DIR__ . '/traits/BotAdminSettingsTrait.php';
 require_once __DIR__ . '/traits/BotIpAnalysisTrait.php';
@@ -17,7 +17,7 @@ class Bot
 {
     use BotCoreTrait;
     use BotMtprotoTrait;
-    use BotXrayTrait;
+    use BotSingboxTrait;
     use BotPacTrait;
     use BotAdminSettingsTrait;
     use BotIpAnalysisTrait;
@@ -49,7 +49,7 @@ class Bot
     public $time;
     public $time2;
     public $time3;
-    public $time_xray_stats;
+    public $time_singbox_stats;
     public $admin;
     public $ports;
 

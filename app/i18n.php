@@ -269,7 +269,7 @@ $i = [
         'en' => 'clear',
         'ru' => 'очистить',
     ],
-    'xray'  => [
+    'vless'  => [
         'en' => 'Vless',
         'ru' => 'Vless',
     ],

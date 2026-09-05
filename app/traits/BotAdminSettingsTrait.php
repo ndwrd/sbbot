@@ -143,8 +143,8 @@ public function export()
             'mtproto'       => file_get_contents('/config/mtprotosecret'),
             'mtprotodomain' => file_get_contents('/config/mtprotodomain'),
             'mtprotoadtag'  => file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '',
-            'xray'          => $this->getXray(),
-            'xraystats'     => $this->getXrayStats(),
+            'singbox'       => $this->getSingbox(),
+            'singboxstats'  => $this->getSingboxStats(),
         ];
         return json_encode($conf, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
@@ -206,19 +206,19 @@ public function importFile($file = false)
                 file_put_contents('/config/mtprotoadtag', trim($json['mtprotoadtag'] ?? ''));
                 $this->restartTG();
             }
-            // xray
-            if (!empty($json['xray'])) {
-                $out[] = 'update xray';
+            // singbox
+            if (!empty($json['singbox'])) {
+                $out[] = 'update singbox';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-                $this->restartXray($json['xray']);
-                $this->adguardXrayClients();
-                $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : ($json['pac']['reality']['domain'] ?: $json['xray']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
+                $this->restartSingbox($json['singbox']);
+                $this->adguardSingboxClients();
+                $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : ($json['pac']['reality']['domain'] ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
             }
-            // xraystats
-            if (!empty($json['xraystats'])) {
-                $out[] = 'update xray stats';
+            // singboxstats
+            if (!empty($json['singboxstats'])) {
+                $out[] = 'update singbox stats';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-                $this->setXrayStats($json['xraystats']);
+                $this->setSingboxStats($json['singboxstats']);
             }
             // dnstt
             if (!empty($json['dnstt'])) {

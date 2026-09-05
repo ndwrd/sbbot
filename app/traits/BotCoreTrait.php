@@ -348,8 +348,8 @@ public function action()
             case preg_match('~^/deladmin (\d+)$~', $this->input['callback'], $m):
                 $this->delAdmin($m[1]);
                 break;
-            case preg_match('~^/qrXray (\d+)(?:_(\d+))?$~', $this->input['callback'], $m):
-                $this->qrXray($m[1], $m[2] ?: false);
+            case preg_match('~^/qrVless (\d+)(?:_(\d+))?$~', $this->input['callback'], $m):
+                $this->qrVless($m[1], $m[2] ?: false);
                 break;
             case preg_match('~^/qrMtproto$~', $this->input['callback'], $m):
                 $this->qrMtproto();
@@ -375,8 +375,8 @@ public function action()
             case preg_match('~^/warpPlus$~', $this->input['callback'], $m):
                 $this->warpPlus();
                 break;
-            case preg_match('~^/xray(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xray($m[1] ?: 0);
+            case preg_match('~^/singbox(?: (\d+))?$~', $this->input['callback'], $m):
+                $this->singbox($m[1] ?: 0);
                 break;
             case preg_match('~^/xtlsblock(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->xtlsblock($m[1] ?: 0);
@@ -475,7 +475,7 @@ public function action()
     }
 
 public function collectSession() {
-        $p = $this->getXrayStats();
+        $p = $this->getSingboxStats();
         $p['global'] = [
             'download' => $p['global']['download'] + $p['session']['download'],
             'upload'   => $p['global']['upload'] + $p['session']['upload'],
@@ -490,7 +490,7 @@ public function collectSession() {
             $p['users'][$k]['global']['upload']    += $v['session']['upload'];
             $p['users'][$k]['session']['upload']    = 0;
         }
-        $this->setXrayStats($p);
+        $this->setSingboxStats($p);
     }
 
 public function setLang($lang)
@@ -509,10 +509,10 @@ public function cron()
             $this->checkVersion();
             $this->checkBackup();
             $this->checkLogs();
-            $this->checkResetXrayStats();
+            $this->checkResetSingboxStats();
             $this->checkCert();
             $this->autoAnalyzeLogs();
-            $this->xrayStatsUser();
+            $this->singboxStatsUser();
             sleep($period);
         }
     }
@@ -768,7 +768,7 @@ public function menu($type = false, $arg = false, $return = false)
             $main[] = '<code>';
             $main[] = $this->alignColumns([
                 [
-                    $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('xray'),
+                    $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
                     $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
                     $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
                     $this->i18n($this->ssh('pgrep dnstt', 'dnstt') ? 'on' : 'off') . ' ' . $this->i18n('dnstt'),
@@ -805,8 +805,8 @@ public function menu($type = false, $arg = false, $return = false)
                     [
                         [
                             [
-                                'text'          => $this->i18n('xray'),
-                                'callback_data' => "/xray",
+                                'text'          => $this->i18n('vless'),
+                                'callback_data' => "/singbox",
                             ],
                             [
                                 'text'          => $this->i18n('mtproto'),
