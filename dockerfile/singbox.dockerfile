@@ -4,6 +4,7 @@ FROM golang:1.24-alpine AS build
 ARG SING_BOX_VERSION=v1.14.0
 ARG TAGS="with_quic with_utls with_acme with_clash_api with_wireguard with_reality_server with_v2ray_api"
 RUN apk add --no-cache git ca-certificates \
+    && mkdir -p /out \
     && git clone --depth 1 --branch ${SING_BOX_VERSION} https://github.com/SagerNet/sing-box /sing-box \
     && cd /sing-box \
     && CGO_ENABLED=0 go build -trimpath \
