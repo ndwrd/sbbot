@@ -43,7 +43,7 @@ delete:
 	make d
 	docker system prune -f -a
 	docker volume prune -f -a
-	rm -rf /root/vpnbot
+	rm -rf /root/sbbot
 push:
 	docker compose push
 s:
@@ -58,13 +58,13 @@ reset:
 	make d
 	git reset --hard
 	git clean -fd
-	docker volume rm vpnbot_adguard vpnbot_warp
+	docker volume rm sbbot_adguard sbbot_warp
 	make u
 backup:
 	docker compose exec php php backup.php > backup.json
 mtproto:
 	docker compose exec php php mtproto.php
 cron: # установка задачи в cron для автозапуска при перезагрузке
-	@(crontab -l 2>/dev/null | grep -v "cd /root/vpnbot && make r"; echo "@reboot cd /root/vpnbot && make r") | crontab -
+	@(crontab -l 2>/dev/null | grep -v "cd /root/sbbot && make r"; echo "@reboot cd /root/sbbot && make r") | crontab -
 uncron: # удаление задачи из cron
-	@crontab -l 2>/dev/null | grep -v "cd /root/vpnbot && make r" | crontab -
+	@crontab -l 2>/dev/null | grep -v "cd /root/sbbot && make r" | crontab -
