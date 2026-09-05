@@ -2090,7 +2090,11 @@ public function addRuleSet($route)
                                 "type"            => "remote",
                                 "format"          => "binary",
                                 "url"             => $url,
-                                "update_interval" => $time
+                                "update_interval" => $time,
+                                // download_detour удалён в 1.14/1.16 — без явного http_client
+                                // sing-box падает в implicit-резолвинг детура и упирается в
+                                // "detour to an empty direct outbound makes no sense".
+                                "http_client"     => ["detour" => "direct"],
                             ];
                             $route['rules'][$t[$type]]['rule_set'][] = $k;
                         }
@@ -2176,6 +2180,7 @@ public function createRuleSet($route, $uid, $domain)
                         "update_interval" => $r['interval'],
                         "type"            => "remote",
                         "format"          => "binary",
+                        "http_client"     => ["detour" => "direct"],
                     ];
                     $route['rules'][$k]['rule_set'][] = $r['name'];
                 }
