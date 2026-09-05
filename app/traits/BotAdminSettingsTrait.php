@@ -487,7 +487,7 @@ public function configMenu()
         $data = [
             [
                 [
-                    'text'          => $this->i18n('Domains') . ($conf['domain'] ? ": {$conf['domain']}" : ''),
+                    'text'          => $this->i18n('Domains'),
                     'callback_data' => "/menu domains",
                 ],
             ],
