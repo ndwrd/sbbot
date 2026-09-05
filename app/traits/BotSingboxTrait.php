@@ -157,7 +157,7 @@ public function buildSingboxConfig($pac)
             ],
             'dns' => [
                 'servers' => [
-                    ['tag' => 'default', 'address' => 'local'],
+                    ['tag' => 'default', 'type' => 'local'],
                 ],
             ],
             'inbounds'  => $inbounds,
