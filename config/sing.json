@@ -692,12 +692,7 @@
             "tls": {
                 "enabled": true,
                 "insecure": false,
-                "reality": {
-                    "enabled": true,
-                    "public_key": "~public_key~",
-                    "short_id": "~short_id~"
-                },
-                "server_name": "~server_name~",
+                "server_name": "~domain~",
                 "utls": {
                     "enabled": true,
                     "fingerprint": "firefox"
@@ -705,6 +700,10 @@
             },
             "uuid": "~uid~",
             "tcp_fast_open": true,
+            "transport": {
+                "type": "ws",
+                "path": "~wspath~"
+            },
             "multiplex": {
                 "enabled": true,
                 "protocol": "smux",

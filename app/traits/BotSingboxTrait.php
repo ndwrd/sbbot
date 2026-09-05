@@ -1728,51 +1728,58 @@ public function subscription($return = false)
 
                 break;
             case 'si':
-                $c['outbounds'][$index]['uuid'] = '~uid~';
-                switch ($pac['transport']) {
-                    case 'Reality':
-                        unset($c['outbounds'][$index]["transport"]);
-                        $c['outbounds'][$index]['flow']                         = 'xtls-rprx-vision';
-                        $c['outbounds'][$index]['tls']['reality']['public_key'] = '~public_key~';
-                        $c['outbounds'][$index]['tls']['server_name']           = '~server_name~';
-                        $c['outbounds'][$index]['tls']['reality']['short_id']   = '~short_id~';
-                        break;
-                    case 'xhttp':
-                        unset($c['outbounds'][$index]['flow']);
-                        unset($c['outbounds'][$index]['tls']['reality']);
+                // vless-out в шаблоне уже в финальном виде для единственного реально
+                // используемого сейчас транспорта (WS) — uuid/domain/~wspath~ заполнит
+                // общий replaceTags() ниже, точечная мутация по индексу не нужна.
+                // Ветки Reality/xhttp — задел на случай, если транспорт когда-нибудь
+                // переключат обратно (см. buildSingboxConfig(), где Reality тоже
+                // отключён, но не удалён); шаблон больше не несёт tls.reality/flow сам
+                // по себе, поэтому эти ветки досоздают их с нуля.
+                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                    foreach ($c['outbounds'] as $k => $v) {
+                        if ($v['tag'] == 'vless-out') {
+                            $vlessIndex = $k;
+                            break;
+                        }
+                    }
+                    switch ($pac['transport']) {
+                        case 'Reality':
+                            unset($c['outbounds'][$vlessIndex]["transport"]);
+                            $c['outbounds'][$vlessIndex]['flow']               = 'xtls-rprx-vision';
+                            $c['outbounds'][$vlessIndex]['tls']['reality']     = [
+                                'enabled'    => true,
+                                'public_key' => '~public_key~',
+                                'short_id'   => '~short_id~',
+                            ];
+                            $c['outbounds'][$vlessIndex]['tls']['server_name'] = '~server_name~';
+                            break;
+                        case 'xhttp':
+                            unset($c['outbounds'][$vlessIndex]['flow']);
+                            unset($c['outbounds'][$vlessIndex]['tls']['reality']);
 
-                        $c['outbounds'][$index]["transport"] = [
-                            "type" => "xhttp",
-                            "host" => "~domain~",
-                            "mode" => "packet-up",
-                            "path" => "/ws$hash",  // ← путь WS + hash
-                            "xmux" => [
-                                "max_concurrency"   => "16-32",
-                                "max_connections"   => "0-1",
-                                "c_max_reuse_times" => "0-1",
-                                "h_max_request_times" => "600-900",
-                                "h_max_reusable_secs" => "1800-3000",
-                                "h_keep_alive_period" => 60
-                            ]
-                        ];
+                            $c['outbounds'][$vlessIndex]["transport"] = [
+                                "type" => "xhttp",
+                                "host" => "~domain~",
+                                "mode" => "packet-up",
+                                "path" => "~wspath~",
+                                "xmux" => [
+                                    "max_concurrency"   => "16-32",
+                                    "max_connections"   => "0-1",
+                                    "c_max_reuse_times" => "0-1",
+                                    "h_max_request_times" => "600-900",
+                                    "h_max_reusable_secs" => "1800-3000",
+                                    "h_keep_alive_period" => 60
+                                ]
+                            ];
 
-                        $c['outbounds'][$index]['tls'] = [
-                            "enabled"     => true,
-                            "insecure"    => false,
-                            "server_name" => "~domain~",
-                            "alpn"        => ["h2"]
-                        ];
-                        break;
-
-                    default:
-                        unset($c['outbounds'][$index]['tls']['reality']);
-                        unset($c['outbounds'][$index]['flow']);
-                        $c['outbounds'][$index]["transport"] = [
-                            "type" => "ws",
-                            "path" => "/ws$hash"
-                        ];
-                        $c['outbounds'][$index]['tls']['server_name'] = '~domain~';
-                        break;
+                            $c['outbounds'][$vlessIndex]['tls'] = [
+                                "enabled"     => true,
+                                "insecure"    => false,
+                                "server_name" => "~domain~",
+                                "alpn"        => ["h2"]
+                            ];
+                            break;
+                    }
                 }
                 break;
             case 'cl':
@@ -1858,6 +1865,7 @@ public function subscription($return = false)
             '"~subnet~"'     => json_encode(array_keys(array_filter($pac['subnetlist'] ?: []))),
             '~dns~'          => "https://$domain/dns-query$hash/$uid",
             '~dnspath~'      => "/dns-query$hash/$uid",
+            '~wspath~'       => "/ws$hash",
             '~uid~'          => $uid,
             '~password~'     => $password,
             '~domain~'       => $domain,
