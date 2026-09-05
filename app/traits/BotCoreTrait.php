@@ -96,7 +96,7 @@ public function action()
             case preg_match('~^/menu$~', $this->input['message'], $m):
             case preg_match('~^/start$~', $this->input['message'], $m):
             case preg_match('~^/menu$~', $this->input['callback'], $m):
-            case preg_match('~^/menu (?P<type>adguard|config|ss|lang)$~', $this->input['callback'], $m):
+            case preg_match('~^/menu (?P<type>adguard|config|ss|lang|domains)$~', $this->input['callback'], $m):
                 $this->menu(type: $m['type'] ?? false, arg: $m['arg'] ?? false);
                 break;
             case preg_match('~^/changeTransport(?: (\w+))?$~', $this->input['callback'], $m):
@@ -833,6 +833,7 @@ public function menu($type = false, $arg = false, $return = false)
             'adguard'      => $type == 'adguard' ? $this->adguardMenu()                    : false,
             'config'       => $type == 'config'  ? $this->configMenu()                     : false,
             'lang'         => $type == 'lang'    ? $this->menuLang()                       : false,
+            'domains'      => $type == 'domains' ? $this->domainsMenu()                    : false,
         ];
 
         $text = $menu[$type ?: 'main' ]['text'];

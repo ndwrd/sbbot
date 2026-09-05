@@ -36,7 +36,7 @@ public function addDomain($domain, $nomenu = false)
         }
         if (empty($nomenu)) {
             sleep(3);
-            $this->menu('config');
+            $this->menu('domains');
         }
     }
 
@@ -59,7 +59,7 @@ public function regenSubdomains()
         if ($conf['domain'] && $this->nginxGetTypeCert() == 'letsencrypt') {
             $this->setSSL('letsencrypt');
         } else {
-            $this->menu('config');
+            $this->menu('domains');
         }
     }
 
@@ -116,7 +116,7 @@ public function deleteSSL($notmenu = false)
         $this->adguardSync();
         $this->cloakNginx();
         if (!$notmenu) {
-            $this->menu('config');
+            $this->menu('domains');
         }
     }
 
@@ -164,7 +164,7 @@ public function setSSL($name)
             $this->update($this->input['chat'], $this->input['message_id'], "wrong format key");
         }
         sleep(3);
-        $this->menu('config');
+        $this->menu('domains');
     }
 
 public function controlUnit($url, $method = 'GET', $json = false, $bundle = false)
@@ -197,7 +197,7 @@ public function delDomain()
         $this->setPacConf($conf);
         $this->adguardSync();
         $this->cloakNginx();
-        $this->menu('config');
+        $this->menu('domains');
     }
 
 public function domain()

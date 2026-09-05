@@ -383,7 +383,7 @@ public function restart()
         $this->delete($this->input['from'], $this->input['message_id']);
     }
 
-public function configMenu()
+public function domainsMenu()
     {
         $conf = $this->getPacConf();
         if (!empty($conf['domain'])) {
@@ -392,9 +392,18 @@ public function configMenu()
 
             $text[] = "<blockquote>";
             $text[] = "Domains:";
-            $text[] = $conf['domain'] . (in_array($conf['domain'], $certs) ? ' (ssl: ' . date('Y-m-d H:i:s', $ssl_expiry) . ')' : '');
+            $text[] = "General: {$conf['domain']}";
+            if (!empty($conf['naiveSubdomain'])) {
+                $text[] = "Naive: {$conf['naiveSubdomain']}.{$conf['domain']}";
+            }
+            if (!empty($conf['anytlsSubdomain'])) {
+                $text[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
+            }
             if (!empty($conf['adguardkey'])) {
-                $text[] = "{$conf['adguardkey']}.{$conf['domain']}" . (in_array("{$conf['adguardkey']}.{$conf['domain']}", $certs) ? ' (ssl: ' . date('Y-m-d H:i:s', $ssl_expiry) . ')' : '') . ' adguard DOT';
+                $text[] = "{$conf['adguardkey']}.{$conf['domain']} adguard DOT";
+            }
+            if (in_array($conf['domain'], $certs)) {
+                $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
             }
             $text[] = "</blockquote>";
         } else {
@@ -458,6 +467,31 @@ public function configMenu()
                 ];
             }
         }
+        $data[] = [
+            [
+                'text'          => $this->i18n('back'),
+                'callback_data' => "/menu config",
+            ],
+        ];
+        return [
+            'text' => implode("\n", $text),
+            'data' => $data,
+        ];
+    }
+
+public function configMenu()
+    {
+        $conf   = $this->getPacConf();
+        $text[] = "Menu -> " . $this->i18n('config');
+
+        $data = [
+            [
+                [
+                    'text'          => $this->i18n('Domains') . ($conf['domain'] ? ": {$conf['domain']}" : ''),
+                    'callback_data' => "/menu domains",
+                ],
+            ],
+        ];
         $data[] = [
             [
                 'text'          => $this->i18n('Ports'),
