@@ -328,6 +328,16 @@ public function cloakNginx()
             $this->ssh('nginx -s reload 2>&1', 'up');
         }
 
+        $test = $this->ssh('nginx -t 2>&1', 'ng');
+        if (stripos($test, 'successful') === false) {
+            // Не шлём reload на заведомо битый конфиг — nginx просто продолжит молча
+            // работать со старым, и ошибка останется незамеченной (как уже было).
+            require dirname(__DIR__) . '/config.php';
+            foreach ($c['admin'] ?? [] as $admin) {
+                $this->send($admin, "nginx config test failed, reload skipped:\n$test");
+            }
+            return $test;
+        }
         return $this->ssh('nginx -s reload', 'ng');
     }
 
