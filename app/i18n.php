@@ -317,10 +317,6 @@ $i = [
         'en' => 'dns',
         'ru' => 'днс',
     ],
-    'mirror'  => [
-        'en' => 'mirror',
-        'ru' => 'зеркало',
-    ],
     'download'  => [
         'en' => 'download',
         'ru' => 'скачать',

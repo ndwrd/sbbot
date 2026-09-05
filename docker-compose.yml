@@ -122,8 +122,6 @@ services:
             - ./scripts/start_php.sh:/start_php.sh
             - ./scripts/check_file.sh:/check_file.sh
             - ./version:/version
-            - ./mirror:/mirror
-            - ./.env:/mirror/.env
             - ./update:/update
             - ./.git:/.git
             - ./docker-compose.override.yml:/docker/compose

@@ -10,7 +10,6 @@ require_once __DIR__ . '/traits/BotDomainSslTrait.php';
 require_once __DIR__ . '/traits/BotTelegramTrait.php';
 require_once __DIR__ . '/traits/BotAdguardTrait.php';
 require_once __DIR__ . '/traits/BotDnsttTrait.php';
-require_once __DIR__ . '/traits/BotMirrorTrait.php';
 require_once __DIR__ . '/traits/BotWarpTrait.php';
 
 class Bot
@@ -25,7 +24,6 @@ class Bot
     use BotTelegramTrait;
     use BotAdguardTrait;
     use BotDnsttTrait;
-    use BotMirrorTrait;
     use BotWarpTrait;
 
 

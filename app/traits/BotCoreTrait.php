@@ -96,14 +96,11 @@ public function action()
             case preg_match('~^/menu$~', $this->input['message'], $m):
             case preg_match('~^/start$~', $this->input['message'], $m):
             case preg_match('~^/menu$~', $this->input['callback'], $m):
-            case preg_match('~^/menu (?P<type>adguard|config|ss|lang|mirror)$~', $this->input['callback'], $m):
+            case preg_match('~^/menu (?P<type>adguard|config|ss|lang)$~', $this->input['callback'], $m):
                 $this->menu(type: $m['type'] ?? false, arg: $m['arg'] ?? false);
                 break;
             case preg_match('~^/changeTransport(?: (\w+))?$~', $this->input['callback'], $m):
                 $this->changeTransport($m[1] ?? false);
-                break;
-            case preg_match('~^/mirror$~', $this->input['message'], $m):
-                $this->menu('mirror');
                 break;
             case preg_match('~^/mainOutbound$~', $this->input['callback'], $m):
                 $this->mainOutbound();
@@ -218,9 +215,6 @@ public function action()
                 break;
             case preg_match('~^/restart$~', $this->input['callback'], $m):
                 $this->restart();
-                break;
-            case preg_match('~^/getMirror$~', $this->input['callback'], $m):
-                $this->getMirror();
                 break;
             case preg_match('~^/logs$~', $this->input['callback'], $m):
                 $this->logs();
@@ -827,7 +821,6 @@ public function menu($type = false, $arg = false, $return = false)
             'adguard'      => $type == 'adguard' ? $this->adguardMenu()                    : false,
             'config'       => $type == 'config'  ? $this->configMenu()                     : false,
             'lang'         => $type == 'lang'    ? $this->menuLang()                       : false,
-            'mirror'       => $type == 'mirror'  ? $this->mirrorMenu()                     : false,
         ];
 
         $text = $menu[$type ?: 'main' ]['text'];
