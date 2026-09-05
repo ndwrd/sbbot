@@ -2061,7 +2061,6 @@ public function addRuleSet($route)
                                 "type"            => "remote",
                                 "format"          => "binary",
                                 "url"             => $url,
-                                "download_detour" => "direct",
                                 "update_interval" => $time
                             ];
                             $route['rules'][$t[$type]]['rule_set'][] = $k;
@@ -2148,7 +2147,6 @@ public function createRuleSet($route, $uid, $domain)
                         "update_interval" => $r['interval'],
                         "type"            => "remote",
                         "format"          => "binary",
-                        "download_detour" => "direct",
                     ];
                     $route['rules'][$k]['rule_set'][] = $r['name'];
                 }
