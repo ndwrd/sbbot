@@ -1,13 +1,13 @@
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "output": "/logs/singbox.log"
     },
     "dns": {
         "servers": [
             {
                 "tag": "default",
-                "address": "local"
+                "type": "local"
             }
         ]
     },
