@@ -138,7 +138,14 @@ public function setSSL($name)
                 // naive/anytls живут на своих (случайных, не протокол-именованных) поддоменах
                 // (см. cloakNginx()/upstream.conf) — сертификат должен покрывать их SAN-записями,
                 // иначе TLS-хендшейк не пройдёт.
+                // 80/tcp на хосте держится закрытым всё остальное время — этот файл-маркер
+                // (общая bind-mount папка /certs/) видит scripts/watch_port80.sh на хосте и
+                // сам открывает/закрывает порт через ufw, т.к. контейнер не может дёрнуть
+                // firewall хоста напрямую.
+                touch('/certs/.want_port80');
+                usleep(500000);
                 exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d {$conf['naiveSubdomain']}.{$conf['domain']} -d {$conf['anytlsSubdomain']}.{$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
+                @unlink('/certs/.want_port80');
                 if ($code > 0) {
                     $this->send($this->input['chat'], "ERROR\n" . implode("\n", $out));
                     break;

@@ -747,7 +747,7 @@ public function menu($type = false, $arg = false, $return = false)
                     $certs      = $this->domainsCert() ?: [];
 
                     $main[] = "<blockquote>";
-                    $main[] = "Domains:";
+                    $main[] = "<b>Domains:</b>";
                     $main[] = "General: {$conf['domain']}";
                     if (!empty($conf['naiveSubdomain'])) {
                         $main[] = "Naive: {$conf['naiveSubdomain']}.{$conf['domain']}";
@@ -769,7 +769,6 @@ public function menu($type = false, $arg = false, $return = false)
 
 
             $ports  = $this->getPorts();
-            $main[] = '';
 
             $main[] = '<code>';
             $main[] = $this->alignColumns([

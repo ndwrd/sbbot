@@ -10,7 +10,8 @@ apt install -y \
     iptables \
     iproute2 \
     xtables-addons-common \
-    xtables-addons-dkms
+    xtables-addons-dkms \
+    inotify-tools
 curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
 git clone https://github.com/ndwrd/sbbot.git
 cd ./sbbot

@@ -1,0 +1,13 @@
+[Unit]
+Description=sbbot: open 80/tcp in ufw only while an SSL renewal is in progress
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=path
+ExecStart=/bin/sh ./scripts/watch_port80.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
