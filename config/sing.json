@@ -85,6 +85,40 @@
             "tag": "~outbound~"
         },
         {
+            "type": "hysteria2",
+            "tag": "hysteria2-out",
+            "server": "~domain~",
+            "server_port": 8443,
+            "password": "~password~",
+            "tls": {
+                "enabled": true,
+                "server_name": "~domain~"
+            }
+        },
+        {
+            "type": "naive",
+            "tag": "naive-out",
+            "server": "naive.~domain~",
+            "server_port": 443,
+            "username": "~email~",
+            "password": "~password~",
+            "tls": {
+                "enabled": true,
+                "server_name": "naive.~domain~"
+            }
+        },
+        {
+            "type": "anytls",
+            "tag": "anytls-out",
+            "server": "anytls.~domain~",
+            "server_port": 443,
+            "password": "~password~",
+            "tls": {
+                "enabled": true,
+                "server_name": "anytls.~domain~"
+            }
+        },
+        {
             "type": "direct",
             "tag": "direct"
         }

@@ -110,7 +110,9 @@ public function setSSL($name)
                 $out[] = 'Install certificate:';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $adguardClient = $conf['adguardkey'] ? "-d {$conf['adguardkey']}.{$conf['domain']}" : '';
-                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
+                // naive/anytls живут на своих поддоменах (см. cloakNginx()/upstream.conf) —
+                // сертификат должен покрывать их SAN-записями, иначе TLS-хендшейк не пройдёт.
+                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d naive.{$conf['domain']} -d anytls.{$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
                 if ($code > 0) {
                     $this->send($this->input['chat'], "ERROR\n" . implode("\n", $out));
                     break;
@@ -257,11 +259,14 @@ public function cloakNginx()
         $template = file_get_contents('/config/nginx_default.conf');
         // $template = preg_replace('~server_name ip~', "server_name {$this->ip}", $template);
         $template = preg_replace('~server_name domain~', "server_name " . ($conf['domain'] ? " *.{$conf['domain']} {$conf['domain']}" : '_'), $template);
+        $template = preg_replace('~server_name naive\.domain~', "server_name naive.{$conf['domain']}", $template);
         if ($conf['domain'] && $conf['letsencrypt']) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
-            preg_match_all('~#-domain.+?#-domain~s', $template, $m);
-            foreach ($m[0] as $v) {
-                $template = preg_replace('~#-domain.+?#-domain~s', $this->uncomment($v, 'domain'), $template, 1);
+            foreach (['domain', 'naive', 'anytls'] as $tag) {
+                preg_match_all("~#-$tag.+?#-$tag~s", $template, $m);
+                foreach ($m[0] as $v) {
+                    $template = preg_replace("~#-$tag.+?#-$tag~s", $this->uncomment($v, $tag), $template, 1);
+                }
             }
         }
         $h = $this->getHashBot();
@@ -284,6 +289,13 @@ public function cloakNginx()
         // путь /ws$hash считается заново в buildSingboxConfig() из getHashBot() при каждом
         // restartSingbox() — достаточно один раз перегенерировать конфиг после смены hash.
         $this->restartSingbox($this->getSingbox());
+
+        if ($conf['domain']) {
+            $up = file_get_contents('/config/upstream.conf');
+            $up = preg_replace('~#anytls.+#anytls~s', "#anytls\nanytls.{$conf['domain']} ng-anytls;\n#anytls", $up);
+            file_put_contents('/config/upstream.conf', $up);
+            $this->ssh('nginx -s reload 2>&1', 'up');
+        }
 
         return $this->ssh('nginx -s reload', 'ng');
     }

@@ -84,6 +84,22 @@
             },
             "servername": "~server_name~",
             "client-fingerprint": "chrome"
+        },
+        {
+            "name": "hysteria2",
+            "type": "hysteria2",
+            "server": "~domain~",
+            "port": 8443,
+            "password": "~password~",
+            "sni": "~domain~"
+        },
+        {
+            "name": "anytls",
+            "type": "anytls",
+            "server": "anytls.~domain~",
+            "port": 443,
+            "password": "~password~",
+            "sni": "anytls.~domain~"
         }
     ],
     "proxy-groups": [
@@ -91,7 +107,9 @@
             "name": "PROXY",
             "type": "select",
             "proxies": [
-                "~outbound~"
+                "~outbound~",
+                "hysteria2",
+                "anytls"
             ]
         }
     ],

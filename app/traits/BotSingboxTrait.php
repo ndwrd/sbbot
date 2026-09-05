@@ -97,6 +97,51 @@ public function buildSingboxConfig($pac)
             ];
         }
 
+        // naive/anytls: TLS уже снят на ng (тот же паттерн, что и у vless-in выше — они
+        // приходят по внутренней docker-сети уже расшифрованными, ng слушает их поддомены
+        // сам). hysteria2 — единственный протокол на своём отдельном UDP-порту напрямую
+        // на sbx, TLS здесь остаётся на стороне sing-box (реальный сертификат сервера).
+        $protocolUsers = [];
+        foreach ($pac['singboxClients'] ?? [] as $v) {
+            if (empty($v['id']) || !empty($v['off']) || empty($v['password'])) {
+                continue;
+            }
+            $protocolUsers[] = ['name' => $v['email'] ?? $v['id'], 'password' => $v['password']];
+        }
+
+        $inbounds = [$inbound];
+
+        $inbounds[] = [
+            'type'        => 'naive',
+            'tag'         => 'naive-in',
+            'listen'      => '0.0.0.0',
+            'listen_port' => 8444,
+            'users'       => array_map(fn ($u) => ['username' => $u['name'], 'password' => $u['password']], $protocolUsers),
+            'tls'         => ['enabled' => false],
+        ];
+
+        $inbounds[] = [
+            'type'        => 'anytls',
+            'tag'         => 'anytls-in',
+            'listen'      => '0.0.0.0',
+            'listen_port' => 8445,
+            'users'       => $protocolUsers,
+            'tls'         => ['enabled' => false],
+        ];
+
+        $inbounds[] = [
+            'type'        => 'hysteria2',
+            'tag'         => 'hysteria2-in',
+            'listen'      => '0.0.0.0',
+            'listen_port' => 8443,
+            'users'       => $protocolUsers,
+            'tls'         => [
+                'enabled'          => true,
+                'certificate_path' => '/certs/cert_public',
+                'key_path'         => '/certs/cert_private',
+            ],
+        ];
+
         $outbounds = [
             ['type' => 'direct', 'tag' => 'direct'],
             ['type' => 'block', 'tag' => 'block'],
@@ -115,7 +160,7 @@ public function buildSingboxConfig($pac)
                     ['tag' => 'default', 'address' => 'local'],
                 ],
             ],
-            'inbounds'  => [$inbound],
+            'inbounds'  => $inbounds,
             'outbounds' => $outbounds,
             'route'     => [
                 'rules' => $pac['singboxRoutingRules'] ?? [],
@@ -126,9 +171,9 @@ public function buildSingboxConfig($pac)
                     'listen' => '127.0.0.1:8080',
                     'stats'  => [
                         'enabled'   => true,
-                        'inbounds'  => ['vless-in'],
+                        'inbounds'  => ['vless-in', 'naive-in', 'anytls-in', 'hysteria2-in'],
                         'outbounds' => ['direct'],
-                        'users'     => array_column($users, 'name'),
+                        'users'     => array_unique(array_merge(array_column($users, 'name'), array_column($protocolUsers, 'name'))),
                     ],
                 ],
             ],
@@ -141,7 +186,7 @@ public function addXrUser()
             $this->input['chat'],
             "@{$this->input['username']} enter name",
             $this->input['message_id'],
-            reply: 'enter name:uuid [,name:uuid]',
+            reply: 'enter name:description:uuid:password [,name:description:uuid:password]',
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message'  => $this->input['message_id'],
@@ -650,19 +695,27 @@ public function addxrus($users)
             $emails[] = $v['email'];
         }
         foreach ($users as $user) {
-            $uuid = $user[1] ?: trim($this->ssh('sing-box generate uuid', 'sbx'));
+            $description = $user[1] ?? '';
+            $uuid        = $user[2] ?? '';
+            $password    = $user[3] ?? '';
+            $uuid        = $uuid ?: trim($this->ssh('sing-box generate uuid', 'sbx'));
+            $password    = $password ?: trim($this->ssh('openssl rand -base64 16', 'sbx'));
             if (in_array($uuid, $uuids ?: []) || in_array($user[0], $emails ?: [])) {
                 $this->send($this->input['chat'], "user {$user[0]} already exists");
                 return $this->singbox();
             }
-            $c['inbounds'][0]['settings']['clients'][] = $p['transport'] != 'Reality' ? [
-                    'id'    => $uuid,
-                    'email' => $user[0],
-                ] : [
-                    'id'    => $uuid,
-                    'flow'  => 'xtls-rprx-vision',
-                    'email' => $user[0],
+            $client = [
+                'id'       => $uuid,
+                'email'    => $user[0],
+                'password' => $password,
             ];
+            if ($description !== '') {
+                $client['description'] = $description;
+            }
+            if ($p['transport'] == 'Reality') {
+                $client['flow'] = 'xtls-rprx-vision';
+            }
+            $c['inbounds'][0]['settings']['clients'][] = $client;
         }
         $this->restartSingbox($c);
         $this->adguardSingboxClients();
@@ -889,6 +942,7 @@ public function templates($type)
             <code>~dns~</code>
             <code>~dnspath~</code>
             <code>~uid~</code>
+            <code>~password~</code>
             <code>~domain~</code>
             <code>~directdomain~</code>
             <code>~cdndomain~</code>
@@ -1032,7 +1086,7 @@ public function singbox($page = 0)
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
             $data[]   = [
                 [
-                    'text'          => "{$v['email']}" . ($time ? ": $time" : ''),
+                    'text'          => "{$v['email']}" . (!empty($v['description']) ? " — {$v['description']}" : '') . ($time ? ": $time" : ''),
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1484,6 +1538,7 @@ public function subscription($return = false)
                 $template = base64_decode($v["{$type}template"]);
                 $uid      = $v['id'];
                 $email    = $v['email'];
+                $password = $v['password'] ?? '';
                 break;
             }
         }
@@ -1781,6 +1836,7 @@ public function subscription($return = false)
             '~dns~'          => "https://$domain/dns-query$hash/$uid",
             '~dnspath~'      => "/dns-query$hash/$uid",
             '~uid~'          => $uid,
+            '~password~'     => $password,
             '~domain~'       => $domain,
             '~directdomain~' => $pac['domain'],
             '~cdndomain~'    => $pac['linkdomain'],

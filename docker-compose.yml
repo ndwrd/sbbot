@@ -276,7 +276,10 @@ services:
             - ./config/sshd_config:/etc/ssh/sshd_config
             - ./config/sing-server.json:/sing.json
             - ./scripts/start_singbox.sh:/start_singbox.sh
+            - ./certs/:/certs/
             - ./logs:/logs
+        ports:
+            - 8443:8443/udp
         hostname: singbox
         container_name: singbox-${VER}
         depends_on:
