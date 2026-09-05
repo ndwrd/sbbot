@@ -2,10 +2,11 @@ ARG image
 # build stage: собираем sing-box с нужными тегами
 FROM golang:1.24-alpine AS build
 ARG SING_BOX_VERSION=v1.14.0
-# quic/utls(reality)/acme/clash_api/wireguard/gvisor/tailscale/cloudflared are all
-# built in by default (https://sing-box.sagernet.org/installation/build-from-source/)
-# — with_v2ray_api is the only tag we actually need to add for stats.
-ARG TAGS="with_v2ray_api"
+# "Built in by default" in the docs means "default in sing-box's own Makefile/
+# release process" — a plain `go build -tags "..."` like this one gets NOTHING
+# unless listed here explicitly. This is the exact list from their own
+# release/DEFAULT_BUILD_TAGS_OTHERS (v1.14.0), plus with_v2ray_api for stats.
+ARG TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0,with_v2ray_api"
 # sing-box's go.mod can require a newer Go than this base image ships (e.g. v1.14.0
 # needs >=1.25.5 while this image has 1.24.x) — auto lets Go fetch that toolchain
 # on demand instead of hard-failing with "go.mod requires go >= X".
