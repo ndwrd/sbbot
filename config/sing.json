@@ -673,19 +673,17 @@
                 "strategy": "ipv4_only"
             }
         },
-		{
-            "type": "urltest",
+        {
+            "type": "selector",
             "tag": "~outbound~",
             "outbounds": [
                 "vless-out",
                 "hysteria2-out",
                 "naive-out",
                 "anytls-out",
-				"warp-out"
+                "warp-out"
             ],
-			"url": "https://captive.apple.com/generate_204",
-			"interval": "5m",
-			"tolerance": 150,
+            "default": "vless-out",
             "interrupt_exist_connections": true
         },
         {
