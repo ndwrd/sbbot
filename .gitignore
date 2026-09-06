@@ -16,7 +16,6 @@
 /config/mtprotosecret
 /config/mtprotodomain
 /config/deny
-/config/unit.json
 /config/singbox.stats
 /todo.todo
 /app/zapretlists/*
