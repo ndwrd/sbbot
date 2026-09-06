@@ -336,9 +336,6 @@ public function action()
             case preg_match('~^/addNipdomain$~', $this->input['callback'], $m):
                 $this->addNipdomain();
                 break;
-            case preg_match('~^/regenSubdomains$~', $this->input['callback'], $m):
-                $this->regenSubdomains();
-                break;
             case preg_match('~^/(?P<action>change|delete)(?P<typelist>\w+) (?P<arg>\d+)(?: (?P<page>\d+))?$~', $this->input['callback'], $m):
                 $this->listPacChange($m['typelist'], $m['action'], $m['arg'], ($m['page'] ?? null) ?: 0);
                 break;

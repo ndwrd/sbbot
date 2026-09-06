@@ -386,6 +386,7 @@ public function restart()
 public function domainsMenu()
     {
         $conf = $this->getPacConf();
+        $cert = $this->nginxGetTypeCert();
         if (!empty($conf['domain'])) {
             $ssl_expiry = $this->expireCert();
             $certs      = $this->domainsCert() ?: [];
@@ -406,6 +407,9 @@ public function domainsMenu()
                 $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
             }
             $text[] = "</blockquote>";
+            if (empty($cert)) {
+                $text[] = "Настройте DNS A-записи на IP этого сервера для: {$conf['domain']}, {$conf['naiveSubdomain']}.{$conf['domain']}, {$conf['anytlsSubdomain']}.{$conf['domain']} — и только после этого нажимайте «Letsencrypt SSL».";
+            }
         } else {
             $text[] = $this->i18n('domain explain');
         }
@@ -422,10 +426,8 @@ public function domainsMenu()
                 ],
             ],
         ];
-        // Кнопка "change subdomains" временно скрыта из меню — логика regenSubdomains()
-        // требует пересмотра, но саму функцию и её callback-маршрут не трогаем.
         if ($conf['domain']) {
-            if ($cert = $this->nginxGetTypeCert()) {
+            if ($cert) {
                 switch ($cert) {
                     case 'letsencrypt':
                         $data[] = [

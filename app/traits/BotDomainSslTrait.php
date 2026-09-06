@@ -49,20 +49,6 @@ public function ensureProtocolSubdomains(array $conf)
         return $conf;
     }
 
-public function regenSubdomains()
-    {
-        $conf = $this->getPacConf();
-        $conf['naiveSubdomain']  = bin2hex(random_bytes(4));
-        $conf['anytlsSubdomain'] = bin2hex(random_bytes(4));
-        $this->setPacConf($conf);
-        $this->cloakNginx();
-        if ($conf['domain'] && $this->nginxGetTypeCert() == 'letsencrypt') {
-            $this->setSSL('letsencrypt');
-        } else {
-            $this->menu('domains');
-        }
-    }
-
 public function sslip()
     {
         require dirname(__DIR__) . '/config.php';
