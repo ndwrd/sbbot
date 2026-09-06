@@ -290,9 +290,9 @@ public function timerXr($k)
     {
         $r = $this->send(
             $this->input['chat'],
-            "@{$this->input['username']} enter time like https://www.php.net/manual/ru/function.strtotime.php:",
+            "@{$this->input['username']} enter time, example: +1 month or 2026-12-31 23:59:59",
             $this->input['message_id'],
-            reply: 'enter time like https://www.php.net/manual/ru/function.strtotime.php:',
+            reply: 'example: +1 month or 2026-12-31 23:59:59',
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message' => $this->input['message_id'],
@@ -688,7 +688,7 @@ public function switchXr($i, $nm = 0, $time = false)
 public function renXrUs($name, $i)
     {
         $c = $this->getSingbox();
-        $c['inbounds'][0]['settings']['clients'][$i]['username'] = $name;
+        $c['inbounds'][0]['settings']['clients'][$i]['description'] = $name;
         $this->restartSingbox($c);
         $this->adguardSingboxClients();
         $this->userXr($i);
@@ -1004,7 +1004,7 @@ public function singbox($page = 0)
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
             $data[]   = [
                 [
-                    'text'          => "{$v['username']}" . (!empty($v['description']) ? " — {$v['description']}" : '') . ($time ? ": $time" : ''),
+                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : ''),
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1241,7 +1241,7 @@ public function userXr($i)
         ];
         $data[] = [
             [
-                'text'    => $this->i18n('v2ray'),
+                'text'    => $this->i18n('xray'),
                 'web_app' => ['url' => "https://{$domain}/pac$hash?t=s&s={$c['id']}"]
             ],
             [
@@ -1255,7 +1255,7 @@ public function userXr($i)
         ];
         $data[] = [
             [
-                'text'    => $this->i18n('v2ray ⬇️'),
+                'text'    => $this->i18n('xray ⬇️'),
                 'callback_data' => "/dw {$i} s",
             ],
             [
@@ -1282,7 +1282,7 @@ public function userXr($i)
         $clashtemplate = $c['clashtemplate'] ? base64_decode($c['clashtemplate']) : 'default(' . ($pac['defaultclashtemplate'] && !empty($pac['clashtemplates'][base64_decode($pac['defaultclashtemplate'])]) ? base64_decode($pac['defaultclashtemplate']) : 'origin') . ')';
         $data[]        = [
             [
-                'text'          => $this->i18n('v2ray') . ": $v2raytemplate",
+                'text'          => $this->i18n('xray') . ": $v2raytemplate",
                 'callback_data' => "/templateUser v2ray $i",
             ],
             [
@@ -1296,11 +1296,11 @@ public function userXr($i)
         ];
         $data[] = [
             [
-                'text'          => $this->i18n('qr short'),
+                'text'          => $this->i18n('qr vless'),
                 'callback_data' => "/qrVless $i",
             ],
             [
-                'text'          => $this->i18n('qr v2ray'),
+                'text'          => $this->i18n('qr xray'),
                 'callback_data' => "/qrVless {$i}_1",
             ],
             [
