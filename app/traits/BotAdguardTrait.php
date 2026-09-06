@@ -4,23 +4,33 @@ trait BotAdguardTrait
 {
 public function readAdguardConfig()
     {
-        // AdGuardHome сама создаёт /config/AdGuardHome.yaml на первом старте.
-        // Если мы попадаем сюда раньше неё (гонка контейнеров при первом запуске
-        // или после сброса), yaml_parse_file() вернёт false — а запись поверх
-        // false PHP молча превращает в пустой массив (deprecated, но не фатал),
-        // так что дальнейший yaml_emit_file() перезаписал бы файл огрызком без
-        // dns/filtering/schema_version и т.п. — именно так один раз и разнесло
-        // конфиг AdGuardHome до состояния, несовместимого с её же миграциями схемы.
-        // Даём AdGuardHome до 10 секунд на то, чтобы создать свой файл, вместо
-        // того чтобы писать вслепую поверх ещё не существующего конфига.
-        for ($i = 0; $i < 20; $i++) {
+        // AdGuardHome НЕ пишет /config/AdGuardHome.yaml на диск сама, пока её
+        // install-wizard не пройден через веб-интерфейс — а мы его никогда не
+        // проходим, конфиг с нуля собирает бот. Пара попыток с паузой — только
+        // на случай, если файл в этот момент читает/пишет параллельный вызов
+        // (adguardSync() и adguardSingboxClients() работают с одним файлом);
+        // если файла всё равно нет, отдаём валидный шаблон сами, а не false —
+        // раньше запись поверх false PHP молча превращала в пустой массив, и
+        // дальнейший yaml_emit_file() писал огрызок без dns/schema_version.
+        // schema_version обязателен: без него AdGuardHome решает, что схема
+        // нулевая, и пытается мигрировать её поверх структур (clients и т.п.),
+        // которые бот и так пишет в текущем формате — несовместимость валит
+        // AdGuardHome на старте ("unexpected type of clients").
+        for ($i = 0; $i < 6; $i++) {
             $c = yaml_parse_file($this->adguard);
             if (is_array($c)) {
                 return $c;
             }
             usleep(500000);
         }
-        return false;
+        return [
+            'schema_version' => 34,
+            'dns' => [
+                'bind_hosts'   => ['0.0.0.0'],
+                'upstream_dns' => ['1.1.1.1', '8.8.8.8'],
+            ],
+            'users' => [],
+        ];
     }
 
 public function adguardSync()
@@ -30,9 +40,6 @@ public function adguardSync()
         $this->setPacConf($pac);
         $ssl = $this->nginxGetTypeCert();
         $c   = $this->readAdguardConfig();
-        if ($c === false) {
-            return;
-        }
         $this->stopAd();
         $c['users'][0]['password'] = password_hash($pac['adpswd'], PASSWORD_DEFAULT);
         // AdGuardHome по умолчанию поднимает веб-интерфейс на заводском :3000 (порт
@@ -110,9 +117,6 @@ public function adguardSingboxClients()
     {
         $xr = $this->getSingbox();
         $ad = $this->readAdguardConfig();
-        if ($ad === false) {
-            return;
-        }
         foreach ($xr['inbounds'][0]['settings']['clients'] as $k => $v) {
             $tmp[] = [
                 'safe_search' => [

@@ -4,7 +4,12 @@ trait BotPacTrait
 {
 public function getPacConf()
     {
-        return json_decode(file_get_contents($this->pac), true);
+        // Пустой/битый/ещё не созданный pac.json даёт json_decode() null — а
+        // setPacConf() принимает только array (строгая типизация), так что любой
+        // caller вида "$c = getPacConf(); ...; setPacConf($c)" падает TypeError'ом
+        // на всём service.php (см. selfUpdate()). Гарантируем массив на выходе,
+        // а не только у отдельных вызовов.
+        return json_decode(file_get_contents($this->pac), true) ?: [];
     }
 
 public function setPacConf(array $conf)
