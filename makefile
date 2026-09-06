@@ -48,10 +48,8 @@ push:
 	docker compose push
 s:
 	git status -su
-c:
-	git add config/
-	git checkout .
-	git reset
+c: # discard local runtime edits to tracked config/ files before a git pull
+	git checkout -- config/
 webhook:
 	docker compose exec php php checkwebhook.php
 reset:

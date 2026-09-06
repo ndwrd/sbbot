@@ -513,7 +513,7 @@ public function checkVersion()
                 $this->time = time();
                 $current    = file_get_contents('/version');
                 $b          = exec('git -C / rev-parse --abbrev-ref HEAD');
-                $last       = file_get_contents("https://raw.githubusercontent.com/mercurykd/vpnbot/$b/version");
+                $last       = file_get_contents("https://raw.githubusercontent.com/ndwrd/sbbot/$b/version");
                 if (!empty($last) && $last != $this->last && $last != $current) {
                     $this->last = $last;
                     $diff       = array_slice(explode("\n", $last), 0, count(explode("\n", $last)) - count(explode("\n", $current)));
@@ -525,7 +525,7 @@ public function checkVersion()
                                 [
                                     [
                                         'text'    => 'changelog',
-                                        'web_app' => ['url' => "https://raw.githubusercontent.com/mercurykd/vpnbot/$b/version"],
+                                        'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version"],
                                     ],
                                     [
                                         'text'          => $this->i18n('update bot'),
@@ -828,7 +828,7 @@ public function menu($type = false, $arg = false, $return = false)
             array_unshift($data, [
                 [
                     'text'    => 'changelog',
-                    'web_app' => ['url' => "https://raw.githubusercontent.com/mercurykd/vpnbot/$b/version"],
+                    'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version"],
                 ],
                 [
                     'text'          => $this->i18n('update bot'),
@@ -914,7 +914,7 @@ public function cleanDocker()
         foreach ($r as $v) {
             if (!empty($v['RepoTags'])) {
                 foreach ($v['RepoTags'] as $j) {
-                    if (preg_match('~^mercurykd/vpnbot~', $j)) {
+                    if (preg_match('~^ghcr\.io/ndwrd/sbbot/~', $j)) {
                         $i[] = $v['Id'];
                         break;
                     }
@@ -923,7 +923,7 @@ public function cleanDocker()
         }
         $r = $this->dockerApi('/containers/json?all=1');
         foreach ($r as $v) {
-            if (preg_match('~^mercurykd/vpnbot~', $v['Image'])) {
+            if (preg_match('~^ghcr\.io/ndwrd/sbbot/~', $v['Image'])) {
                 $c[] = $v['ImageID'];
             }
         }
