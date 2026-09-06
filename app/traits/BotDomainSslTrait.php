@@ -76,6 +76,12 @@ public function sslip()
         if (empty($p)) {
             $this->addDomain(str_replace('.', '-', $this->ip) . '.nip.io', 1);
             $this->setSSL('letsencrypt');
+            // nginx -s reload (внутри cloakNginx(), вызванного из setSSL()) не всегда
+            // подхватывает новый ssl_alpn для только что включённых naive/anytls
+            // stream-листенеров — на живом сервере это лечилось только полным
+            // рестартом контейнера. Раз это единственный, самый первый запуск —
+            // разово перезапускаем ng сразу, чтобы не зависеть от повторного reload.
+            $this->restartContainer('ng');
         }
         $this->menu();
     }

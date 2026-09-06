@@ -908,6 +908,17 @@ public function dockerApi($url, $method = 'GET', $data = [])
         return $r;
     }
 
+public function restartContainer($service)
+    {
+        $r = $this->dockerApi('/containers/json?all=1');
+        foreach ($r as $v) {
+            if (($v['Labels']['com.docker.compose.service'] ?? '') == $service) {
+                $this->dockerApi("/containers/{$v['Id']}/restart", 'POST');
+                break;
+            }
+        }
+    }
+
 public function cleanDocker()
     {
         $r = $this->dockerApi('/images/json');
