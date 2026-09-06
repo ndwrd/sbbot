@@ -297,7 +297,6 @@ public function cloakNginx()
         if ($conf !== $before) {
             $this->setPacConf($conf);
         }
-        $template = preg_replace('~server_name naive\.domain~', "server_name {$conf['naiveSubdomain']}.{$conf['domain']}", $template);
         if ($conf['domain'] && $conf['letsencrypt']) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
             foreach (['domain', 'naive', 'anytls'] as $tag) {
@@ -330,6 +329,7 @@ public function cloakNginx()
 
         if ($conf['domain']) {
             $up = file_get_contents('/config/upstream.conf');
+            $up = preg_replace('~#naive.+#naive~s', "#naive\n{$conf['naiveSubdomain']}.{$conf['domain']} ng-naive;\n#naive", $up);
             $up = preg_replace('~#anytls.+#anytls~s', "#anytls\n{$conf['anytlsSubdomain']}.{$conf['domain']} ng-anytls;\n#anytls", $up);
             file_put_contents('/config/upstream.conf', $up);
             $this->ssh('nginx -s reload 2>&1', 'up');
