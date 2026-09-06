@@ -163,53 +163,23 @@ public function buildSingboxConfig($pac)
             ],
         ];
 
-        $outbounds = [
-            [
-                'type'            => 'direct',
-                'tag'             => 'direct',
-                // Пустой (незаполненный) direct sing-box 1.14 больше не даёт использовать
-                // как implicit-детур для скачивания rule-set'ов — "detour to an empty
-                // direct outbound makes no sense". domain_resolver делает outbound
-                // "непустым" без отдельного http_client на каждый rule_set.
-                'domain_resolver' => [
-                    'server'   => 'default',
-                    'strategy' => 'ipv4_only',
-                ],
-            ],
-            ['type' => 'block', 'tag' => 'block'],
-        ];
-        foreach ($pac['singboxOutbounds'] ?? [] as $o) {
-            $outbounds[] = $o;
-        }
-
-        return [
-            'log' => [
-                'level'  => 'info',
-                'output' => '/logs/singbox.log',
-            ],
-            'dns' => [
-                'servers' => [
-                    ['tag' => 'default', 'type' => 'local'],
-                ],
-            ],
-            'inbounds'  => $inbounds,
-            'outbounds' => $outbounds,
-            'route'     => [
-                'rules' => $pac['singboxRoutingRules'] ?? [],
-                'final' => 'direct',
-            ],
-            'experimental' => [
-                'v2ray_api' => [
-                    'listen' => '127.0.0.1:8080',
-                    'stats'  => [
-                        'enabled'   => true,
-                        'inbounds'  => ['vless-in', 'naive-in', 'anytls-in', 'hysteria2-in'],
-                        'outbounds' => ['direct'],
-                        'users'     => array_unique(array_merge(array_column($users, 'name'), array_column($protocolUsers, 'name'))),
-                    ],
+        // log/dns/outbounds/route — статика из /config/sing-server.json, правится
+        // руками прямо в файле; сервер подставляет сюда только то, что реально зависит
+        // от текущих данных (inbounds — список клиентов, experimental — их же stats-теги).
+        $sing = json_decode(file_get_contents('/config/sing-server.json'), true) ?: [];
+        $sing['inbounds']     = $inbounds;
+        $sing['experimental'] = [
+            'v2ray_api' => [
+                'listen' => '127.0.0.1:8080',
+                'stats'  => [
+                    'enabled'   => true,
+                    'inbounds'  => ['vless-in', 'naive-in', 'anytls-in', 'hysteria2-in'],
+                    'outbounds' => ['direct'],
+                    'users'     => array_unique(array_merge(array_column($users, 'name'), array_column($protocolUsers, 'name'))),
                 ],
             ],
         ];
+        return $sing;
     }
 
 public function addXrUser()

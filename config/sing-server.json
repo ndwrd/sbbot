@@ -30,7 +30,11 @@
     "outbounds": [
         {
             "type": "direct",
-            "tag": "direct"
+            "tag": "direct",
+            "domain_resolver": {
+                "server": "default",
+                "strategy": "ipv4_only"
+            }
         },
         {
             "type": "block",
