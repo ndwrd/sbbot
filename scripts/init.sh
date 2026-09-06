@@ -34,6 +34,7 @@ else
     echo "Skipping automatic IPv6 docker setup (daemon.json exists or ip6tables/NAT66 unsupported)" >&2
 fi
 
+cd ~
 git clone https://github.com/ndwrd/sbbot.git
 cd ./sbbot
 git checkout $TAG
