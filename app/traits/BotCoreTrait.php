@@ -381,21 +381,6 @@ public function action()
             case preg_match('~^/routes(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->routes($m[1] ?: 0);
                 break;
-            case preg_match('~^/tun$~', $this->input['callback'], $m):
-                $this->tun();
-                break;
-            case preg_match('~^/tunpackage(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->tunpackage($m[1] ?: 0);
-                break;
-            case preg_match('~^/tunpackagemode$~', $this->input['callback'], $m):
-                $this->tunpackagemode();
-                break;
-            case preg_match('~^/tunprocessmode$~', $this->input['callback'], $m):
-                $this->tunprocessmode();
-                break;
-            case preg_match('~^/tunprocess(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->tunprocess($m[1] ?: 0);
-                break;
             case preg_match('~^/xtlswarp(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->xtlswarp($m[1] ?: 0);
                 break;

@@ -63,28 +63,23 @@
                                 "alterId": 0,
                                 "email": "t@t.tt",
                                 "security": "auto",
-                                "encryption": "none",
-                                "flow": "xtls-rprx-vision"
+                                "encryption": "none"
                             }
                         ]
                     }
                 ]
             },
             "streamSettings": {
-                "network": "tcp",
-                "security": "reality",
-                "realitySettings": {
-                    "serverName": "~server_name~",
-                    "fingerprint": "chrome",
-                    "show": false,
-                    "publicKey": "~public_key~",
-                    "shortId": "~short_id~",
-                    "spiderX": ""
+                "network": "ws",
+                "security": "tls",
+                "wsSettings": {
+                    "path": "~wspath~?ed=2560"
+                },
+                "tlsSettings": {
+                    "allowInsecure": false,
+                    "serverName": "~domain~",
+                    "fingerprint": "chrome"
                 }
-            },
-            "mux": {
-                "enabled": false,
-                "concurrency": -1
             }
         },
         {

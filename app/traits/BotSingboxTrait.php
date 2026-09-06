@@ -354,12 +354,6 @@ public function backXtlsList($type, $page = 0)
             case 'rulessetlist':
                 $this->xtlsrulesset($page);
                 break;
-            case 'tunprocess':
-                $this->tunprocess($page);
-                break;
-            case 'tunpackage':
-                $this->tunpackage($page);
-                break;
             case 'white':
             case 'deny':
                 $this->syncDeny();
@@ -414,60 +408,6 @@ public function singboxUpdateRules()
 
         $xr['routing']['rules'] = $rules;
         $this->restartSingbox($xr);
-    }
-
-public function tunpackagemode()
-    {
-        $c = $this->getPacConf();
-        $c['tunpackagemode'] = $c['tunpackagemode'] ? 0 : 1;
-        $this->setPacConf($c);
-        $this->tun();
-    }
-
-public function tunprocessmode()
-    {
-        $c = $this->getPacConf();
-        $c['tunprocessmode'] = $c['tunprocessmode'] ? 0 : 1;
-        $this->setPacConf($c);
-        $this->tun();
-    }
-
-public function tunpackage($page = 0)
-    {
-        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('package');
-
-        [$data] = $this->listPac('tunpackage', $page, 'tunpackage');
-        $data[] = [
-            [
-                'text'          => $this->i18n('back'),
-                'callback_data' => "/tun",
-            ],
-        ];
-        $this->update(
-            $this->input['chat'],
-            $this->input['message_id'],
-            implode("\n", $text ?: ['...']),
-            $data ?: false,
-        );
-    }
-
-public function tunprocess($page = 0)
-    {
-        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> ' . $this->i18n('process');
-
-        [$data] = $this->listPac('tunprocess', $page, 'tunprocess');
-        $data[] = [
-            [
-                'text'          => $this->i18n('back'),
-                'callback_data' => "/tun",
-            ],
-        ];
-        $this->update(
-            $this->input['chat'],
-            $this->input['message_id'],
-            implode("\n", $text ?: ['...']),
-            $data ?: false,
-        );
     }
 
 public function xtlsblock($page = 0)
@@ -1252,48 +1192,6 @@ public function routes()
         );
     }
 
-public function tun()
-    {
-        $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('tun lists');
-
-        $c = $this->getPacConf();
-
-        $data = [
-            [
-                [
-                    'text'          => $this->i18n('package'),
-                    'callback_data' => "/tunpackage",
-                ],
-                [
-                    'text'          => 'mode: ' . $this->i18n(!empty($c['tunpackagemode']) ? 'exclude' : 'include'),
-                    'callback_data' => "/tunpackagemode",
-                ],
-            ],
-            [
-                [
-                    'text'          => $this->i18n('process'),
-                    'callback_data' => "/tunprocess",
-                ],
-                [
-                    'text'          => 'mode: ' . $this->i18n(!empty($c['tunprocessmode']) ? 'exclude' : 'include'),
-                    'callback_data' => "/tunprocessmode",
-                ],
-            ],
-        ];
-        $data[] = [
-            [
-                'text'          => $this->i18n('back'),
-                'callback_data' => "/singbox",
-            ],
-        ];
-        $this->update(
-            $this->input['chat'],
-            $this->input['message_id'],
-            implode("\n", $text ?: ['...']),
-            $data ?: false,
-        );
-    }
-
 public function choiceTemplate($arg)
     {
         $arg = explode('_', $arg);
@@ -1660,85 +1558,73 @@ public function subscription($return = false)
 
         switch ($_GET['t']) {
             case 's':
-                $c['outbounds'][$index]['settings']['vnext'][0]['address']  = '~domain~';
-                $c['outbounds'][$index]['settings']['vnext'][0]['users'][0] = [
-                    'id'         => '~uid~',
-                    'encryption' => 'none',
-                ];
-                $fingerprint = $c['outbounds'][$index]['streamSettings']['realitySettings']['fingerprint'] ?? $c['outbounds'][$index]['streamSettings']['tlsSettings']['fingerprint'] ?? 'chrome';
-                switch ($pac['transport']) {
-                    case 'Reality':
-                        $c['outbounds'][$index]['settings']['vnext'][0]['users'][0]["flow"] = "xtls-rprx-vision";
-                        $c['outbounds'][$index]['streamSettings']                           = [
-                            "network"         => "tcp",
-                            "security"        => "reality",
-                            "realitySettings" => [
-                                "serverName"  => '~server_name~',
-                                "fingerprint" => $fingerprint,
-                                "publicKey"   => '~public_key~',
-                                "shortId"     => '~short_id~',
-                            ]
-                        ];
-                        $c['outbounds'][$index]['mux'] = [
-                            "enabled"     => false,
-                            "concurrency" => -1
-                        ];
-                        break;
-                    case 'xhttp':
-                        $c['outbounds'][$index]['streamSettings'] = [
-                            "network"  => "xhttp",
-                            "security" => "tls",
-
-                            "xhttpSettings" => [
-                                "host" => "~domain~",
-                                "mode" => "packet-up",
-                                "path" => "/ws$hash",
-
-                                "extra" => [
-                                    "scMaxEachPostBytes"    => 1000000,
-                                    "scMinPostsIntervalMs"  => 30,
-                                    "scStreamUpServerSecs"  => "20-80",
-                                    "xmux" => [
-                                        "cMaxReuseTimes"    => 0,
-                                        "hKeepAlivePeriod"  => 0,
-                                        "hMaxRequestTimes"  => "600-900",
-                                        "hMaxReusableSecs"  => "1800-3000",
-                                        "maxConcurrency"    => "16-32",
-                                        "maxConnections"    => 0,
-                                    ],
-                                    "xPaddingBytes" => "100-1000",
-                                    "noGRPCHeader"  => false
+                // Как и у sing-box-шаблона: v2ray.json уже в финальном WS-виде для
+                // единственного реально используемого сейчас транспорта — uuid/domain/
+                // ~wspath~ заполнит общий replaceTags() ниже. Reality/xhttp — дормант-
+                // задел (см. buildSingboxConfig()), сами достраивают всё с нуля, раз
+                // шаблон больше не несёт realitySettings/mux по умолчанию.
+                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                    $c['outbounds'][$index]['settings']['vnext'][0]['address']  = '~domain~';
+                    $c['outbounds'][$index]['settings']['vnext'][0]['users'][0] = [
+                        'id'         => '~uid~',
+                        'encryption' => 'none',
+                    ];
+                    switch ($pac['transport']) {
+                        case 'Reality':
+                            $c['outbounds'][$index]['settings']['vnext'][0]['users'][0]["flow"] = "xtls-rprx-vision";
+                            $c['outbounds'][$index]['streamSettings']                           = [
+                                "network"         => "tcp",
+                                "security"        => "reality",
+                                "realitySettings" => [
+                                    "serverName"  => '~server_name~',
+                                    "fingerprint" => 'chrome',
+                                    "publicKey"   => '~public_key~',
+                                    "shortId"     => '~short_id~',
                                 ]
-                            ],
+                            ];
+                            $c['outbounds'][$index]['mux'] = [
+                                "enabled"     => false,
+                                "concurrency" => -1
+                            ];
+                            break;
+                        case 'xhttp':
+                            $c['outbounds'][$index]['streamSettings'] = [
+                                "network"  => "xhttp",
+                                "security" => "tls",
 
-                            "tlsSettings" => [
-                                "allowInsecure" => false,
-                                "alpn"          => ["h2", "http/1.1"],
-                                "fingerprint"   => "chrome",
-                                "serverName"    => "~domain~",
-                                "show"          => false
-                            ]
-                        ];
-                        unset($c['outbounds'][$index]['mux']);
-                        break;
+                                "xhttpSettings" => [
+                                    "host" => "~domain~",
+                                    "mode" => "packet-up",
+                                    "path" => "~wspath~",
 
-                    default:
-                        $c['outbounds'][$index]['streamSettings'] = [
-                            "network"    => "ws",
-                            "security"   => "tls",
-                            "wsSettings" => [
-                                "path" => "/ws$hash?ed=2560"
-                            ],
-                            "tlsSettings" => [
-                                "allowInsecure" => false,
-                                "serverName"    => '~domain~',
-                                "fingerprint"   => $fingerprint
-                            ]
-                        ];
-                        unset($c['outbounds'][$index]['mux']);
-                        break;
+                                    "extra" => [
+                                        "scMaxEachPostBytes"    => 1000000,
+                                        "scMinPostsIntervalMs"  => 30,
+                                        "scStreamUpServerSecs"  => "20-80",
+                                        "xmux" => [
+                                            "cMaxReuseTimes"    => 0,
+                                            "hKeepAlivePeriod"  => 0,
+                                            "hMaxRequestTimes"  => "600-900",
+                                            "hMaxReusableSecs"  => "1800-3000",
+                                            "maxConcurrency"    => "16-32",
+                                            "maxConnections"    => 0,
+                                        ],
+                                        "xPaddingBytes" => "100-1000",
+                                        "noGRPCHeader"  => false
+                                    ]
+                                ],
+
+                                "tlsSettings" => [
+                                    "allowInsecure" => false,
+                                    "alpn"          => ["h2", "http/1.1"],
+                                    "fingerprint"   => "chrome",
+                                    "serverName"    => "~domain~",
+                                    "show"          => false
+                                ]
+                            ];
+                            break;
+                    }
                 }
-
                 break;
             case 'si':
                 // vless-out в шаблоне уже в финальном виде для единственного реально
@@ -1796,75 +1682,51 @@ public function subscription($return = false)
                 }
                 break;
             case 'cl':
-                $c['proxies'][$index]['server'] = '~domain~';
-                $c['proxies'][$index]['uuid']   = '~uid~';
-                switch (true) {
-                    case $pac['transport'] == 'Reality':
-                        unset($c['proxies'][$index]["ws-opts"]);
-                        unset($c['proxies'][$index]["skip-cert-verify"]);
-                        $c['proxies'][$index]["network"]      = "tcp";
-                        $c['proxies'][$index]['flow']         = 'xtls-rprx-vision';
-                        $c['proxies'][$index]['servername']  = '~server_name~';
-                        $c['proxies'][$index]['reality-opts'] = [
-                            'public-key' => '~public_key~',
-                            'short-id'   => '~short_id~',
-                        ];
-                        break;
-                    case $pac['transport'] == 'xhttp':
-                        unset($c['proxies'][$index]['ws-opts']);
-                        unset($c['proxies'][$index]['flow']);
-                        unset($c['proxies'][$index]['reality-opts']);
+                // clash.json тоже уже в финальном WS-виде — как и у 's'/'si', точечная
+                // мутация нужна только для дормант-транспортов Reality/xhttp.
+                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                    $c['proxies'][$index]['server'] = '~domain~';
+                    $c['proxies'][$index]['uuid']   = '~uid~';
+                    switch ($pac['transport']) {
+                        case 'Reality':
+                            unset($c['proxies'][$index]["ws-opts"]);
+                            unset($c['proxies'][$index]["skip-cert-verify"]);
+                            $c['proxies'][$index]["network"]      = "tcp";
+                            $c['proxies'][$index]['flow']         = 'xtls-rprx-vision';
+                            $c['proxies'][$index]['servername']  = '~server_name~';
+                            $c['proxies'][$index]['reality-opts'] = [
+                                'public-key' => '~public_key~',
+                                'short-id'   => '~short_id~',
+                            ];
+                            break;
+                        case 'xhttp':
+                            unset($c['proxies'][$index]['ws-opts']);
+                            unset($c['proxies'][$index]['flow']);
+                            unset($c['proxies'][$index]['reality-opts']);
 
-                        $c['proxies'][$index]['network']            = 'xhttp';
-                        $c['proxies'][$index]['client-fingerprint'] = 'chrome';
-                        $c['proxies'][$index]['tls']                = true;
-                        $c['proxies'][$index]['alpn']               = ['h2'];
-                        $c['proxies'][$index]['servername']         = '~domain~';
-                        $c['proxies'][$index]['skip-cert-verify']   = false;
+                            $c['proxies'][$index]['network']            = 'xhttp';
+                            $c['proxies'][$index]['client-fingerprint'] = 'chrome';
+                            $c['proxies'][$index]['tls']                = true;
+                            $c['proxies'][$index]['alpn']               = ['h2'];
+                            $c['proxies'][$index]['servername']         = '~domain~';
+                            $c['proxies'][$index]['skip-cert-verify']   = false;
 
-                        $c['proxies'][$index]['xhttp-opts'] = [
-                            'host'                   => '~domain~',
-                            'path'                   => "/ws$hash",
-                            'mode'                   => 'packet-up',
-                            'no-grpc-header'         => false,
-                            'x-padding-bytes'        => '100-1000',
-                            'sc-max-each-post-bytes' => 1000000,
-                            'reuse-settings'         => [
-                                'max-connections'   => '0',
-                                'max-concurrency'   => '8-16',
-                                'c-max-reuse-times' => '0',
-                                'h-max-request-times' => '100-200',
-                                'h-max-reusable-secs' => '1800-3000',
-                            ],
-                        ];
-                        break;
-
-                    default:
-                        unset($c['proxies'][$index]['flow']);
-                        unset($c['proxies'][$index]['reality-opts']);
-                        $c['proxies'][$index]["network"]          = "ws";
-                        $c['proxies'][$index]["ws-opts"]['path']  = "/ws$hash";
-                        $c['proxies'][$index]["skip-cert-verify"] = false;
-                        $c['proxies'][$index]['servername']       = '~domain~';
-                        break;
-                }
-
-                $tunpackage = array_filter($pac['tunpackage'] ?? []);
-                $tunprocess = array_filter($pac['tunprocess'] ?? []);
-                if (!empty($tunpackage) || !empty($tunprocess)) {
-                    if (!empty($tunpackage)) {
-                        if (!empty($pac['tunpackagemode'])) {
-                            $c['tun']['exclude-package'] = array_keys($tunpackage);
-                        } else {
-                            $c['tun']['include-package'] = array_keys($tunpackage);
-                        }
-                    }
-                    if (!empty($tunprocess)) {
-                        if (!empty($pac['tunprocessmode'])) {
-                            $c['tun']['exclude-process'] = array_keys($tunprocess);
-                        } else {
-                            $c['tun']['include-process'] = array_keys($tunprocess);
-                        }
+                            $c['proxies'][$index]['xhttp-opts'] = [
+                                'host'                   => '~domain~',
+                                'path'                   => "~wspath~",
+                                'mode'                   => 'packet-up',
+                                'no-grpc-header'         => false,
+                                'x-padding-bytes'        => '100-1000',
+                                'sc-max-each-post-bytes' => 1000000,
+                                'reuse-settings'         => [
+                                    'max-connections'   => '0',
+                                    'max-concurrency'   => '8-16',
+                                    'c-max-reuse-times' => '0',
+                                    'h-max-request-times' => '100-200',
+                                    'h-max-reusable-secs' => '1800-3000',
+                                ],
+                            ];
+                            break;
                     }
                 }
                 break;

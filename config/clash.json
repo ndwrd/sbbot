@@ -74,15 +74,14 @@
             "server": "~domain~",
             "port": 443,
             "uuid": "~uid~",
-            "network": "tcp",
-            "flow": "xtls-rprx-vision",
+            "network": "ws",
+            "ws-opts": {
+                "path": "~wspath~"
+            },
             "udp": true,
             "tls": true,
-            "reality-opts": {
-                "public-key": "~public_key~",
-                "short-id": "~short_id~"
-            },
-            "servername": "~server_name~",
+            "skip-cert-verify": false,
+            "servername": "~domain~",
             "client-fingerprint": "chrome"
         },
         {
