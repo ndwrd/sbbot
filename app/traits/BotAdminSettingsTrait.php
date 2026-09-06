@@ -819,7 +819,7 @@ public function selfUpdate()
         if (file_exists($this->update)) {
             $this->selfupdate = true;
             if (!empty($m)) {
-                $this->send($this->input['chat'], "<pre>$m</pre>", $rm[1]);
+                $this->send($this->input['chat'], "<pre>$m</pre>", (int) ($rm[1] ?? 0));
             }
             $r = $this->send($this->input['chat'], "import settings");
             $this->input['message_id']  = $r['result']['message_id'];

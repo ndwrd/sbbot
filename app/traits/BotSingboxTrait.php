@@ -848,10 +848,12 @@ public function statsMenu()
         $text[] = "Menu -> " . $this->i18n('vless') . ' -> Stats';
         $text[] = '';
         $text[] = '<blockquote>';
+        $text[] = 'System';
         $text[] = 'Sing-box uptime: ' . $this->formatUptime($sys['uptime'] ?? 0);
         $text[] = 'Sing-box memory: ' . $this->getMB($sys['alloc'] ?? 0);
         $text[] = '</blockquote>';
-        $text[] = '<code>';
+        $text[] = '<blockquote>';
+        $text[] = 'Traffic';
         foreach ([
             'vless-in'     => 'Vless',
             'naive-in'     => 'Naive',
@@ -862,7 +864,7 @@ public function statsMenu()
             $upload   = ($st['inbounds'][$tag]['global']['upload']   ?? 0) + ($st['inbounds'][$tag]['session']['upload']   ?? 0);
             $text[]   = "$label: ↓{$this->getGB($download)} ↑{$this->getGB($upload)}";
         }
-        $text[] = '</code>';
+        $text[] = '</blockquote>';
 
         $data[] = [
             [
@@ -870,7 +872,7 @@ public function statsMenu()
                 'callback_data' => "/resetXrStats",
             ],
             [
-                'text'          => $this->i18n(!empty($conf['reset_monthly']) ? 'on' : 'off') . ' reset monthly',
+                'text'          => $this->i18n(!empty($conf['reset_monthly']) ? 'on' : 'off') . ' Reset monthly',
                 'callback_data' => "/switchMonthlyStats",
             ],
         ];
@@ -1141,7 +1143,7 @@ public function singbox($page = 0)
         $text[] = "↓{$this->getGB($totalDownload)} ↑{$this->getGB($totalUpload)}";
         $data[] = [
             [
-                'text'          => $this->i18n('main outbound name: ') . ($p['outbound'] ?? 'proxy'),
+                'text'          => $this->i18n('main outbound name: ') . '"' . ($p['outbound'] ?? 'proxy') . '"',
                 'callback_data' => '/mainOutbound',
             ],
             [
@@ -1459,8 +1461,6 @@ public function userXr($i)
                 'text'          => !empty($c['trafficlimit']) ? "limit: " . $this->getGB($c['trafficlimit']) : $this->i18n('set limit'),
                 'callback_data' => "/limitXr $i",
             ],
-        ];
-        $data[] = [
             [
                 'text'          => $this->i18n($c['off'] ? 'off' : 'on'),
                 'callback_data' => "/switchXr $i",
