@@ -39,7 +39,10 @@ public function restartSingbox($c, $norestart = false)
             // SIGHUP = sing-box's own graceful reload (validates the new config, then
             // swaps instances with a shutdown grace period for existing connections)
             // instead of a hard kill; falls back to a cold start if nothing is running yet.
-            $this->ssh('pkill -HUP sing-box || (sing-box run -c /sing.json > /dev/null 2>&1 &)', 'sbx');
+            // $wait=false makes ssh() nohup-wrap the whole command — confirmed the hard
+            // way that a bare `&` here does NOT survive the ssh channel closing (same
+            // class of bug as `docker exec ... &` needing `exec -d` to actually detach).
+            $this->ssh('pkill -HUP sing-box || sing-box run -c /sing.json', 'sbx', false);
         } else {
             file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         }
