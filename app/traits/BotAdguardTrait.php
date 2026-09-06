@@ -2,13 +2,37 @@
 
 trait BotAdguardTrait
 {
+public function readAdguardConfig()
+    {
+        // AdGuardHome сама создаёт /config/AdGuardHome.yaml на первом старте.
+        // Если мы попадаем сюда раньше неё (гонка контейнеров при первом запуске
+        // или после сброса), yaml_parse_file() вернёт false — а запись поверх
+        // false PHP молча превращает в пустой массив (deprecated, но не фатал),
+        // так что дальнейший yaml_emit_file() перезаписал бы файл огрызком без
+        // dns/filtering/schema_version и т.п. — именно так один раз и разнесло
+        // конфиг AdGuardHome до состояния, несовместимого с её же миграциями схемы.
+        // Даём AdGuardHome до 10 секунд на то, чтобы создать свой файл, вместо
+        // того чтобы писать вслепую поверх ещё не существующего конфига.
+        for ($i = 0; $i < 20; $i++) {
+            $c = yaml_parse_file($this->adguard);
+            if (is_array($c)) {
+                return $c;
+            }
+            usleep(500000);
+        }
+        return false;
+    }
+
 public function adguardSync()
     {
         $pac = $this->getPacConf();
         $pac['adpswd'] = ($pac['adpswd'] ?? null) ?: substr(hash('md5', time()), 0, 10);
         $this->setPacConf($pac);
         $ssl = $this->nginxGetTypeCert();
-        $c   = yaml_parse_file($this->adguard);
+        $c   = $this->readAdguardConfig();
+        if ($c === false) {
+            return;
+        }
         $this->stopAd();
         $c['users'][0]['password'] = password_hash($pac['adpswd'], PASSWORD_DEFAULT);
         // AdGuardHome по умолчанию поднимает веб-интерфейс на заводском :3000 (порт
@@ -85,7 +109,10 @@ public function adguardreset()
 public function adguardSingboxClients()
     {
         $xr = $this->getSingbox();
-        $ad = yaml_parse_file($this->adguard);
+        $ad = $this->readAdguardConfig();
+        if ($ad === false) {
+            return;
+        }
         foreach ($xr['inbounds'][0]['settings']['clients'] as $k => $v) {
             $tmp[] = [
                 'safe_search' => [
