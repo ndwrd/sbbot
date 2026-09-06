@@ -13,6 +13,11 @@
 /config/hwid.json
 /config/pac.json
 /config/AdGuardHome.yaml
+/config/mtprotosecret
+/config/mtprotodomain
+/config/deny
+/config/unit.json
+/config/singbox.stats
 /todo.todo
 /app/zapretlists/*
 !/app/zapretlists/.gitkeep
