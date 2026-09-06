@@ -245,7 +245,6 @@ services:
             - ./ssh:/ssh
             - ./config/sshd_config:/etc/ssh/sshd_config
             - ./scripts/start_tg.sh:/start_tg.sh
-            - ./config/mtprotosecret:/mtprotosecret
             - ./logs/:/logs/
         hostname: telegram
         container_name: relay-${VER}
