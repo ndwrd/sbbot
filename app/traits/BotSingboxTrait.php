@@ -967,6 +967,7 @@ public function singbox($page = 0)
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
         $text[] = 'transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
+        $text[] = 'Outbounds: Vless, Hysteria2, Naive, Anytls';
         $data[] = [
             [
                 'text'          => $this->i18n('main outbound name: ') . ($p['outbound'] ?? 'proxy'),

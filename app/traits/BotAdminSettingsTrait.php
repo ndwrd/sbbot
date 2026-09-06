@@ -484,13 +484,13 @@ public function configMenu()
                     'text'          => $this->i18n('Domains'),
                     'callback_data' => "/menu domains",
                 ],
+                [
+                    'text'          => $this->i18n('Ports'),
+                    'callback_data' => "/ports",
+                ],
             ],
         ];
         $data[] = [
-            [
-                'text'          => $this->i18n('Ports'),
-                'callback_data' => "/ports",
-            ],
             [
                 'text'          => $this->i18n('logs'),
                 'callback_data' => "/logs",
@@ -498,17 +498,6 @@ public function configMenu()
             [
                 'text'          => $this->i18n('IP ban'),
                 'callback_data' => "/ipMenu",
-            ],
-        ];
-
-        $data[] = [
-            [
-                'text'          => $this->i18n('lang'),
-                'callback_data' => "/menu lang",
-            ],
-            [
-                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
-                'callback_data' => "/enterPage",
             ],
         ];
         $data[] = [
@@ -534,8 +523,6 @@ public function configMenu()
                 'text'          => $this->i18n('backup') . ': ' . ($backup ?: $this->i18n('off')),
                 'callback_data' => "/backup",
             ],
-        ];
-        $data[] = [
             [
                 'text'          => $this->i18n('autoupdate') . ': ' .  $this->i18n($conf['autoupdate'] ? 'on' : 'off'),
                 'callback_data' => "/autoupdate",
@@ -546,11 +533,19 @@ public function configMenu()
                 'text'          => $this->i18n('restart'),
                 'callback_data' => "/restart",
             ],
-        ];
-        $data[] = [
             [
                 'text'          => "{$this->i18n('add')} {$this->i18n('admin')}",
                 'callback_data' => "/addadmin",
+            ],
+        ];
+        $data[] = [
+            [
+                'text'          => $this->i18n('lang'),
+                'callback_data' => "/menu lang",
+            ],
+            [
+                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
+                'callback_data' => "/enterPage",
             ],
         ];
         $file = dirname(__DIR__) . '/config.php';
