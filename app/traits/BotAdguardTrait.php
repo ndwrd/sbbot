@@ -41,6 +41,10 @@ public function adguardSync()
         $ssl = $this->nginxGetTypeCert();
         $c   = $this->readAdguardConfig();
         $this->stopAd();
+        // adguardBasicAuth() и текст меню везде подразумевают логин "admin" —
+        // на чистой установке users стартует пустым, и без явного имени
+        // получившаяся запись пользователя ни под каким логином не подходит.
+        $c['users'][0]['name']     = 'admin';
         $c['users'][0]['password'] = password_hash($pac['adpswd'], PASSWORD_DEFAULT);
         // AdGuardHome по умолчанию поднимает веб-интерфейс на заводском :3000 (порт
         // выбирается только через install-wizard, который мы никогда не проходим) —
