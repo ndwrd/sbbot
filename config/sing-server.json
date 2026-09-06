@@ -11,52 +11,13 @@
             }
         ]
     },
-    "inbounds": [
-        {
-            "type": "vless",
-            "tag": "vless-ws-in",
-            "listen": "0.0.0.0",
-            "listen_port": 443,
-            "users": [],
-            "tls": {
-                "enabled": false
-            },
-            "transport": {
-                "type": "ws",
-                "path": "/ws"
-            }
-        }
-    ],
     "outbounds": [
         {
             "type": "direct",
-            "tag": "direct",
-            "domain_resolver": {
-                "server": "default",
-                "strategy": "ipv4_only"
-            }
-        },
-        {
-            "type": "block",
-            "tag": "block"
+            "tag": "direct"
         }
     ],
     "route": {
         "rules": []
-    },
-    "experimental": {
-        "v2ray_api": {
-            "listen": "127.0.0.1:8080",
-            "stats": {
-                "enabled": true,
-                "inbounds": [
-                    "vless-ws-in"
-                ],
-                "outbounds": [
-                    "direct"
-                ],
-                "users": []
-            }
-        }
     }
 }
