@@ -189,9 +189,9 @@ public function addXrUser()
     {
         $r = $this->send(
             $this->input['chat'],
-            "@{$this->input['username']} enter description",
+            "@{$this->input['username']} example: Description:username:uuid:password, (description required, username/uuid/password auto-generated if omitted)",
             $this->input['message_id'],
-            reply: 'enter description:username:uuid:password [,description:username:uuid:password] (description required, username auto-generated if omitted)',
+            reply: 'Description:username:uuid:password,',
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message'  => $this->input['message_id'],
@@ -205,9 +205,9 @@ public function renameXrUser($i)
     {
         $r = $this->send(
             $this->input['chat'],
-            "@{$this->input['username']} enter name",
+            "@{$this->input['username']} Enter Description",
             $this->input['message_id'],
-            reply: 'enter password',
+            reply: 'Enter Description',
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message'  => $this->input['message_id'],
@@ -217,12 +217,96 @@ public function renameXrUser($i)
         ];
     }
 
+public function queryV2raySingboxStats()
+    {
+        // experimental.v2ray_api (тег with_v2ray_api) — v2ray-совместимый gRPC
+        // StatsService; PHP не умеет gRPC/protobuf нативно, поэтому спрашиваем через
+        // grpcurl (готовый gRPC-клиент, как curl, только для gRPC) с тем же
+        // stats.proto, что и собранный sing-box — оба зашиты в образ sbx.
+        // Пустой pattern в QueryStats — значит "отдай вообще все счётчики разом".
+        $out = $this->ssh("grpcurl -plaintext -proto /etc/singbox/stats.proto -d '{}' 127.0.0.1:8080 experimental.v2rayapi.StatsService/QueryStats", 'sbx');
+        $json = json_decode($out, true);
+        $result = ['users' => [], 'inbounds' => []];
+        foreach ($json['stat'] ?? [] as $stat) {
+            // Имена счётчиков вида "user>>>ИМЯ>>>traffic>>>uplink" / "...downlink",
+            // аналогично для "inbound>>>ТЕГ>>>...".
+            $parts = explode('>>>', $stat['name'] ?? '');
+            if (count($parts) < 4 || !in_array($parts[0], ['user', 'inbound'])) {
+                continue;
+            }
+            $key   = $parts[0] === 'user' ? 'users' : 'inbounds';
+            $field = $parts[3] === 'uplink' ? 'upload' : 'download';
+            $result[$key][$parts[1]][$field] = (int) ($stat['value'] ?? 0);
+        }
+        return $result;
+    }
+
+public function getSingboxSysStats()
+    {
+        $out = $this->ssh("grpcurl -plaintext -proto /etc/singbox/stats.proto -d '{}' 127.0.0.1:8080 experimental.v2rayapi.StatsService/GetSysStats", 'sbx');
+        // Регистр ключей в JSON-выдаче grpcurl под вопросом (поля в .proto — не
+        // snake_case, а PascalCase, как есть) — приводим к нижнему регистру, чтобы
+        // не гадать точное написание.
+        return array_change_key_case(json_decode($out, true) ?: [], CASE_LOWER);
+    }
+
 public function singboxStatsUser()
     {
-        // Живой сбор статистики через sing-box v2ray_api временно не реализован
-        // (нужен отдельный gRPC-клиент внутри sbx) — заглушка по согласованному плану,
-        // getSingboxStats()/setSingboxStats() продолжают отдавать последнее сохранённое значение.
-        return;
+        $stats = $this->queryV2raySingboxStats();
+        if (empty($stats['users']) && empty($stats['inbounds'])) {
+            return;
+        }
+        $pac     = $this->getPacConf();
+        $clients = $pac['singboxClients'] ?? [];
+        $p       = $this->getSingboxStats();
+
+        // Счётчики sing-box именованы по username, а $p['users'] (как уже читают
+        // userXr()/sub()) индексирован числовой позицией клиента — сопоставляем.
+        foreach ($clients as $i => $client) {
+            $name = $client['username'] ?? null;
+            if ($name === null || !isset($stats['users'][$name])) {
+                continue;
+            }
+            $p['users'][$i]['session']['download'] = $stats['users'][$name]['download'] ?? 0;
+            $p['users'][$i]['session']['upload']   = $stats['users'][$name]['upload'] ?? 0;
+        }
+        foreach ($stats['inbounds'] as $tag => $v) {
+            $p['inbounds'][$tag]['session']['download'] = $v['download'] ?? 0;
+            $p['inbounds'][$tag]['session']['upload']   = $v['upload'] ?? 0;
+        }
+        $this->setSingboxStats($p);
+
+        // Лимит трафика — по согласованному плану только уведомляем админа, без
+        // автоотключения; limitNotified не даёт слать одно и то же уведомление
+        // повторно, пока трафик не упадёт обратно ниже лимита (сброс статы и т.п.).
+        $changed = false;
+        require dirname(__DIR__) . '/config.php';
+        foreach ($clients as $i => $client) {
+            if (empty($client['trafficlimit'])) {
+                continue;
+            }
+            $stat = $p['users'][$i] ?? null;
+            if (!$stat) {
+                continue;
+            }
+            $total = ($stat['global']['download'] ?? 0) + ($stat['session']['download'] ?? 0)
+                   + ($stat['global']['upload']   ?? 0) + ($stat['session']['upload']   ?? 0);
+            if ($total >= $client['trafficlimit'] && empty($client['limitNotified'])) {
+                $label = $client['description'] ?? ($client['username'] ?? $i);
+                foreach ($c['admin'] as $admin) {
+                    $this->send($admin, "$label: traffic limit exceeded (" . $this->getGB($total) . ")");
+                }
+                $clients[$i]['limitNotified'] = true;
+                $changed = true;
+            } elseif ($total < $client['trafficlimit'] && !empty($client['limitNotified'])) {
+                $clients[$i]['limitNotified'] = false;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $pac['singboxClients'] = $clients;
+            $this->setPacConf($pac);
+        }
     }
 
 public function checkResetSingboxStats()
@@ -252,10 +336,13 @@ public function checkResetSingboxStats()
                 if ($lastResetTime < $lastScheduledReset) {
                     $pac['last_reset_singbox_time'] = $now;
                     $this->setPacConf($pac);
+                    $st       = $this->getSingboxStats();
+                    $download = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
+                    $upload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
                     $this->resetXrStats(1);
                     require dirname(__DIR__) . '/config.php';
                     foreach ($c['admin'] as $admin) {
-                        $this->send($admin, "vless: reset stats");
+                        $this->send($admin, "vless: monthly traffic ↓{$this->getGB($download)} ↑{$this->getGB($upload)}, stats reset");
                     }
                 }
             }
@@ -299,6 +386,36 @@ public function timerXr($k)
             'callback'      => 'setTimerXr',
             'args'          => [$k],
         ];
+    }
+
+public function limitXr($i)
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter traffic limit in GB, example: 50 (0 to disable)",
+            $this->input['message_id'],
+            reply: 'example: 50 (0 to disable)',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'setLimitXr',
+            'args'          => [$i],
+        ];
+    }
+
+public function setLimitXr($gb, $i)
+    {
+        $c  = $this->getSingbox();
+        $gb = (float) $gb;
+        if (empty($gb)) {
+            unset($c['inbounds'][0]['settings']['clients'][$i]['trafficlimit']);
+            unset($c['inbounds'][0]['settings']['clients'][$i]['limitNotified']);
+        } else {
+            $c['inbounds'][0]['settings']['clients'][$i]['trafficlimit']  = (int) round($gb * 1024 ** 3);
+            $c['inbounds'][0]['settings']['clients'][$i]['limitNotified'] = false;
+        }
+        $this->restartSingbox($c, 1);
+        $this->userXr($i);
     }
 
 public function backXtlsList($type, $page = 0)
@@ -524,7 +641,7 @@ public function switchMonthlyStats()
         $c = $this->getPacConf();
         $c['reset_monthly'] = $c['reset_monthly'] ? 0 : 1;
         $this->setPacConf($c);
-        $this->singbox();
+        $this->statsMenu();
     }
 
 public function linkVless($i, $s = false)
@@ -708,6 +825,7 @@ public function resetXrUser($i)
     {
         $c = $this->getSingboxStats();
         unset($c['users'][$i]);
+        $this->setSingboxStats($c);
         $this->restartSingbox($this->getSingbox());
         $this->userXr($i);
     }
@@ -717,8 +835,57 @@ public function resetXrStats($nomenu = false)
         $this->restartSingbox($this->getSingbox());
         $this->setSingboxStats([]);
         if (empty($nomenu)) {
-            $this->singbox();
+            $this->statsMenu();
         }
+    }
+
+public function statsMenu()
+    {
+        $st   = $this->getSingboxStats();
+        $sys  = $this->getSingboxSysStats();
+        $conf = $this->getPacConf();
+
+        $text[] = "Menu -> " . $this->i18n('vless') . ' -> Stats';
+        $text[] = '';
+        $text[] = '<blockquote>';
+        $text[] = 'Sing-box uptime: ' . $this->formatUptime($sys['uptime'] ?? 0);
+        $text[] = 'Sing-box memory: ' . $this->getMB($sys['alloc'] ?? 0);
+        $text[] = '</blockquote>';
+        $text[] = '<code>';
+        foreach ([
+            'vless-in'     => 'Vless',
+            'naive-in'     => 'Naive',
+            'anytls-in'    => 'Anytls',
+            'hysteria2-in' => 'Hysteria2',
+        ] as $tag => $label) {
+            $download = ($st['inbounds'][$tag]['global']['download'] ?? 0) + ($st['inbounds'][$tag]['session']['download'] ?? 0);
+            $upload   = ($st['inbounds'][$tag]['global']['upload']   ?? 0) + ($st['inbounds'][$tag]['session']['upload']   ?? 0);
+            $text[]   = "$label: ↓{$this->getGB($download)} ↑{$this->getGB($upload)}";
+        }
+        $text[] = '</code>';
+
+        $data[] = [
+            [
+                'text'          => $this->i18n('reset stats'),
+                'callback_data' => "/resetXrStats",
+            ],
+            [
+                'text'          => $this->i18n(!empty($conf['reset_monthly']) ? 'on' : 'off') . ' reset monthly',
+                'callback_data' => "/switchMonthlyStats",
+            ],
+        ];
+        $data[] = [
+            [
+                'text'          => $this->i18n('back'),
+                'callback_data' => "/singbox",
+            ],
+        ];
+        $this->update(
+            $this->input['chat'],
+            $this->input['message_id'],
+            implode("\n", $text ?: ['...']),
+            $data ?: false,
+        );
     }
 
 public function listXr($i)
@@ -879,7 +1046,7 @@ public function templates($type)
         ];
         $data[] = [
             [
-                'text'          => "origin",
+                'text'          => "Origin",
                 'web_app' => ['url' => "https://$domain/pac$hash?t=te&ty=$type"],
             ],
             [
@@ -968,10 +1135,18 @@ public function singbox($page = 0)
         }
         $text[] = 'transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
         $text[] = 'Outbounds: Vless, Hysteria2, Naive, Anytls';
+        $st = $this->getSingboxStats();
+        $totalDownload = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
+        $totalUpload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
+        $text[] = "↓{$this->getGB($totalDownload)} ↑{$this->getGB($totalUpload)}";
         $data[] = [
             [
                 'text'          => $this->i18n('main outbound name: ') . ($p['outbound'] ?? 'proxy'),
                 'callback_data' => '/mainOutbound',
+            ],
+            [
+                'text'          => $this->i18n('templates'),
+                'callback_data' => "/templatesMenu",
             ],
         ];
         $data[] = [
@@ -980,8 +1155,14 @@ public function singbox($page = 0)
                 'callback_data' => "/routes",
             ],
             [
-                'text'          => $this->i18n('templates'),
-                'callback_data' => "/templatesMenu",
+                'text'          => 'Stats',
+                'callback_data' => "/statsMenu",
+            ],
+        ];
+        $data[] = [
+            [
+                'text'          => '─────────────',
+                'callback_data' => "/singbox $page",
             ],
         ];
         $on = $off = 0;
@@ -1002,9 +1183,11 @@ public function singbox($page = 0)
         $clients = $page != -1 ? array_slice($clients, $page * $this->limit, $this->limit, true) : $clients;
         foreach ($clients as $k => $v) {
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
+            $download = ($st['users'][$k]['global']['download'] ?? 0) + ($st['users'][$k]['session']['download'] ?? 0);
+            $upload   = ($st['users'][$k]['global']['upload']   ?? 0) + ($st['users'][$k]['session']['upload']   ?? 0);
             $data[]   = [
                 [
-                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : ''),
+                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . " ↓{$this->getGB($download)} ↑{$this->getGB($upload)}",
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1100,19 +1283,19 @@ public function routes()
                 'callback_data' => "/xtlswarp",
             ]],
             [[
-                'text'          => 'domains',
+                'text'          => 'Domains',
                 'callback_data' => "/xtlsproxy",
             ]],
             [[
-                'text'          => "subnet",
+                'text'          => "Subnet",
                 'callback_data' => "/xtlssubnet",
             ]],
             [[
-                'text'          => 'process',
+                'text'          => 'Process',
                 'callback_data' => "/xtlsprocess",
             ]],
             [[
-                'text'          => 'package',
+                'text'          => 'Package',
                 'callback_data' => "/xtlsapp",
             ]],
             [[
@@ -1155,13 +1338,13 @@ public function templateUser($type, $i)
         $templates = $pac["{$type}templates"];
         $data[]    = [
             [
-                'text'          => 'default',
+                'text'          => 'Default',
                 'callback_data' => "/choiceTemplate {$type}_$i",
             ],
         ];
         $data[] = [
             [
-                'text'          => 'origin',
+                'text'          => 'Origin',
                 'callback_data' => "/choiceTemplate {$type}_{$i}_" . base64_encode('origin'),
             ],
         ];
@@ -1272,6 +1455,12 @@ public function userXr($i)
                 'text'          => $c['time'] ? "timer: " . $this->getTime($c['time']) : $this->i18n('timer'),
                 'callback_data' => "/timerXr $i",
             ],
+            [
+                'text'          => !empty($c['trafficlimit']) ? "limit: " . $this->getGB($c['trafficlimit']) : $this->i18n('set limit'),
+                'callback_data' => "/limitXr $i",
+            ],
+        ];
+        $data[] = [
             [
                 'text'          => $this->i18n($c['off'] ? 'off' : 'on'),
                 'callback_data' => "/switchXr $i",

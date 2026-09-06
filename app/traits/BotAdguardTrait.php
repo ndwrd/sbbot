@@ -286,7 +286,7 @@ public function adguardMenu()
         $data = [
             [
                 [
-                    'text'          => 'web panel',
+                    'text'          => 'Web panel',
                     'web_app' => [
                         "url" => "https://$domain/adguard$hash"
                     ],

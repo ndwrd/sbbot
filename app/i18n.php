@@ -23,91 +23,91 @@ $i = [
     ],
     'config'               => [
         'en' => 'Settings',
-        'ru' => 'настройки',
+        'ru' => 'Настройки',
     ],
     'pac'                  => [
         'en' => 'PAC',
         'ru' => 'PAC',
     ],
     'chat'                 => [
-        'en' => 'chat',
-        'ru' => 'чат поддержки',
+        'en' => 'Chat',
+        'ru' => 'Чат поддержки',
     ],
     'back'                 => [
-        'en' => 'back',
-        'ru' => 'назад',
+        'en' => 'Back',
+        'ru' => 'Назад',
     ],
     'import'               => [
-        'en' => 'restore',
-        'ru' => 'восстановить',
+        'en' => 'Restore',
+        'ru' => 'Восстановить',
     ],
     'export'               => [
-        'en' => 'backup',
-        'ru' => 'сохранить',
+        'en' => 'Backup',
+        'ru' => 'Сохранить',
     ],
     'delete'               => [
-        'en' => 'delete',
-        'ru' => 'удалить',
+        'en' => 'Delete',
+        'ru' => 'Удалить',
     ],
     'add'                  => [
-        'en' => 'add',
-        'ru' => 'добавить',
+        'en' => 'Add',
+        'ru' => 'Добавить',
     ],
     'donate'               => [
-        'en' => 'donate',
-        'ru' => 'донат',
+        'en' => 'Donate',
+        'ru' => 'Донат',
     ],
     'admin'                => [
-        'en' => 'admin',
-        'ru' => 'админа',
+        'en' => 'Admin',
+        'ru' => 'Админа',
     ],
     'menu'                 => [
         'en' => 'Menu',
         'ru' => 'Меню',
     ],
     'update status'        => [
-        'en' => 'update status',
-        'ru' => 'обновить статус',
+        'en' => 'Update status',
+        'ru' => 'Обновить статус',
     ],
     'add peer'             => [
-        'en' => 'add peer',
-        'ru' => 'добавить клиента',
+        'en' => 'Add peer',
+        'ru' => 'Добавить клиента',
     ],
     'all traffic'          => [
-        'en' => 'all traffic',
-        'ru' => 'весь трафик',
+        'en' => 'All traffic',
+        'ru' => 'Весь трафик',
     ],
     'subnet'               => [
-        'en' => 'subnet',
-        'ru' => 'подсеть',
+        'en' => 'Subnet',
+        'ru' => 'Подсеть',
     ],
     'proxy ip'             => [
-        'en' => 'proxy ip',
-        'ru' => 'айпи прокси',
+        'en' => 'Proxy ip',
+        'ru' => 'Айпи прокси',
     ],
     'rename'               => [
-        'en' => 'rename',
-        'ru' => 'переименовать',
+        'en' => 'Rename',
+        'ru' => 'Переименовать',
     ],
     'show QR'              => [
-        'en' => 'show QR',
-        'ru' => 'показать QR',
+        'en' => 'Show QR',
+        'ru' => 'Показать QR',
     ],
     'download config'      => [
-        'en' => 'download config',
-        'ru' => 'скачать настройки',
+        'en' => 'Download config',
+        'ru' => 'Скачать настройки',
     ],
     'install domain'       => [
-        'en' => 'install domain',
-        'ru' => 'установить домен',
+        'en' => 'Install domain',
+        'ru' => 'Установить домен',
     ],
     'renew SSL'            => [
-        'en' => 'renew SSL',
-        'ru' => 'обновить SSL',
+        'en' => 'Renew SSL',
+        'ru' => 'Обновить SSL',
     ],
     'delete SSL'           => [
-        'en' => 'delete SSL',
-        'ru' => 'удалить SSL',
+        'en' => 'Delete SSL',
+        'ru' => 'Удалить SSL',
     ],
     'Letsencrypt SSL'      => [
         'en' => 'Letsencrypt SSL',
@@ -118,52 +118,52 @@ $i = [
         'ru' => 'Собственный SSL',
     ],
     'change password'      => [
-        'en' => 'change password',
-        'ru' => 'изменить пароль',
+        'en' => 'Change password',
+        'ru' => 'Изменить пароль',
     ],
     'reset settings'       => [
-        'en' => 'reset settings',
-        'ru' => 'сбросить настройки',
+        'en' => 'Reset settings',
+        'ru' => 'Сбросить настройки',
     ],
     'add upstream'         => [
-        'en' => 'add upstream',
-        'ru' => 'добавить DNS',
+        'en' => 'Add upstream',
+        'ru' => 'Добавить DNS',
     ],
     'check DNS'            => [
-        'en' => 'check DNS',
-        'ru' => 'проверить DNS',
+        'en' => 'Check DNS',
+        'ru' => 'Проверить DNS',
     ],
     'update'               => [
-        'en' => 'update',
-        'ru' => 'обновить',
+        'en' => 'Update',
+        'ru' => 'Обновить',
     ],
     'self list'            => [
-        'en' => 'self list',
-        'ru' => 'собственный список',
+        'en' => 'Self list',
+        'ru' => 'Собственный список',
     ],
     'reverse list'         => [
-        'en' => 'reverse list',
-        'ru' => 'обратный список',
+        'en' => 'Reverse list',
+        'ru' => 'Обратный список',
     ],
     'subzones'             => [
-        'en' => 'subzones',
-        'ru' => 'поддомены',
+        'en' => 'Subzones',
+        'ru' => 'Поддомены',
     ],
     'check url'            => [
-        'en' => 'check url',
-        'ru' => 'проверить домен',
+        'en' => 'Check url',
+        'ru' => 'Проверить домен',
     ],
     'blacklist exclude'    => [
-        'en' => 'blacklist exclude',
-        'ru' => 'исключения из списка ркн',
+        'en' => 'Blacklist exclude',
+        'ru' => 'Исключения из списка ркн',
     ],
     'lang'                 => [
-        'en' => 'language',
-        'ru' => 'язык интерфейса',
+        'en' => 'Language',
+        'ru' => 'Язык интерфейса',
     ],
     'adguard web'          => [
-        'en' => 'web interface',
-        'ru' => 'вебморда адгварда',
+        'en' => 'Web interface',
+        'ru' => 'Вебморда адгварда',
     ],
     'domain explain'       => [
         'en' => 'Some clients require a valid certificate when connecting, such as windows 11 DoH or ShadowSocks Android (PAC url), this requires a domain',
@@ -178,24 +178,24 @@ $i = [
         'ru' => ' - домены которые будут работать напрямую, все остальные через прокси',
     ],
     'timer'                => [
-        'en' => 'set timer',
-        'ru' => 'установить время действия',
+        'en' => 'Set timer',
+        'ru' => 'Установить время действия',
     ],
     'reset nginx'          => [
-        'en' => 'reset nginx',
-        'ru' => 'сбросить nginx',
+        'en' => 'Reset nginx',
+        'ru' => 'Сбросить nginx',
     ],
     'set internal dns'     => [
-        'en' => 'set internal dns',
-        'ru' => 'установить внутренний dns',
+        'en' => 'Set internal dns',
+        'ru' => 'Установить внутренний dns',
     ],
     'delete internal dns'  => [
-        'en' => 'delete internal dns',
-        'ru' => 'удалить внутренний dns',
+        'en' => 'Delete internal dns',
+        'ru' => 'Удалить внутренний dns',
     ],
     'no devices' => [
-        'en' => 'no devices',
-        'ru' => 'нет устройств',
+        'en' => 'No devices',
+        'ru' => 'Нет устройств',
     ],
     'on'  => [
         'en' => '🟢',
@@ -206,88 +206,88 @@ $i = [
         'ru' => '🔴',
     ],
     'torrent'  => [
-        'en' => 'torrents',
-        'ru' => 'торренты',
+        'en' => 'Torrents',
+        'ru' => 'Торренты',
     ],
     'listSubnet'  => [
-        'en' => 'listSubnet',
-        'ru' => 'список подсетей',
+        'en' => 'ListSubnet',
+        'ru' => 'Список подсетей',
     ],
     'AllowedIPs'  => [
         'en' => 'AllowedIPs',
         'ru' => 'AllowedIPs',
     ],
     'calc'  => [
-        'en' => 'calc CIDR',
-        'ru' => 'calc CIDR',
+        'en' => 'Calc CIDR',
+        'ru' => 'Calc CIDR',
     ],
     'mtproto'  => [
         'en' => 'MTProto',
         'ru' => 'MTProto',
     ],
     'generateSecret'  => [
-        'en' => 'generateSecret',
-        'ru' => 'сгенерировать ключ',
+        'en' => 'GenerateSecret',
+        'ru' => 'Сгенерировать ключ',
     ],
     'setSecret'  => [
-        'en' => 'setSecret',
-        'ru' => 'установить свой ключ',
+        'en' => 'SetSecret',
+        'ru' => 'Установить свой ключ',
     ],
     'setAdTag'  => [
-        'en' => 'set adtag',
-        'ru' => 'установить adtag',
+        'en' => 'Set adtag',
+        'ru' => 'Установить adtag',
     ],
     'defaultDNS'  => [
-        'en' => 'defaultDNS',
-        'ru' => 'дефолтный днс',
+        'en' => 'DefaultDNS',
+        'ru' => 'Дефолтный днс',
     ],
     'defaultMTU'  => [
-        'en' => 'defaultMTU',
-        'ru' => 'дефолтный MTU',
+        'en' => 'DefaultMTU',
+        'ru' => 'Дефолтный MTU',
     ],
     'debug'  => [
-        'en' => 'debug mode',
-        'ru' => 'режим отладки',
+        'en' => 'Debug mode',
+        'ru' => 'Режим отладки',
     ],
     'backup'  => [
-        'en' => 'auto backup',
-        'ru' => 'автобэкап',
+        'en' => 'Auto backup',
+        'ru' => 'Автобэкап',
     ],
     'logs'  => [
-        'en' => 'logs',
-        'ru' => 'логи',
+        'en' => 'Logs',
+        'ru' => 'Логи',
     ],
     'clear'  => [
-        'en' => 'clear',
-        'ru' => 'очистить',
+        'en' => 'Clear',
+        'ru' => 'Очистить',
     ],
     'vless'  => [
         'en' => 'Sing-box',
         'ru' => 'Sing-box',
     ],
     'clash'  => [
-        'en' => 'mihomo',
-        'ru' => 'mihomo',
+        'en' => 'Mihomo',
+        'ru' => 'Mihomo',
     ],
     'geodb'  => [
         'en' => 'GeoIp/GeoSite',
         'ru' => 'GeoIp/GeoSite',
     ],
     'changeFakeDomain'  => [
-        'en' => 'changeFakeDomain',
-        'ru' => 'фейковый домен',
+        'en' => 'ChangeFakeDomain',
+        'ru' => 'Фейковый домен',
     ],
     'selfFakeDomain'  => [
-        'en' => 'steal from yourself',
-        'ru' => 'steal from yourself',
+        'en' => 'Steal from yourself',
+        'ru' => 'Steal from yourself',
     ],
     'page'  => [
-        'en' => 'pagination',
-        'ru' => 'пагинация',
+        'en' => 'Pagination',
+        'ru' => 'Пагинация',
     ],
     'exchange'  => [
-        'en' => 'client isolation',
-        'ru' => 'изоляция клиентов',
+        'en' => 'Client isolation',
+        'ru' => 'Изоляция клиентов',
     ],
     'ocserv'  => [
         'en' => 'OpenConnect',
@@ -298,80 +298,232 @@ $i = [
         'ru' => 'NaiveProxy',
     ],
     'change login'  => [
-        'en' => 'change login',
-        'ru' => 'изменить логин',
+        'en' => 'Change login',
+        'ru' => 'Изменить логин',
     ],
     'change secret'  => [
-        'en' => 'change secret',
-        'ru' => 'секретное слово',
+        'en' => 'Change secret',
+        'ru' => 'Секретное слово',
     ],
     'dns'  => [
-        'en' => 'dns',
-        'ru' => 'днс',
+        'en' => 'Dns',
+        'ru' => 'Днс',
     ],
     'download'  => [
-        'en' => 'download',
-        'ru' => 'скачать',
+        'en' => 'Download',
+        'ru' => 'Скачать',
     ],
     'update bot'  => [
-        'en' => 'update bot',
-        'ru' => 'обновить бота',
+        'en' => 'Update bot',
+        'ru' => 'Обновить бота',
     ],
     'third party browser'  => [
-        'en' => 'third party browser',
-        'ru' => 'сторонний браузер',
+        'en' => 'Third party browser',
+        'ru' => 'Сторонний браузер',
     ],
     'browser_notify_on'  => [
-        'en' => 'the web panel can be opened in any browser',
-        'ru' => 'веб панель может быть открыта в любом браузере',
+        'en' => 'The web panel can be opened in any browser',
+        'ru' => 'Веб панель может быть открыта в любом браузере',
     ],
     'browser_notify_off'  => [
-        'en' => 'web panel is only available from telegram',
-        'ru' => 'веб панель доступна только из телеграмма',
+        'en' => 'Web panel is only available from telegram',
+        'ru' => 'Веб панель доступна только из телеграмма',
     ],
     'no updates'  => [
-        'en' => 'no updates',
-        'ru' => 'нет обновлений',
+        'en' => 'No updates',
+        'ru' => 'Нет обновлений',
     ],
     'have updates'  => [
-        'en' => '🟢 have updates',
-        'ru' => '🟢 есть обновления',
+        'en' => '🟢 Have updates',
+        'ru' => '🟢 Есть обновления',
     ],
     'fake html'  => [
-        'en' => 'fake html',
-        'ru' => 'фейк заглушка',
+        'en' => 'Fake html',
+        'ru' => 'Фейк заглушка',
     ],
     'expose-iroutes'  => [
-        'en' => 'expose-iroutes',
-        'ru' => 'изоляция клиентов',
+        'en' => 'Expose-iroutes',
+        'ru' => 'Изоляция клиентов',
     ],
     'fill allowed clients'  => [
-        'en' => 'fill allowed clients',
-        'ru' => 'заполнить белый список клиентов',
+        'en' => 'Fill allowed clients',
+        'ru' => 'Заполнить белый список клиентов',
     ],
     'delete allowed clients'  => [
-        'en' => 'delete allowed clients',
-        'ru' => 'очистить белый список клиентов',
+        'en' => 'Delete allowed clients',
+        'ru' => 'Очистить белый список клиентов',
     ],
     'success'  => [
-        'en' => 'success',
-        'ru' => 'сохранено',
+        'en' => 'Success',
+        'ru' => 'Сохранено',
     ],
     'error'  => [
-        'en' => 'error',
-        'ru' => 'ошибка',
+        'en' => 'Error',
+        'ru' => 'Ошибка',
     ],
     'save'  => [
-        'en' => 'save',
-        'ru' => 'сохранить',
+        'en' => 'Save',
+        'ru' => 'Сохранить',
     ],
     'copy'  => [
-        'en' => 'copy',
-        'ru' => 'копировать',
+        'en' => 'Copy',
+        'ru' => 'Копировать',
     ],
     'restart'  => [
-        'en' => 'restart',
-        'ru' => 'перезагрузка',
+        'en' => 'Restart',
+        'ru' => 'Перезагрузка',
+    ],
+    'set key'  => [
+        'en' => 'Set key',
+        'ru' => 'Установить ключ',
+    ],
+    'download pubkey'  => [
+        'en' => 'Download pubkey',
+        'ru' => 'Скачать публичный ключ',
+    ],
+    'set subdomain'  => [
+        'en' => 'Set subdomain',
+        'ru' => 'Установить поддомен',
+    ],
+    'set password'  => [
+        'en' => 'Set password',
+        'ru' => 'Установить пароль',
+    ],
+    'yes'  => [
+        'en' => 'Yes',
+        'ru' => 'Да',
+    ],
+    'delete all'  => [
+        'en' => 'Delete all',
+        'ru' => 'Удалить всё',
+    ],
+    'clean'  => [
+        'en' => 'Clean',
+        'ru' => 'Очистить',
+    ],
+    'clean all'  => [
+        'en' => 'Clean all',
+        'ru' => 'Очистить всё',
+    ],
+    'autoclean'  => [
+        'en' => 'Autoclean',
+        'ru' => 'Автоочистка',
+    ],
+    'autoupdate'  => [
+        'en' => 'Autoupdate',
+        'ru' => 'Автообновление',
+    ],
+    'analyze'  => [
+        'en' => 'Analyze',
+        'ru' => 'Анализ',
+    ],
+    'autoscan'  => [
+        'en' => 'Autoscan',
+        'ru' => 'Автосканирование',
+    ],
+    'autoblock'  => [
+        'en' => 'Autoblock',
+        'ru' => 'Автоблокировка',
+    ],
+    'notify'  => [
+        'en' => 'Notify',
+        'ru' => 'Уведомления',
+    ],
+    'ignorelist'  => [
+        'en' => 'Ignorelist',
+        'ru' => 'Белый список',
+    ],
+    'blocklist'  => [
+        'en' => 'Blocklist',
+        'ru' => 'Чёрный список',
+    ],
+    'block'  => [
+        'en' => 'Block',
+        'ru' => 'Блокировка',
+    ],
+    'ignore'  => [
+        'en' => 'Ignore',
+        'ru' => 'Игнорировать',
+    ],
+    'all logs'  => [
+        'en' => 'All logs',
+        'ru' => 'Все логи',
+    ],
+    'suspicious log'  => [
+        'en' => 'Suspicious log',
+        'ru' => 'Подозрительные логи',
+    ],
+    'telegram IPs'  => [
+        'en' => 'Telegram IPs',
+        'ru' => 'IP телеграма',
+    ],
+    'gcore IPs'  => [
+        'en' => 'Gcore IPs',
+        'ru' => 'IP gcore',
+    ],
+    'cloudflare IPs'  => [
+        'en' => 'Cloudflare IPs',
+        'ru' => 'IP cloudflare',
+    ],
+    'main outbound name: '  => [
+        'en' => 'Main outbound name: ',
+        'ru' => 'Имя основного outbound: ',
+    ],
+    'templates'  => [
+        'en' => 'Templates',
+        'ru' => 'Шаблоны',
+    ],
+    'routes'  => [
+        'en' => 'Routes',
+        'ru' => 'Маршруты',
+    ],
+    'rulesset'  => [
+        'en' => 'Rulesset',
+        'ru' => 'Списки правил',
+    ],
+    'reset stats'  => [
+        'en' => 'Reset stats',
+        'ru' => 'Сбросить статистику',
+    ],
+    'xray'  => [
+        'en' => 'Xray',
+        'ru' => 'Xray',
+    ],
+    'singbox'  => [
+        'en' => 'Singbox',
+        'ru' => 'Singbox',
+    ],
+    'mihomo'  => [
+        'en' => 'Mihomo',
+        'ru' => 'Mihomo',
+    ],
+    'xray ⬇️'  => [
+        'en' => 'Xray ⬇️',
+        'ru' => 'Xray ⬇️',
+    ],
+    'singbox ⬇️'  => [
+        'en' => 'Singbox ⬇️',
+        'ru' => 'Singbox ⬇️',
+    ],
+    'mihomo ⬇️'  => [
+        'en' => 'Mihomo ⬇️',
+        'ru' => 'Mihomo ⬇️',
+    ],
+    'set limit'  => [
+        'en' => 'Set limit',
+        'ru' => 'Установить лимит',
+    ],
+    'qr vless'  => [
+        'en' => 'Qr vless',
+        'ru' => 'Qr vless',
+    ],
+    'qr xray'  => [
+        'en' => 'Qr xray',
+        'ru' => 'Qr xray',
+    ],
+    'qr singbox'  => [
+        'en' => 'Qr singbox',
+        'ru' => 'Qr singbox',
     ],
 ];
 

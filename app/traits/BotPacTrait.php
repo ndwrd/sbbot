@@ -237,7 +237,7 @@ public function listPac($type, $page, $menu, $basename = false)
                         'callback_data' => "/change$type " . ($i + $page * $this->limit) . " $page",
                     ],
                     [
-                        'text'          => 'delete',
+                        'text'          => 'Delete',
                         'callback_data' => "/delete$type " . ($i + $page * $this->limit) . " $page",
                     ],
                 ];

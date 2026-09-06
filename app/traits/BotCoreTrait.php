@@ -306,6 +306,9 @@ public function action()
             case preg_match('~^/timerXr (\d+)$~', $this->input['callback'], $m):
                 $this->timerXr($m[1]);
                 break;
+            case preg_match('~^/limitXr (\d+)$~', $this->input['callback'], $m):
+                $this->limitXr($m[1]);
+                break;
             case preg_match('~^/switchXr (\d+)$~', $this->input['callback'], $m):
                 $this->switchXr($m[1]);
                 break;
@@ -353,6 +356,9 @@ public function action()
                 break;
             case preg_match('~^/templatesMenu$~', $this->input['callback'], $m):
                 $this->templatesMenu();
+                break;
+            case preg_match('~^/statsMenu$~', $this->input['callback'], $m):
+                $this->statsMenu();
                 break;
             case preg_match('~^/xtlsblock(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->xtlsblock(($m[1] ?? null) ?: 0);
@@ -451,6 +457,12 @@ public function collectSession() {
             $p['users'][$k]['global']['upload']    += $v['session']['upload'];
             $p['users'][$k]['session']['upload']    = 0;
         }
+        foreach ($p['inbounds'] ?? [] as $k => $v) {
+            $p['inbounds'][$k]['global']['download'] = ($v['global']['download'] ?? 0) + ($v['session']['download'] ?? 0);
+            $p['inbounds'][$k]['session']['download'] = 0;
+            $p['inbounds'][$k]['global']['upload']   = ($v['global']['upload'] ?? 0) + ($v['session']['upload'] ?? 0);
+            $p['inbounds'][$k]['session']['upload']   = 0;
+        }
         $this->setSingboxStats($p);
     }
 
@@ -503,7 +515,7 @@ public function checkVersion()
                             $this->send($v, implode("\n", $diff), 0, [
                                 [
                                     [
-                                        'text'    => 'changelog',
+                                        'text'    => 'Changelog',
                                         'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version"],
                                     ],
                                     [
@@ -798,7 +810,7 @@ public function menu($type = false, $arg = false, $return = false)
             $b = exec('git -C / rev-parse --abbrev-ref HEAD');
             array_unshift($data, [
                 [
-                    'text'    => 'changelog',
+                    'text'    => 'Changelog',
                     'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version"],
                 ],
                 [
@@ -935,6 +947,25 @@ public function getBytes($bytes)
                 return round($bytes / (1024 ** ($k - 1)), 2) . " {$t[$k - 1]}";
             }
         }
+    }
+
+public function getGB($bytes)
+    {
+        return round(($bytes ?: 0) / (1024 ** 3), 2) . ' GB';
+    }
+
+public function getMB($bytes)
+    {
+        return round(($bytes ?: 0) / (1024 ** 2), 2) . ' MB';
+    }
+
+public function formatUptime($seconds)
+    {
+        $seconds = (int) $seconds;
+        $d = intdiv($seconds, 86400);
+        $h = intdiv($seconds % 86400, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        return "{$d}D {$h}H {$m}M";
     }
 
 public function getHashBot($notset = false)

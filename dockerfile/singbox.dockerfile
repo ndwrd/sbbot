@@ -23,8 +23,18 @@ RUN apk add --no-cache git ca-certificates \
 
 # runtime stage: как у xray-контейнера — sshd для управления из PHP
 FROM alpine:3.20
+ARG SING_BOX_VERSION=v1.14.0
+# grpcurl — готовый gRPC-клиент (как curl, только для gRPC), нужен только чтобы
+# спросить experimental.v2ray_api.StatsService у самого sing-box (тег with_v2ray_api).
+# stats.proto тянем с ТОГО ЖЕ тега sing-box, что собран выше — иначе схема может
+# разойтись с тем, что реально отдаёт бинарник.
+ARG GRPCURL_VERSION=1.9.4
 RUN apk add --no-cache openssh openssl jq curl ca-certificates tzdata \
-    && mkdir -p /root/.ssh /var/run/sshd \
-    && chmod 700 /root/.ssh
+    && mkdir -p /root/.ssh /var/run/sshd /etc/singbox \
+    && chmod 700 /root/.ssh \
+    && curl -fsSL "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz" -o /tmp/grpcurl.tar.gz \
+    && tar -xzf /tmp/grpcurl.tar.gz -C /usr/bin grpcurl \
+    && rm /tmp/grpcurl.tar.gz \
+    && curl -fsSL "https://raw.githubusercontent.com/SagerNet/sing-box/${SING_BOX_VERSION}/experimental/v2rayapi/stats.proto" -o /etc/singbox/stats.proto
 COPY --from=build /out/sing-box /usr/bin/sing-box
 ENV ENV="/root/.ashrc"
