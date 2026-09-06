@@ -5,7 +5,7 @@ trait BotAdguardTrait
 public function adguardSync()
     {
         $pac = $this->getPacConf();
-        $pac['adpswd'] = $pac['adpswd'] ?: substr(hash('md5', time()), 0, 10);
+        $pac['adpswd'] = ($pac['adpswd'] ?? null) ?: substr(hash('md5', time()), 0, 10);
         $this->setPacConf($pac);
         $ssl = $this->nginxGetTypeCert();
         $c   = yaml_parse_file($this->adguard);

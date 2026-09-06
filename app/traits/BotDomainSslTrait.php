@@ -44,8 +44,8 @@ public function ensureProtocolSubdomains(array $conf)
     {
         // Поддомены naive/anytls намеренно случайные (не "naive.domain"/"anytls.domain") —
         // буквальное имя протокола в SNI/DNS сразу выдаёт censor'у, что тут за сервис.
-        $conf['naiveSubdomain']  = $conf['naiveSubdomain']  ?: bin2hex(random_bytes(4));
-        $conf['anytlsSubdomain'] = $conf['anytlsSubdomain'] ?: bin2hex(random_bytes(4));
+        $conf['naiveSubdomain']  = ($conf['naiveSubdomain']  ?? null) ?: bin2hex(random_bytes(4));
+        $conf['anytlsSubdomain'] = ($conf['anytlsSubdomain'] ?? null) ?: bin2hex(random_bytes(4));
         return $conf;
     }
 
@@ -243,33 +243,6 @@ public function selfssl()
         ];
     }
 
-public function addSubdomain()
-    {
-        $r = $this->send(
-            $this->input['chat'],
-            "@{$this->input['username']} enter subdomain",
-            $this->input['message_id'],
-            reply: 'enter subdomain',
-        );
-        $_SESSION['reply'][$r['result']['message_id']] = [
-            'start_message' => $this->input['message_id'],
-            'callback'      => 'setSubdomain',
-            'args'          => [],
-        ];
-    }
-
-public function setSubdomain($text)
-    {
-        $c = $this->getPacConf();
-        if (empty($text)) {
-            unset($c['subdomain']);
-        } else {
-            $c['subdomain'] = array_filter(explode(',', $text), fn($e) => !empty(trim($e)));
-        }
-        $this->setPacConf($c);
-        $this->menu('config');
-    }
-
 public function selfsslInstall()
     {
         $this->setSSL('self');
@@ -281,7 +254,7 @@ public function getDomain($cdn = false)
         if ($cdn && $c['linkdomain']) {
             return $c['linkdomain'];
         }
-        return $c['domain'] ?: $this->ip;
+        return ($c['domain'] ?? null) ?: $this->ip;
     }
 
 public function setUpstreamDomain($domain)
@@ -357,7 +330,7 @@ public function cloakNginx()
 public function expireCert()
     {
         $c = openssl_x509_read(file_get_contents("/certs/cert_public"));
-        return openssl_x509_parse($c)["validTo_time_t"] ?: false;
+        return (openssl_x509_parse($c)["validTo_time_t"] ?? null) ?: false;
     }
 
 public function domainsCert()

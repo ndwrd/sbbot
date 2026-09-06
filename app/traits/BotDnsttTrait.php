@@ -77,14 +77,6 @@ public function dnsttDownload()
         $this->sendFile($this->input['from'], curl_file_create('/config/dnstt/server.pub'));
     }
 
-public function showdnstt()
-    {
-        $c = $this->getPacConf();
-        $c['showdnstt'] = empty($c['showdnstt']);
-        $this->setPacConf($c);
-        $this->dnstt(1);
-    }
-
 public function dnstt($update = false)
     {
         $c      = $this->getPacConf();

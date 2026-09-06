@@ -26,11 +26,6 @@ public function qrVless($i, $s = false)
             "<code>$link</code>"
         );
         unlink($qr_file);
-        if ($this->getPacConf()['blinkmenu']) {
-            $this->delete($this->input['chat'], $this->input['message_id']);
-            $this->input['message_id'] = $this->send($this->input['chat'], '.')['result']['message_id'];
-            $this->singbox();
-        }
     }
 
 public function qrMtproto()
@@ -44,11 +39,6 @@ public function qrMtproto()
             "<code>$link</code>"
         );
         unlink($qr_file);
-        if ($this->getPacConf()['blinkmenu']) {
-            $this->delete($this->input['chat'], $this->input['message_id']);
-            $this->input['message_id'] = $this->send($this->input['chat'], '.')['result']['message_id'];
-            $this->mtproto();
-        }
     }
 
 public function upload($name, $code, $chat = false)

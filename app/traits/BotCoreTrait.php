@@ -139,7 +139,7 @@ public function action()
                 $this->ports();
                 break;
             case preg_match('~^/analysisIp(?:\s(\d+))?$~', $this->input['callback'], $m):
-                $this->analysisIp($m[1] ?: 0);
+                $this->analysisIp(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/ipMenu$~', $this->input['callback'], $m):
                 $this->ipMenu();
@@ -148,7 +148,7 @@ public function action()
                 $this->cleanDeny($m[1]);
                 break;
             case preg_match('~^/denyList (.+?)(?:\s(\d))?$~', $this->input['callback'], $m):
-                $this->denyList($m[1], $m[2] ?: 0);
+                $this->denyList($m[1], ($m[2] ?? null) ?: 0);
                 break;
             case preg_match('~^/cleanLogs (.+?)(?:\s(1))?$~', $this->input['callback'], $m):
                 $this->cleanLogs($m[1], $m[2]);
@@ -169,25 +169,10 @@ public function action()
                 $this->whiteIp($m[1], $m[2], $m[3], $m[4]);
                 break;
             case preg_match('~^/adgFillAllowedClients(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->adgFillAllowedClients($m[1] ?: false);
-                break;
-            case preg_match('~^/appOutbound$~', $this->input['callback'], $m):
-                $this->appOutbound();
-                break;
-            case preg_match('~^/domainsOutbound$~', $this->input['callback'], $m):
-                $this->domainsOutbound();
-                break;
-            case preg_match('~^/finalOutbound$~', $this->input['callback'], $m):
-                $this->finalOutbound();
-                break;
-            case preg_match('~^/processOutbound$~', $this->input['callback'], $m):
-                $this->processOutbound();
+                $this->adgFillAllowedClients(($m[1] ?? null) ?: false);
                 break;
             case preg_match('~^/offWarp$~', $this->input['callback'], $m):
                 $this->offWarp();
-                break;
-            case preg_match('~^/addSubdomain$~', $this->input['callback'], $m):
-                $this->addSubdomain();
                 break;
             case preg_match('~^/id$~', $this->input['message'], $m):
                 $this->send($this->input['chat'], "your id: {$this->input['from']}\nchat id: {$this->input['chat']}", $this->input['message_id']);
@@ -219,11 +204,8 @@ public function action()
             case preg_match('~^/logs$~', $this->input['callback'], $m):
                 $this->logs();
                 break;
-            case preg_match('~^/dnstt$~', $this->input['callback'] ?: $this->input['message'], $m):
+            case preg_match('~^/dnstt$~', ($this->input['callback'] ?? null) ?: $this->input['message'], $m):
                 $this->dnstt(!empty($this->input['callback']));
-                break;
-            case preg_match('~^/showdnstt$~', $this->input['callback'], $m):
-                $this->showdnstt();
                 break;
             case preg_match('~^/dnsttDownload$~', $this->input['callback'], $m):
                 $this->dnsttDownload();
@@ -333,14 +315,11 @@ public function action()
             case preg_match('~^/listXr (\d+)$~', $this->input['callback'], $m):
                 $this->listXr($m[1]);
                 break;
-            case preg_match('~^/blinkmenuswitch$~', $this->input['callback'], $m):
-                $this->blinkmenuswitch();
-                break;
             case preg_match('~^/deladmin (\d+)$~', $this->input['callback'], $m):
                 $this->delAdmin($m[1]);
                 break;
             case preg_match('~^/qrVless (\d+)(?:_(\d+))?$~', $this->input['callback'], $m):
-                $this->qrVless($m[1], $m[2] ?: false);
+                $this->qrVless($m[1], ($m[2] ?? null) ?: false);
                 break;
             case preg_match('~^/qrMtproto$~', $this->input['callback'], $m):
                 $this->qrMtproto();
@@ -358,7 +337,7 @@ public function action()
                 $this->regenSubdomains();
                 break;
             case preg_match('~^/(?P<action>change|delete)(?P<typelist>\w+) (?P<arg>\d+)(?: (?P<page>\d+))?$~', $this->input['callback'], $m):
-                $this->listPacChange($m['typelist'], $m['action'], $m['arg'], $m['page'] ?: 0);
+                $this->listPacChange($m['typelist'], $m['action'], $m['arg'], ($m['page'] ?? null) ?: 0);
                 break;
             case preg_match('~^/domain$~', $this->input['callback'], $m):
                 $this->domain();
@@ -370,34 +349,34 @@ public function action()
                 $this->warpPlus();
                 break;
             case preg_match('~^/singbox(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->singbox($m[1] ?: 0);
+                $this->singbox(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/templatesMenu$~', $this->input['callback'], $m):
                 $this->templatesMenu();
                 break;
             case preg_match('~^/xtlsblock(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlsblock($m[1] ?: 0);
+                $this->xtlsblock(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/routes(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->routes($m[1] ?: 0);
+                $this->routes(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlswarp(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlswarp($m[1] ?: 0);
+                $this->xtlswarp(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlsproxy(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlsproxy($m[1] ?: 0);
+                $this->xtlsproxy(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlsapp(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlsapp($m[1] ?: 0);
+                $this->xtlsapp(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlsprocess(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlsprocess($m[1] ?: 0);
+                $this->xtlsprocess(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlssubnet(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlssubnet($m[1] ?: 0);
+                $this->xtlssubnet(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/xtlsrulesset(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->xtlsrulesset($m[1] ?: 0);
+                $this->xtlsrulesset(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/templateCopy (\w+)(?: (.+))?$~', $this->input['callback'], $m):
                 $this->templateCopy($m[1], $m[2]);
@@ -587,14 +566,6 @@ public function getTime(int $seconds)
         return trim($text) ?: '♾';
     }
 
-public function blinkmenuswitch()
-    {
-        $c = $this->getPacConf();
-        $c['blinkmenu'] = $c['blinkmenu'] ? 0 : 1;
-        $this->setPacConf($c);
-        $this->menu('config');
-    }
-
 public function reply()
     {
         if (!empty($_SESSION['reply'][$this->input['reply']])) {
@@ -666,7 +637,7 @@ public function sizeFormat($bytes)
 
 public function i18n(string $menu): string
     {
-        return $this->i18n[$menu][$this->language] ?: $menu;
+        return ($this->i18n[$menu][$this->language] ?? null) ?: $menu;
     }
 
 public function alignColumns(array $columns): string
@@ -709,7 +680,7 @@ public function alignColumns(array $columns): string
 public function menu($type = false, $arg = false, $return = false)
     {
         $conf   = $this->getPacConf();
-        $domain = $conf['domain'] ?: $this->ip;
+        $domain = ($conf['domain'] ?? null) ?: $this->ip;
         $hash   = $this->getHashBot();
         if ($type == false) {
             $update = exec('git -C / rev-list --count HEAD..@{u}');

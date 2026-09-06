@@ -60,8 +60,8 @@ class Bot
         $this->pac      = '/config/pac.json';
         $this->ip       = getenv('IP');
         $this->i18n     = $i18n;
-        $this->language = $this->getPacConf()['language'] ?: 'en';
-        $this->limit    = $this->getPacConf()['limitpage'] ?: 5;
+        $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
+        $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
         $this->adguard  = '/config/AdGuardHome.yaml';
         $this->update   = '/update/json';
         $this->logs = [

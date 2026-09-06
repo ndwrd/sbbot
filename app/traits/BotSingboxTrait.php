@@ -441,38 +441,6 @@ public function xtlsproxy($page = 0)
         );
     }
 
-public function appOutbound()
-    {
-        $p = $this->getPacConf();
-        $p['app_outbound'] = !$p['app_outbound'];
-        $p = $this->setPacConf($p);
-        $this->xtlsapp();
-    }
-
-public function domainsOutbound()
-    {
-        $p = $this->getPacConf();
-        $p['domains_outbound'] = !$p['domains_outbound'];
-        $p = $this->setPacConf($p);
-        $this->xtlsproxy();
-    }
-
-public function finalOutbound()
-    {
-        $p = $this->getPacConf();
-        $p['final_outbound'] = !$p['final_outbound'];
-        $p = $this->setPacConf($p);
-        $this->routes();
-    }
-
-public function processOutbound()
-    {
-        $p = $this->getPacConf();
-        $p['process_outbound'] = !$p['process_outbound'];
-        $p = $this->setPacConf($p);
-        $this->xtlsprocess();
-    }
-
 public function xtlsapp($page = 0)
     {
         $text[] = "Menu -> " . $this->i18n('vless') . ' -> ' . $this->i18n('routes') . ' -> package list';
@@ -998,7 +966,7 @@ public function singbox($page = 0)
         if (!empty($c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0])) {
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
-        $text[] = 'transport: ' . ($p['transport'] ?: 'Websocket');
+        $text[] = 'transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
         $data[] = [
             [
                 'text'          => $this->i18n('main outbound name: ') . ($p['outbound'] ?? 'proxy'),
@@ -1025,7 +993,7 @@ public function singbox($page = 0)
         }
         $type    = !empty($this->getPacConf()['xtlslist']);
         $clients = array_filter($c['inbounds'][0]['settings']['clients'], fn($e) => !$type ? empty($e['off']) : !empty($e['off']));
-        uasort($clients, fn($a, $b) => ($a['time'] ?: PHP_INT_MAX) <=> ($b['time'] ?: PHP_INT_MAX));
+        uasort($clients, fn($a, $b) => (($a['time'] ?? null) ?: PHP_INT_MAX) <=> (($b['time'] ?? null) ?: PHP_INT_MAX));
 
         $all     = (int) ceil(count($clients) / $this->limit);
         $page    = min($page, $all - 1);
@@ -1368,7 +1336,7 @@ public function sub()
         $xr     = $this->getSingbox();
         $pac    = $this->getPacConf();
         $st     = $this->getSingboxStats();
-        $domain = $_GET['cdn'] ?: ($_SERVER['SERVER_NAME'] ?: $this->getDomain($pac['transport'] != 'Reality'));
+        $domain = ($_GET['cdn'] ?? null) ?: (($_SERVER['SERVER_NAME'] ?? null) ?: $this->getDomain($pac['transport'] != 'Reality'));
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
         $flag   = true;
@@ -1431,7 +1399,7 @@ public function subscription($return = false)
                 break;
         }
         $pac    = $this->getPacConf();
-        $domain = $_GET['cdn'] ?: ($_SERVER['SERVER_NAME'] ?: $this->getDomain($pac['transport'] != 'Reality'));
+        $domain = ($_GET['cdn'] ?? null) ?: (($_SERVER['SERVER_NAME'] ?? null) ?: $this->getDomain($pac['transport'] != 'Reality'));
         $xr     = $this->getSingbox();
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
@@ -1510,7 +1478,7 @@ public function subscription($return = false)
                 break;
         }
 
-        $outbound = $pac['outbound'] ?: 'proxy';
+        $outbound = ($pac['outbound'] ?? null) ?: 'proxy';
         $c = json_decode($this->replaceTags(json_encode($c), [
             '~outbound~' => $outbound,
         ]), true);
@@ -1705,12 +1673,12 @@ public function subscription($return = false)
                 break;
         }
         $c = json_decode($this->replaceTags(json_encode($c), [
-            '"~domains~"'    => json_encode(array_keys(array_filter($pac['includelist'] ?: []))),
-            '"~block~"'      => json_encode(array_keys(array_filter($pac['blocklist'] ?: []))),
-            '"~warp~"'       => json_encode(array_keys(array_filter($pac['warplist'] ?: []))),
-            '"~process~"'    => json_encode(array_keys(array_filter($pac['processlist'] ?: []))),
-            '"~package~"'    => json_encode(array_keys(array_filter($pac['packagelist'] ?: []))),
-            '"~subnet~"'     => json_encode(array_keys(array_filter($pac['subnetlist'] ?: []))),
+            '"~domains~"'    => json_encode(array_keys(array_filter(($pac['includelist'] ?? null) ?: []))),
+            '"~block~"'      => json_encode(array_keys(array_filter(($pac['blocklist'] ?? null) ?: []))),
+            '"~warp~"'       => json_encode(array_keys(array_filter(($pac['warplist'] ?? null) ?: []))),
+            '"~process~"'    => json_encode(array_keys(array_filter(($pac['processlist'] ?? null) ?: []))),
+            '"~package~"'    => json_encode(array_keys(array_filter(($pac['packagelist'] ?? null) ?: []))),
+            '"~subnet~"'     => json_encode(array_keys(array_filter(($pac['subnetlist'] ?? null) ?: []))),
             '~dns~'          => "https://$domain/dns-query$hash/$uid",
             '~dnspath~'      => "/dns-query$hash/$uid",
             '~wspath~'       => "/ws$hash",
@@ -1922,7 +1890,7 @@ public function addRuleSet($route)
         if (!empty($route['rules'])) {
             foreach ($route['rules'] as $k => $v) {
                 if (!empty($v['addruleset'])) {
-                    $t[$v['outbound'] ?: 'block'] = $k;
+                    $t[($v['outbound'] ?? null) ?: 'block'] = $k;
                 }
             }
             $p = $this->getPacConf();
@@ -2034,7 +2002,7 @@ public function createRuleSet($route, $uid, $domain)
         if (!empty($route['rules'])) {
             $route['rules']    = array_values($route['rules']);
         }
-        $route['rule_set'] = array_merge($route['rule_set'] ?: [], $ruleset ?: []);
+        $route['rule_set'] = array_merge(($route['rule_set'] ?? null) ?: [], $ruleset ?: []);
         if (empty($route['rule_set'])) {
             unset($route['rule_set']);
         }
@@ -2111,8 +2079,8 @@ public function changeTransport($transport)
         $x = $this->getSingbox();
         $h = $this->getHashBot();
 
-        $p['reality']['domain']      = $p['reality']['domain'] ?: 'yandex.ru';
-        $p['reality']['destination'] = $p['reality']['destination'] ?: $p['reality']['domain'] . ':443';
+        $p['reality']['domain']      = ($p['reality']['domain'] ?? null) ?: 'yandex.ru';
+        $p['reality']['destination'] = ($p['reality']['destination'] ?? null) ?: $p['reality']['domain'] . ':443';
         $p['transport'] = $transport;
 
         $p['reality']['domain']      = $x['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0] ?? $p['reality']['domain'];
@@ -2140,15 +2108,15 @@ public function changeTransport($transport)
                 $x['inbounds'][0]['streamSettings'] = [
                     "network"         => "tcp",
                     "realitySettings" => [
-                        "dest"         => $p['reality']['destination'] ?: $x['inbounds'][0]['streamSettings']['realitySettings']['dest'],
+                        "dest"         => ($p['reality']['destination'] ?? null) ?: $x['inbounds'][0]['streamSettings']['realitySettings']['dest'],
                         "maxClientVer" => "",
                         "maxTimeDiff"  => 0,
                         "minClientVer" => "",
                         "privateKey"   => $p['reality']['privateKey'],
                         "serverNames"  => [
-                            $p['reality']['domain'] ?: $x['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]
+                            ($p['reality']['domain'] ?? null) ?: $x['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]
                         ],
-                        "shortIds" => [$p['reality']['shortId']] ?: $x['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0],
+                        "shortIds" => [($p['reality']['shortId'] ?? null) ?: $x['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0]],
                         "show"     => false,
                         "xver"     => 0
                     ],
@@ -2176,7 +2144,7 @@ public function changeTransport($transport)
         }
 
         $this->setUpstreamDomain($transport == 'Reality'
-            ? ($p['reality']['domain'] ?: $x['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0])
+            ? (($p['reality']['domain'] ?? null) ?: $x['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0])
             : 't'
         );
         $this->setPacConf($p);

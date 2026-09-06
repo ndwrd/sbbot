@@ -209,14 +209,6 @@ $i = [
         'en' => 'torrents',
         'ru' => 'торренты',
     ],
-    'blinkmenuon'  => [
-        'en' => 'blinkmenu on',
-        'ru' => 'прыгающее меню вкл',
-    ],
-    'blinkmenuoff'  => [
-        'en' => 'blinkmenu off',
-        'ru' => 'прыгающее меню выкл',
-    ],
     'listSubnet'  => [
         'en' => 'listSubnet',
         'ru' => 'список подсетей',

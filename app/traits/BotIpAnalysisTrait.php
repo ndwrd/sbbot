@@ -101,7 +101,7 @@ public function switchBanIp()
 public function switchSilence()
     {
         $c = $this->getPacConf();
-        $c['silence'] = (($c['silence'] ?: 0) + 1) % 3;
+        $c['silence'] = ((($c['silence'] ?? null) ?: 0) + 1) % 3;
         $this->setPacConf($c);
         $this->ipMenu();
     }
@@ -110,11 +110,11 @@ public function ipMenu()
     {
         $text   = 'Settings -> IP & Logs';
         $pac    = $this->getPacConf();
-        $d      = count($pac['deny'] ?: []);
-        $w      = count($pac['white'] ?: []);
+        $d      = count(($pac['deny'] ?? null) ?: []);
+        $w      = count(($pac['white'] ?? null) ?: []);
         $data[] = [
             [
-                'text'          => $this->i18n('autoscan') . ': ' . ($pac['autoscan'] ? $this->getTime(strtotime(($pac['autoscan_timeout'] ?: 3600) . ' seconds')) : $this->i18n('off')),
+                'text'          => $this->i18n('autoscan') . ': ' . ($pac['autoscan'] ? $this->getTime(strtotime((($pac['autoscan_timeout'] ?? null) ?: 3600) . ' seconds')) : $this->i18n('off')),
                 'callback_data' => '/autoScanTimeout',
             ],
         ];
@@ -126,7 +126,7 @@ public function ipMenu()
                 ],
                 [
                     'text'          => $this->i18n('notify') . ': ' . ((function ($pac) {
-                        switch ($pac['silence']) {
+                        switch ($pac['silence'] ?? 0) {
                             case 0:
                                 return '🔊';
                             case 1:
@@ -219,10 +219,10 @@ public function analysisIp(int $page = 0, $return = false)
     {
         $pac = $this->getPacConf();
         $xr  = [];
-        foreach (array_merge($pac['white'] ?: [], $pac['deny'] ?: [], ['10.10.0.0/23']) as $v) {
+        foreach (array_merge(($pac['white'] ?? null) ?: [], ($pac['deny'] ?? null) ?: [], ['10.10.0.0/23']) as $v) {
             if (preg_match('~^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:(/\d{1,2}))?$~', $v, $m)) {
-                if (!in_array($m[1] . ($m[2] ?: '/32'), $xr)) {
-                    $xr[] = $m[1] . ($m[2] ?: '/32');
+                if (!in_array($m[1] . (($m[2] ?? null) ?: '/32'), $xr)) {
+                    $xr[] = $m[1] . (($m[2] ?? null) ?: '/32');
                 }
             }
         }
@@ -468,7 +468,7 @@ public function importIps($type)
 public function denyList($page = 0, $white = 0)
     {
         $text    = 'Menu -> IP -> ' . ($white ? 'ignore' : 'block') . 'list';
-        $domains = $this->getPacConf()[$white ? 'white' : 'deny'] ?: [];
+        $domains = ($this->getPacConf()[$white ? 'white' : 'deny'] ?? null) ?: [];
         $all     = (int) ceil(count($domains) / $this->limit);
         $page    = min($page, $all - 1);
         $page    = $page < 0 ? $all - 1 : $page;
@@ -565,13 +565,13 @@ public function denyIp($ip, $fun = false, $page = 0, $white = 0)
         if (is_array($ip)) {
             foreach ($ip as $v) {
                 $pac['deny'][] = $v;
-                if (($t = array_search($v, $pac['white'] ?: [])) !== false) {
+                if (($t = array_search($v, ($pac['white'] ?? null) ?: [])) !== false) {
                     unset($pac['white'][$t]);
                 }
             }
         } else {
             $pac['deny'][] = $ip;
-            if (($t = array_search($ip, $pac['white'] ?: [])) !== false) {
+            if (($t = array_search($ip, ($pac['white'] ?? null) ?: [])) !== false) {
                 unset($pac['white'][$t]);
             }
         }
@@ -591,13 +591,13 @@ public function whiteIp($ip, $fun = false, $page = 0, $white = 0)
         if (is_array($ip)) {
             foreach ($ip as $v) {
                 $pac['white'][] = $v;
-                if (($t = array_search($v, $pac['deny'] ?: [])) !== false) {
+                if (($t = array_search($v, ($pac['deny'] ?? null) ?: [])) !== false) {
                     unset($pac['deny'][$t]);
                 }
             }
         } else {
             $pac['white'][] = $ip;
-            if (($t = array_search($ip, $pac['deny'] ?: [])) !== false) {
+            if (($t = array_search($ip, ($pac['deny'] ?? null) ?: [])) !== false) {
                 unset($pac['deny'][$t]);
             }
         }
@@ -614,7 +614,7 @@ public function whiteIp($ip, $fun = false, $page = 0, $white = 0)
 public function allowIp($ip, $page, $white = 0)
     {
         $pac = $this->getPacConf();
-        unset($pac[$white ? 'white' : 'deny'][array_search($ip, $pac[$white ? 'white' : 'deny'])]);
+        unset($pac[$white ? 'white' : 'deny'][array_search($ip, ($pac[$white ? 'white' : 'deny'] ?? null) ?: [])]);
         $this->setPacConf($pac);
         $this->syncDeny();
         $this->denyList($page, $white);
@@ -659,7 +659,7 @@ public function syncDeny()
             $pac['deny'] = array_unique($pac['deny']);
             sort($pac['deny']);
             foreach ($pac['deny'] as $k => $v) {
-                if (!in_array($v, $pac['white'] ?: []) && !in_array($v, array_keys($xr ?: []))) {
+                if (!in_array($v, ($pac['white'] ?? null) ?: []) && !in_array($v, array_keys($xr ?? []))) {
                     $text .= "deny $v;\n";
                 } else {
                     unset($pac['deny'][$k]);

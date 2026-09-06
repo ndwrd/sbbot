@@ -61,14 +61,14 @@ switch (true) {
 
             case 'te':
                 if (!empty($_GET['te'])) {
-                    $t = $bot->getPacConf()["{$_GET['ty']}templates"][$_GET['te']];
+                    $t = $bot->getPacConf()["{$_GET['ty']}templates"][$_GET['te']] ?? null;
                 } else {
                     $t = json_decode(file_get_contents("/config/{$_GET['ty']}.json"), true);
                 }
                 if ($t) {
                     header('Content-Type: text/html');
                     $t = json_encode($t, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                    $name = $_GET['te'] ?: 'origin';
+                    $name = ($_GET['te'] ?? null) ?: 'origin';
                     $type = $_GET['ty'];
                     echo <<<HTML
                         <!DOCTYPE HTML>

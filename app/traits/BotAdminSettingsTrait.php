@@ -42,7 +42,7 @@ public function importList($type)
         ];
     }
 
-public function importListFile($message = '', $type)
+public function importListFile($message, $type)
     {
         $r = $this->request('getFile', ['file_id' => $this->input['file_id']]);
         $f = file_get_contents($this->file . $r['result']['file_path']);
@@ -202,7 +202,7 @@ public function importFile($file = false)
                 $out[] = 'update mtproto';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 file_put_contents('/config/mtprotosecret', $json['mtproto']);
-                file_put_contents('/config/mtprotodomain', $json['mtprotodomain'] ?: '');
+                file_put_contents('/config/mtprotodomain', ($json['mtprotodomain'] ?? null) ?: '');
                 file_put_contents('/config/mtprotoadtag', trim($json['mtprotoadtag'] ?? ''));
                 $this->restartTG();
             }
@@ -212,7 +212,7 @@ public function importFile($file = false)
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $this->restartSingbox($json['singbox']);
                 $this->adguardSingboxClients();
-                $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : ($json['pac']['reality']['domain'] ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
+                $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
             }
             // singboxstats
             if (!empty($json['singboxstats'])) {
@@ -235,8 +235,8 @@ public function importFile($file = false)
 
             $out[] = "end import";
             $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-            $this->language = $this->getPacConf()['language'] ?: 'en';
-            $this->limit    = $this->getPacConf()['limitpage'] ?: 5;
+            $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
+            $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
             if (empty($file)) {
                 sleep(3);
                 $this->menu();
@@ -422,14 +422,8 @@ public function domainsMenu()
                 ],
             ],
         ];
-        if ($conf['domain']) {
-            $data[] = [
-                [
-                    'text'          => $this->i18n('change subdomains'),
-                    'callback_data' => '/regenSubdomains',
-                ],
-            ];
-        }
+        // Кнопка "change subdomains" временно скрыта из меню — логика regenSubdomains()
+        // требует пересмотра, но саму функцию и её callback-маршрут не трогаем.
         if ($conf['domain']) {
             if ($cert = $this->nginxGetTypeCert()) {
                 switch ($cert) {
@@ -513,7 +507,7 @@ public function configMenu()
                 'callback_data' => "/menu lang",
             ],
             [
-                'text'          => "{$this->i18n('page')}: " . ($conf['limitpage'] ?: 5),
+                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
                 'callback_data' => "/enterPage",
             ],
         ];
