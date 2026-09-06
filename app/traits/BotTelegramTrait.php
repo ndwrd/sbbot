@@ -64,6 +64,13 @@ public function request($method, $data, $json_header = 0)
                 'Content-Type: application/json'
             ] : [],
             CURLOPT_POSTFIELDS     => $data,
+            // Без этого curl ждёт ответ бесконечно (таймаут по умолчанию — 0).
+            // 'timeout' => 5 в самих $data — это долгий поллинг на стороне
+            // Telegram API, а не таймаут TCP-сокета: если соединение зависнет
+            // на транспорте (например, протухший IPv6-путь), curl_exec() не
+            // вернётся никогда, и весь polling()-цикл замирает насмерть.
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 20,
         ]);
         $res = curl_exec($ch);
         $r   = json_decode($res, true);
