@@ -25,6 +25,14 @@ public function setSecret()
 
 public function secretSet($secret)
     {
+        // linkMtproto() выдаёт клиенту secret с префиксом ee и хвостом-доменом
+        // (fake-tls) — если пользователь копирует именно эту строку обратно
+        // сюда, а не сырой 32-символьный ключ, restartTG() её отбраковывает
+        // по regex и mtproto молча не поднимается. Достаём чистый ключ сами.
+        $secret = trim($secret);
+        if (preg_match('~^(?:dd|ee)?([0-9a-f]{32})~i', $secret, $m)) {
+            $secret = strtolower($m[1]);
+        }
         file_put_contents('/config/mtprotosecret', $secret);
         $this->restartTG();
         $this->mtproto();
@@ -92,8 +100,6 @@ public function mtproto()
                 'text'          => $this->i18n('generateSecret'),
                 'callback_data' => "/generateSecret",
             ],
-        ];
-        $data[] = [
             [
                 'text'          => $this->i18n('setSecret'),
                 'callback_data' => "/setSecret",
@@ -104,14 +110,6 @@ public function mtproto()
                 'text'          => $this->i18n('changeFakeDomain'),
                 'callback_data' => "/changeTGDomain",
             ],
-        ];
-        $data[] = [
-            [
-                'text'          => $this->i18n('setAdTag'),
-                'callback_data' => "/setTGAdtag",
-            ],
-        ];
-        $data[] = [
             [
                 'text'          => $this->i18n('show QR'),
                 'callback_data' => "/qrMtproto",

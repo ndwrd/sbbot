@@ -514,16 +514,16 @@ $i = [
         'ru' => 'Установить лимит',
     ],
     'qr vless'  => [
-        'en' => 'Qr vless',
-        'ru' => 'Qr vless',
+        'en' => 'QR vless',
+        'ru' => 'QR vless',
     ],
     'qr xray'  => [
-        'en' => 'Qr xray',
-        'ru' => 'Qr xray',
+        'en' => 'QR xray',
+        'ru' => 'QR xray',
     ],
     'qr singbox'  => [
-        'en' => 'Qr singbox',
-        'ru' => 'Qr singbox',
+        'en' => 'QR singbox',
+        'ru' => 'QR singbox',
     ],
 ];
 
