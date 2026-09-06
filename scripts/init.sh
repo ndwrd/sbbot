@@ -11,7 +11,8 @@ apt install -y \
     iproute2 \
     xtables-addons-common \
     xtables-addons-dkms \
-    inotify-tools
+    inotify-tools \
+    ufw
 curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
 
 # Best-effort IPv6 egress for containers (lets sing-box's direct outbound reach
@@ -36,6 +37,13 @@ fi
 git clone https://github.com/ndwrd/sbbot.git
 cd ./sbbot
 git checkout $TAG
+
+# Installed before `make u` so it's already watching by the time the `service`
+# container's first-boot sslip() creates the /certs/.want_port80 marker and
+# calls setSSL('letsencrypt') — otherwise that zero-config nip.io+SSL flow
+# needs port 80 reachable and has nothing to open it.
+bash scripts/install_watch_port80.sh
+
 echo "<?php
 
 \$c = ['key' => '$1'];" > ./app/config.php
