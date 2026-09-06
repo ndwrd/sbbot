@@ -11,9 +11,23 @@ public function adguardSync()
         $c   = yaml_parse_file($this->adguard);
         $this->stopAd();
         $c['users'][0]['password'] = password_hash($pac['adpswd'], PASSWORD_DEFAULT);
-        if (!empty($ssl) && !empty($pac['domain']) && empty($c['tls']['enabled'])) {
-            $c['tls']['enabled']     = true;
-            $c['tls']['server_name'] = $pac['domain'];
+        // AdGuardHome по умолчанию поднимает веб-интерфейс на заводском :3000 (порт
+        // выбирается только через install-wizard, который мы никогда не проходим) —
+        // а nginx проксирует /adguard/ на 80-й порт (см. cloakNginx()), поэтому без
+        // этой правки прокси всегда получает 502.
+        $c['http']['address'] = '0.0.0.0:80';
+        if (!empty($ssl) && !empty($pac['domain'])) {
+            if (empty($c['tls']['enabled'])) {
+                $c['tls']['enabled']     = true;
+                $c['tls']['server_name'] = $pac['domain'];
+            }
+            // Независимо от того, включали TLS сейчас или раньше — пути к сертификату
+            // могли остаться пустыми (как раз наш случай на живом сервере: enabled уже
+            // true, но certificate_path/private_key_path так и не были прописаны).
+            if (empty($c['tls']['certificate_path'])) {
+                $c['tls']['certificate_path'] = '/certs/cert_public';
+                $c['tls']['private_key_path'] = '/certs/cert_private';
+            }
         }
         yaml_emit_file($this->adguard, $c);
         $this->startAd();
