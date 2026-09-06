@@ -1200,8 +1200,6 @@ public function userXr($i)
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
             $text[] = "<a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>subscription</a>";
         }
-        $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
-
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['username']}'>import://v2rayng</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['username']}'>import://sing-box</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=st&s={$c['id']}#{$c['username']}'>import://streisand</a>";
@@ -1209,6 +1207,8 @@ public function userXr($i)
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['username']}'>import://karing</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['username']}'>import://mihomo</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['username']}'>import://rabbit-hole</a>";
+
+        $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
 
         $si = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
             'h' => $hash,
@@ -1226,7 +1226,7 @@ public function userXr($i)
             's' => $c['id'],
         ]));
 
-        $text[] = "\nv2ray config: <pre><code>$xr</code></pre>";
+        $text[] = "\nxray config: <pre><code>$xr</code></pre>";
         $text[] = "sing-box config: <pre><code>$si</code></pre>";
         $text[] = "mihomo config: <pre><code>$cl</code></pre>";
 
