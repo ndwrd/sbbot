@@ -144,7 +144,6 @@ public function export()
             'mtprotodomain' => file_get_contents('/config/mtprotodomain'),
             'mtprotoadtag'  => file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '',
             'singbox'       => $this->getSingbox(),
-            'singboxstats'  => $this->getSingboxStats(),
         ];
         return json_encode($conf, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
@@ -215,12 +214,6 @@ public function importFile($file = false)
                 $this->restartSingbox($json['singbox']);
                 $this->adguardSingboxClients();
                 $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
-            }
-            // singboxstats
-            if (!empty($json['singboxstats'])) {
-                $out[] = 'update singbox stats';
-                $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-                $this->setSingboxStats($json['singboxstats']);
             }
             // dnstt
             if (!empty($json['dnstt'])) {
