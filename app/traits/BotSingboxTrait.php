@@ -2169,7 +2169,7 @@ public function createSrs(string $name, array $rules)
             }
         }
         file_put_contents($f, json_encode([
-            'version' => 1,
+            'version' => 5,
             'rules'   => $rules ?: [],
         ]));
         exec("sing-box rule-set compile $f");
