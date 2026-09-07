@@ -29,12 +29,17 @@ ARG SING_BOX_VERSION=v1.14.0
 # stats.proto тянем с ТОГО ЖЕ тега sing-box, что собран выше — иначе схема может
 # разойтись с тем, что реально отдаёт бинарник.
 ARG GRPCURL_VERSION=1.9.4
+# sing-box переопределяет имя gRPC-сервиса в рантайме на v2ray.core.app.stats.command.StatsService
+# (experimental/v2rayapi/stats.go: init() { StatsService_ServiceDesc.ServiceName = ... }) для
+# совместимости с настоящим v2ray-клиентским API — исходный package в stats.proto этого не
+# отражает, поэтому патчим его sed'ом ниже, иначе grpcurl стучится под именем, которого сервер не знает.
 RUN apk add --no-cache openssh openssl jq curl ca-certificates tzdata \
     && mkdir -p /root/.ssh /var/run/sshd /etc/singbox \
     && chmod 700 /root/.ssh \
     && curl -fsSL "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz" -o /tmp/grpcurl.tar.gz \
     && tar -xzf /tmp/grpcurl.tar.gz -C /usr/bin grpcurl \
     && rm /tmp/grpcurl.tar.gz \
-    && curl -fsSL "https://raw.githubusercontent.com/SagerNet/sing-box/${SING_BOX_VERSION}/experimental/v2rayapi/stats.proto" -o /etc/singbox/stats.proto
+    && curl -fsSL "https://raw.githubusercontent.com/SagerNet/sing-box/${SING_BOX_VERSION}/experimental/v2rayapi/stats.proto" -o /etc/singbox/stats.proto \
+    && sed -i 's/^package experimental\.v2rayapi;/package v2ray.core.app.stats.command;/' /etc/singbox/stats.proto
 COPY --from=build /out/sing-box /usr/bin/sing-box
 ENV ENV="/root/.ashrc"

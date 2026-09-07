@@ -224,7 +224,7 @@ public function queryV2raySingboxStats()
         // grpcurl (готовый gRPC-клиент, как curl, только для gRPC) с тем же
         // stats.proto, что и собранный sing-box — оба зашиты в образ sbx.
         // Пустой pattern в QueryStats — значит "отдай вообще все счётчики разом".
-        $out = $this->ssh("grpcurl -plaintext -proto /etc/singbox/stats.proto -d '{}' 127.0.0.1:8080 experimental.v2rayapi.StatsService/QueryStats", 'sbx');
+        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/QueryStats", 'sbx');
         $json = json_decode($out, true);
         $result = ['users' => [], 'inbounds' => []];
         foreach ($json['stat'] ?? [] as $stat) {
@@ -243,7 +243,7 @@ public function queryV2raySingboxStats()
 
 public function getSingboxSysStats()
     {
-        $out = $this->ssh("grpcurl -plaintext -proto /etc/singbox/stats.proto -d '{}' 127.0.0.1:8080 experimental.v2rayapi.StatsService/GetSysStats", 'sbx');
+        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/GetSysStats", 'sbx');
         // Регистр ключей в JSON-выдаче grpcurl под вопросом (поля в .proto — не
         // snake_case, а PascalCase, как есть) — приводим к нижнему регистру, чтобы
         // не гадать точное написание.
