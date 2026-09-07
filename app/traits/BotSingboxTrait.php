@@ -300,7 +300,7 @@ public function singboxStatsUser()
             if ($total >= $client['trafficlimit'] && empty($client['limitNotified'])) {
                 $label = $client['description'] ?? ($client['username'] ?? $i);
                 foreach ($c['admin'] as $admin) {
-                    $this->send($admin, "$label: traffic limit exceeded (" . $this->getGB($total) . ")");
+                    $this->send($admin, "$label: traffic limit exceeded (" . $this->getBytes($total) . ")");
                 }
                 $clients[$i]['limitNotified'] = true;
                 $changed = true;
@@ -348,7 +348,7 @@ public function checkResetSingboxStats()
                     $this->resetXrStats(1);
                     require dirname(__DIR__) . '/config.php';
                     foreach ($c['admin'] as $admin) {
-                        $this->send($admin, "vless: monthly traffic ↓{$this->getGB($download)} ↑{$this->getGB($upload)}, stats reset");
+                        $this->send($admin, "vless: monthly traffic ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}, stats reset");
                     }
                 }
             }
@@ -849,17 +849,22 @@ public function statsMenu()
     {
         $st   = $this->getSingboxStats();
         $sys  = $this->getSingboxSysStats();
+        $host = $this->getHostStats();
         $conf = $this->getPacConf();
 
         $text[] = "Menu -> " . $this->i18n('vless') . ' -> Stats';
         $text[] = '';
         $text[] = '<blockquote>';
-        $text[] = 'System';
+        $text[] = '<b>System</b>';
+        $text[] = "CPU {$host['cpu']}% · MEM {$host['mem']}% · DISK {$host['disk']}%";
         $text[] = 'Sing-box uptime: ' . $this->formatUptime($sys['uptime'] ?? 0);
         $text[] = 'Sing-box memory: ' . $this->getMB($sys['alloc'] ?? 0);
         $text[] = '</blockquote>';
         $text[] = '<blockquote>';
-        $text[] = 'Traffic';
+        $text[] = '<b>Traffic</b>';
+        $totalDownload = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
+        $totalUpload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
+        $text[] = "Total: ↓{$this->getBytes($totalDownload)} ↑{$this->getBytes($totalUpload)}";
         foreach ([
             'vless-in'     => 'Vless',
             'naive-in'     => 'Naive',
@@ -868,7 +873,7 @@ public function statsMenu()
         ] as $tag => $label) {
             $download = ($st['inbounds'][$tag]['global']['download'] ?? 0) + ($st['inbounds'][$tag]['session']['download'] ?? 0);
             $upload   = ($st['inbounds'][$tag]['global']['upload']   ?? 0) + ($st['inbounds'][$tag]['session']['upload']   ?? 0);
-            $text[]   = "$label: ↓{$this->getGB($download)} ↑{$this->getGB($upload)}";
+            $text[]   = "$label: ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}";
         }
         $text[] = '</blockquote>';
 
@@ -1137,16 +1142,15 @@ public function singbox($page = 0)
     {
         $c      = $this->getSingbox();
         $p      = $this->getPacConf();
+        $text[] = '';
         $text[] = "Menu -> " . $this->i18n('vless');
+        $text[] = '';
         if (!empty($c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0])) {
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
-        $text[] = 'transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
+        $text[] = 'Transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
         $text[] = 'Outbounds: Vless, Hysteria2, Naive, Anytls';
         $st = $this->getSingboxStats();
-        $totalDownload = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
-        $totalUpload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
-        $text[] = "↓{$this->getGB($totalDownload)} ↑{$this->getGB($totalUpload)}";
         $data[] = [
             [
                 'text'          => $this->i18n('main outbound name: ') . '"' . ($p['outbound'] ?? 'proxy') . '"',
@@ -1195,7 +1199,7 @@ public function singbox($page = 0)
             $upload   = ($st['users'][$k]['global']['upload']   ?? 0) + ($st['users'][$k]['session']['upload']   ?? 0);
             $data[]   = [
                 [
-                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . " ↓{$this->getGB($download)} ↑{$this->getGB($upload)}",
+                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . " ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}",
                     'callback_data' => "/userXr $k",
                 ],
             ];
@@ -1464,7 +1468,7 @@ public function userXr($i)
                 'callback_data' => "/timerXr $i",
             ],
             [
-                'text'          => !empty($c['trafficlimit']) ? "limit: " . $this->getGB($c['trafficlimit']) : $this->i18n('set limit'),
+                'text'          => !empty($c['trafficlimit']) ? "limit: " . $this->getBytes($c['trafficlimit']) : $this->i18n('set limit'),
                 'callback_data' => "/limitXr $i",
             ],
             [

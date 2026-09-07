@@ -956,6 +956,44 @@ public function getMB($bytes)
         return round(($bytes ?: 0) / (1024 ** 2), 2) . ' MB';
     }
 
+public function getHostStats()
+    {
+        // Как в 3x-ui/2s-ui: CPU/MEM/DISK хоста, а не контейнера. На обычном (без
+        // lxcfs) docker-хосте /proc/stat и /proc/meminfo внутри контейнера — это
+        // /proc самого хоста целиком, не cgroup-урезанный вид, так что два сэмпла
+        // с паузой достаточно для CPU%. Диск смотрим через /app — это bind-mount
+        // с хоста (docker-compose.yml), поэтому df тут отдаёт реальный раздел
+        // хоста, а не overlay-fs контейнера.
+        $sample = function () {
+            $line  = trim(strtok(file_get_contents('/proc/stat'), "\n"));
+            $parts = array_map('intval', preg_split('~\s+~', $line));
+            array_shift($parts);
+            return $parts;
+        };
+        $a = $sample();
+        usleep(200000);
+        $b = $sample();
+        $totalDelta = array_sum($b) - array_sum($a);
+        $idleDelta  = ($b[3] + ($b[4] ?? 0)) - ($a[3] + ($a[4] ?? 0));
+        $cpu        = $totalDelta > 0 ? round((1 - $idleDelta / $totalDelta) * 100, 1) : 0;
+
+        $mem = [];
+        foreach (explode("\n", file_get_contents('/proc/meminfo')) as $line) {
+            if (preg_match('~^(\w+):\s+(\d+)~', $line, $m)) {
+                $mem[$m[1]] = (int) $m[2];
+            }
+        }
+        $memTotal     = $mem['MemTotal'] ?? 0;
+        $memAvailable = $mem['MemAvailable'] ?? ($mem['MemFree'] ?? 0);
+        $memPercent   = $memTotal > 0 ? round((1 - $memAvailable / $memTotal) * 100, 1) : 0;
+
+        $diskTotal   = @disk_total_space('/app') ?: 0;
+        $diskFree    = @disk_free_space('/app') ?: 0;
+        $diskPercent = $diskTotal > 0 ? round((1 - $diskFree / $diskTotal) * 100, 1) : 0;
+
+        return ['cpu' => $cpu, 'mem' => $memPercent, 'disk' => $diskPercent];
+    }
+
 public function formatUptime($seconds)
     {
         $seconds = (int) $seconds;
