@@ -40,6 +40,25 @@ public function addDomain($domain, $nomenu = false)
         }
     }
 
+public function reconcileDomainForNewServer(array &$conf)
+    {
+        // nip.io кодирует IP прямо в тексте домена (X-X-X-X.nip.io -> резолвится в
+        // X.X.X.X) — восстановление бэкапа на другой сервер тащит за собой домен с
+        // IP старого сервера, и всё, что от него зависит (ссылка mtproto, DoH/DoT
+        // AdGuard, поддомены naive/anytls — они хранятся короткими префиксами и
+        // просто приезжают на новый домен) тихо продолжает указывать на старый
+        // сервер. Свой (не nip.io) домен не трогаем — DNS на него держит админ сам.
+        if (empty($conf['domain']) || !preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $conf['domain'], $m)) {
+            return false;
+        }
+        $backupIp = "{$m[1]}.{$m[2]}.{$m[3]}.{$m[4]}";
+        if ($backupIp === $this->ip) {
+            return false;
+        }
+        $conf['domain'] = str_replace('.', '-', $this->ip) . '.nip.io';
+        return true;
+    }
+
 public function ensureProtocolSubdomains(array $conf)
     {
         // Поддомены naive/anytls намеренно случайные (не "naive.domain"/"anytls.domain") —

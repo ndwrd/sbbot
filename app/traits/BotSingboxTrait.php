@@ -250,6 +250,19 @@ public function getSingboxSysStats()
         return array_change_key_case(json_decode($out, true) ?: [], CASE_LOWER);
     }
 
+public function getSingboxTotalTraffic($st)
+    {
+        // Верхнеуровневые $st['global']/$st['session'] нигде не заполняются
+        // (только $st['inbounds'][tag][...] и $st['users'][i][...]) — total считаем
+        // суммой по всем inbound'ам, а не читаем эти всегда-пустые ключи.
+        $download = $upload = 0;
+        foreach (['vless-in', 'naive-in', 'anytls-in', 'hysteria2-in'] as $tag) {
+            $download += ($st['inbounds'][$tag]['global']['download'] ?? 0) + ($st['inbounds'][$tag]['session']['download'] ?? 0);
+            $upload   += ($st['inbounds'][$tag]['global']['upload']   ?? 0) + ($st['inbounds'][$tag]['session']['upload']   ?? 0);
+        }
+        return [$download, $upload];
+    }
+
 public function singboxStatsUser()
     {
         // grpcurl лезет по ssh на sbx на каждый тик — держать это на общем
@@ -342,9 +355,8 @@ public function checkResetSingboxStats()
                 if ($lastResetTime < $lastScheduledReset) {
                     $pac['last_reset_singbox_time'] = $now;
                     $this->setPacConf($pac);
-                    $st       = $this->getSingboxStats();
-                    $download = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
-                    $upload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
+                    $st = $this->getSingboxStats();
+                    [$download, $upload] = $this->getSingboxTotalTraffic($st);
                     $this->resetXrStats(1);
                     require dirname(__DIR__) . '/config.php';
                     foreach ($c['admin'] as $admin) {
@@ -862,8 +874,7 @@ public function statsMenu()
         $text[] = '</blockquote>';
         $text[] = '<blockquote>';
         $text[] = '<b>Traffic</b>';
-        $totalDownload = ($st['global']['download'] ?? 0) + ($st['session']['download'] ?? 0);
-        $totalUpload   = ($st['global']['upload']   ?? 0) + ($st['session']['upload']   ?? 0);
+        [$totalDownload, $totalUpload] = $this->getSingboxTotalTraffic($st);
         $text[] = "Total: ↓{$this->getBytes($totalDownload)} ↑{$this->getBytes($totalUpload)}";
         foreach ([
             'vless-in'     => 'Vless',

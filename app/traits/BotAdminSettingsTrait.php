@@ -184,9 +184,11 @@ public function importFile($file = false)
                 file_put_contents('/certs/cert_public', $json['ssl']['public']);
             }
             // pac
+            $domainMigrated = false;
             if (!empty($json['pac'])) {
                 $out[] = 'update pac';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
+                $domainMigrated = $this->reconcileDomainForNewServer($json['pac']);
                 $this->setPacConf($json['pac']);
             }
             // ad
@@ -226,6 +228,13 @@ public function importFile($file = false)
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 file_put_contents('/config/dnstt/server.key', $json['dnstt']['private']);
                 file_put_contents('/config/dnstt/server.pub', $json['dnstt']['public']);
+            }
+            // domain migrated to this server's IP (nip.io) — old cert doesn't match
+            // the new domain string, letsencrypt needs to be reissued for it
+            if ($domainMigrated) {
+                $out[] = 'reissue SSL for new domain';
+                $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
+                $this->setSSL('letsencrypt');
             }
             // nginx
             $out[] = 'reset nginx';
