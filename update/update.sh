@@ -50,6 +50,8 @@ do
             fi
             tg_draft "applying updates"
             git pull > ./update/message
+            tg_draft "pulling images"
+            docker compose --env-file ./.env --env-file ./override.env pull
         fi
 
         tg_draft "launching the bot"

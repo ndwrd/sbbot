@@ -252,6 +252,12 @@ public function getSingboxSysStats()
 
 public function singboxStatsUser()
     {
+        // grpcurl лезет по ssh на sbx на каждый тик — держать это на общем
+        // 10-секундном периоде cron() избыточно, обновляем раз в 90 секунд.
+        if (!empty($this->time_singbox_stats) && (time() - $this->time_singbox_stats) < 90) {
+            return;
+        }
+        $this->time_singbox_stats = time();
         $stats = $this->queryV2raySingboxStats();
         if (empty($stats['users']) && empty($stats['inbounds'])) {
             return;
