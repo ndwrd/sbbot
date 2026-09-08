@@ -93,12 +93,57 @@
         }
     ],
     "routing": {
-        "domainStrategy": "AsIs",
+        "domainStrategy": "IPIfNonMatch",
         "rules": [
             {
                 "type": "field",
                 "outboundTag": "block",
-                "domain": "~block~"
+                "domain": ["~block~", "geosite:category-ads-all"]
+            },
+            {
+                "type": "field",
+                "outboundTag": "block",
+                "network": "udp",
+                "port": "443"
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "protocol": ["bittorrent"]
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "domain": ["geosite:category-ru"]
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "ip": ["geoip:private"]
+            },
+            {
+                "type": "field",
+                "outboundTag": "~outbound~",
+                "domain": [
+                    "geosite:anthropic",
+                    "geosite:github-copilot",
+                    "geosite:google-gemini",
+                    "geosite:meta",
+                    "geosite:nintendo",
+                    "geosite:twitter",
+                    "geosite:mega",
+                    "geosite:ookla-speedtest",
+                    "geosite:openai",
+                    "geosite:paypal",
+                    "geosite:protonmail",
+                    "geosite:signal",
+                    "geosite:supercell",
+                    "geosite:telegram",
+                    "geosite:tiktok",
+                    "geosite:tutanota",
+                    "geosite:viber",
+                    "geosite:youtube"
+                ]
             },
             {
                 "type": "field",
@@ -114,6 +159,11 @@
                 "type": "field",
                 "outboundTag": "~outbound~",
                 "domain": "~warp~"
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "network": "tcp,udp"
             }
         ]
     }

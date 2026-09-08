@@ -400,7 +400,7 @@ public function dw($u, $t)
         $_GET['t']              = $t;
         $_SERVER['SERVER_NAME'] = $this->getDomain($pac['transport'] != 'Reality');
         $conf                   = $this->subscription(1);
-        $this->sendFile($this->input['from'], new CURLStringFile($conf, $c['username'] . ($t == 'cl' ? '_mihomo.yaml' :($t == 'si' ? '_singbox.json' : '_v2ray.json'))));
+        $this->sendFile($this->input['from'], new CURLStringFile($conf, $c['username'] . ($t == 'cl' ? '_mihomo.yaml' :($t == 'si' ? '_singbox.json' : '_xray.json'))));
     }
 
 public function timerXr($k)
@@ -1279,7 +1279,7 @@ public function templatesMenu()
         $data = [
             [[
                 'text'          => 'Xray',
-                'callback_data' => "/templates v2ray",
+                'callback_data' => "/templates xray",
             ]],
             [[
                 'text'          => 'Sing-box',
@@ -1500,12 +1500,12 @@ public function userXr($i)
             ],
         ];
         $singtemplate  = $c['singtemplate'] ? base64_decode($c['singtemplate']) : 'default(' . ($pac['defaultsingtemplate'] && !empty($pac['singtemplates'][base64_decode($pac['defaultsingtemplate'])]) ? base64_decode($pac['defaultsingtemplate']) : 'origin') . ')';
-        $v2raytemplate = $c['v2raytemplate'] ? base64_decode($c['v2raytemplate']) : 'default(' . ($pac['defaultv2raytemplate'] && !empty($pac['v2raytemplates'][base64_decode($pac['defaultv2raytemplate'])]) ? base64_decode($pac['defaultv2raytemplate']) : 'origin') . ')';
+        $xraytemplate = $c['xraytemplate'] ? base64_decode($c['xraytemplate']) : 'default(' . ($pac['defaultxraytemplate'] && !empty($pac['xraytemplates'][base64_decode($pac['defaultxraytemplate'])]) ? base64_decode($pac['defaultxraytemplate']) : 'origin') . ')';
         $clashtemplate = $c['clashtemplate'] ? base64_decode($c['clashtemplate']) : 'default(' . ($pac['defaultclashtemplate'] && !empty($pac['clashtemplates'][base64_decode($pac['defaultclashtemplate'])]) ? base64_decode($pac['defaultclashtemplate']) : 'origin') . ')';
         $data[]        = [
             [
-                'text'          => $this->i18n('xray') . ": $v2raytemplate",
-                'callback_data' => "/templateUser v2ray $i",
+                'text'          => $this->i18n('xray') . ": $xraytemplate",
+                'callback_data' => "/templateUser xray $i",
             ],
             [
                 'text'          => $this->i18n('singbox') . ": $singtemplate",
@@ -1612,7 +1612,7 @@ public function subscription($return = false)
     {
         switch ($_GET['t']) {
             case 's':
-                $type = 'v2ray';
+                $type = 'xray';
                 break;
             case 'si':
                 $type = 'sing';
@@ -1722,7 +1722,7 @@ public function subscription($return = false)
 
         switch ($_GET['t']) {
             case 's':
-                // Как и у sing-box-шаблона: v2ray.json уже в финальном WS-виде для
+                // Как и у sing-box-шаблона: xray.json уже в финальном WS-виде для
                 // единственного реально используемого сейчас транспорта — uuid/domain/
                 // ~wspath~ заполнит общий replaceTags() ниже. Reality/xhttp — дормант-
                 // задел (см. buildSingboxConfig()), сами достраивают всё с нуля, раз
