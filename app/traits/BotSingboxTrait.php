@@ -166,9 +166,14 @@ public function buildSingboxConfig($pac)
             ],
         ];
 
-        // log/dns/outbounds/route — статика из /config/sing-server.json, правится
-        // руками прямо в файле; сервер подставляет сюда только то, что реально зависит
-        // от текущих данных (inbounds — список клиентов, experimental — их же stats-теги).
+        // log/dns — чистая статика из /config/sing-server.json, правится руками прямо
+        // в файле. outbounds/route тоже читаются оттуда как база (чтобы админ мог
+        // руками добавить что-то своё), но дальше в них домонтируются singboxUpdateRules()'ные
+        // block/warp — раньше singboxOutbounds/singboxRoutingRules честно копились в
+        // pac.json, но сюда, в реальный конфиг, так ни разу и не попадали.
+        // Теги "warp"/"block" зарезервированы под это — старые записи с ними всегда
+        // вычищаются перед вставкой свежих, иначе при каждом restartSingbox() файл
+        // читает сам себя и они задваивались бы.
         $sing = json_decode(file_get_contents('/config/sing-server.json'), true) ?: [];
         $sing['inbounds']     = $inbounds;
         $sing['experimental'] = [
@@ -182,6 +187,13 @@ public function buildSingboxConfig($pac)
                 ],
             ],
         ];
+
+        $baseOutbounds = array_values(array_filter($sing['outbounds'] ?? [], fn($o) => ($o['tag'] ?? null) !== 'warp'));
+        $sing['outbounds'] = array_merge($baseOutbounds, $pac['singboxOutbounds'] ?? []);
+
+        $baseRules = array_values(array_filter($sing['route']['rules'] ?? [], fn($r) => !in_array($r['outbound'] ?? null, ['block', 'warp'], true)));
+        $sing['route']['rules'] = array_merge($pac['singboxRoutingRules'] ?? [], $baseRules);
+
         return $sing;
     }
 
