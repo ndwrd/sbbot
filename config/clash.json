@@ -631,7 +631,6 @@
         "prefer-h3": false,
         "fake-ip-range": "198.18.0.1/16",
         "fake-ip-filter": [
-            "\"rule-set:https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geosite/private.mrs\"",
             "~domain~",
             "*.lan",
             "+.local",
