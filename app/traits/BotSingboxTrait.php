@@ -1967,6 +1967,7 @@ public function subscription($return = false)
             case 'si':
                 $c['route'] = $this->addRuleSet($c['route']);
                 $c['route'] = $this->createRuleSet($c['route'], $uid, $domain);
+                $c = $this->addDnsRuleSet($c);
                 if (!empty($c['route']['rules'])) {
                     foreach ($c['route']['rules'] as $k => $v) {
                         if (count($v) == 1 && array_key_exists('outbound', $v)) {
@@ -2139,6 +2140,31 @@ public function addRuleSet($route)
             }
         }
         return $route;
+    }
+
+public function addDnsRuleSet($c)
+    {
+        // Правило route.rules с action:"reject" — это наш block (и встроенный
+        // ~block~-ruleset из createRuleSet(), и любые внешние .srs, добавленные
+        // через "Rulesset" с типом block, см. addRuleSet()) — оно всегда несёт
+        // актуальный набор rule_set-тегов на момент сборки конфига. Просто зеркалим
+        // этот же список в dns.rules, чтобы резолвинг для заблокированных доменов
+        // не происходил вовсе (см. обсуждение: reject на 50+/30с уходит в тихий
+        // drop, DNS-уровень этого избегает) — add/delete синхронизируются сами
+        // собой, т.к. пересчитывается с нуля из route.rules при каждой сборке.
+        foreach ($c['route']['rules'] ?? [] as $v) {
+            if (($v['action'] ?? null) === 'reject' && !empty($v['rule_set'])) {
+                $c['dns']['rules'][] = [
+                    'rule_set' => $v['rule_set'],
+                    'action'   => 'predefined',
+                    'rcode'    => 'NOERROR',
+                ];
+            }
+        }
+        if (empty($c['dns']['rules'])) {
+            unset($c['dns']['rules']);
+        }
+        return $c;
     }
 
 public function cleanEmptyKeys(array $arr)
