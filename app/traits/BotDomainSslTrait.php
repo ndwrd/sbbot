@@ -242,12 +242,21 @@ public function cloakNginx()
         }
         if ($conf['domain'] && $conf['letsencrypt']) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
-            foreach (['domain', 'naive', 'anytls'] as $tag) {
+            foreach (['domain', 'naive', 'anytls', 'hostcheck'] as $tag) {
                 preg_match_all("~#-$tag.+?#-$tag~s", $template, $m);
                 foreach ($m[0] as $v) {
                     $template = preg_replace("~#-$tag.+?#-$tag~s", $this->uncomment($v, $tag), $template, 1);
                 }
             }
+            // Порт 80 отдаёт только редирект+acme-challenge — реальным клиентам
+            // тут делать нечего, кроме как прийти по нашим домену/поддоменам;
+            // certbot валидирует именно их же (см. setSSL()), так что список
+            // разрешённых Host'ов совпадает с тем, что покрывает сертификат.
+            $template = str_replace(
+                ['HOSTCHECK_DOMAIN', 'HOSTCHECK_NAIVE', 'HOSTCHECK_ANYTLS'],
+                [$conf['domain'], "{$conf['naiveSubdomain']}.{$conf['domain']}", "{$conf['anytlsSubdomain']}.{$conf['domain']}"],
+                $template
+            );
         }
         $h = $this->getHashBot();
         $s = empty($conf['adgbrowser']) ? '' : '#';
