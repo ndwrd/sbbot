@@ -21,7 +21,6 @@ $bot->dontshowcron = 1;
 $bot->sslip();
 $bot->adguardSync();
 $bot->cloakNginx();
-$bot->syncDeny();
 $bot->cleanDocker();
 $bot->dnsttStart();
 $c = $bot->getPacConf();

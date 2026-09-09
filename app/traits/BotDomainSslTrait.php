@@ -91,19 +91,6 @@ public function sslip()
         $this->menu();
     }
 
-public function comment($text, $tag)
-    {
-        $text = explode("\n", $text);
-        foreach ($text as $k => $v) {
-            if (preg_match("~##$tag~", $v)) {
-                $text[$k] = "#-$tag";
-                continue;
-            }
-            $text[$k] = "#$v";
-        }
-        return implode("\n", $text);
-    }
-
 public function uncomment($text, $tag)
     {
         $text = explode("\n", $text);
@@ -129,12 +116,6 @@ public function deleteSSL($notmenu = false)
         if (!$notmenu) {
             $this->menu('domains');
         }
-    }
-
-public function updateUnitInitConfig()
-    {
-        $unit = $this->controlUnit('config');
-        file_put_contents('/config/unit.json', $unit);
     }
 
 public function setSSL($name)
@@ -185,27 +166,6 @@ public function setSSL($name)
         $this->menu('domains');
     }
 
-public function controlUnit($url, $method = 'GET', $json = false, $bundle = false)
-    {
-        $ch = curl_init();
-        $opt = [
-            CURLOPT_CUSTOMREQUEST    => $method,
-            CURLOPT_URL              => "http://localhost/$url",
-            CURLOPT_RETURNTRANSFER   => 1,
-            CURLOPT_UNIX_SOCKET_PATH => '/var/run/control.unit.sock',
-            CURLOPT_TIMEOUT          => 10,
-        ];
-        if ($json) {
-            $opt[CURLOPT_POSTFIELDS] = $json;
-        }
-        if ($bundle) {
-            $opt[CURLOPT_POSTFIELDS] = ['file' => new CURLStringFile($bundle, 'bundle.pem', 'text/plain')];
-        }
-        curl_setopt_array($ch, $opt);
-        $r = curl_exec($ch);
-        curl_close($ch);
-        return $r ?: 'lost connect to unit';
-    }
 
 public function delDomain()
     {
@@ -274,7 +234,6 @@ public function cloakNginx()
     {
         $conf     = $this->getPacConf();
         $template = file_get_contents('/config/nginx_default.conf');
-        // $template = preg_replace('~server_name ip~', "server_name {$this->ip}", $template);
         $template = preg_replace('~server_name domain~', "server_name " . ($conf['domain'] ? " *.{$conf['domain']} {$conf['domain']}" : '_'), $template);
         $before = $conf;
         $conf   = $this->ensureProtocolSubdomains($conf);

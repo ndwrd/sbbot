@@ -17,28 +17,14 @@ public function sendQr($name, $code, $title = false)
 
 public function qrVless($i, $s = false)
     {
-        $link    = $this->linkVless($i, $s);
-        $qr_file = dirname(__DIR__) . "/qr/vless.png";
-        exec("qrencode -t png -o $qr_file '$link'");
-        $r = $this->sendPhoto(
-            $this->input['chat'],
-            curl_file_create($qr_file),
-            "<code>$link</code>"
-        );
-        unlink($qr_file);
+        $link = $this->linkVless($i, $s);
+        $this->sendQr('vless', $link, "<code>$link</code>");
     }
 
 public function qrMtproto()
     {
-        $link    = $this->linkMtproto();
-        $qr_file = dirname(__DIR__) . "/qr/mtproto.png";
-        exec("qrencode -t png -o $qr_file '$link'");
-        $r = $this->sendPhoto(
-            $this->input['chat'],
-            curl_file_create($qr_file),
-            "<code>$link</code>"
-        );
-        unlink($qr_file);
+        $link = $this->linkMtproto();
+        $this->sendQr('mtproto', $link, "<code>$link</code>");
     }
 
 public function upload($name, $code, $chat = false)
@@ -126,7 +112,6 @@ public function send($chat, $text, ?int $to = 0, $button = false, $reply = false
                     'chat_id'                  => $chat,
                     'text'                     => "$v\n",
                     'parse_mode'               => $mode,
-                    // 'disable_web_page_preview' => true,
                     'disable_notification'     => $disable_notification,
                     'reply_to_message_id'      => 0 == $k && $to > 0 ? $to : false,
                 ];
@@ -142,7 +127,6 @@ public function send($chat, $text, ?int $to = 0, $button = false, $reply = false
                 'chat_id'                  => $chat,
                 'text'                     => $text,
                 'parse_mode'               => $mode,
-                // 'disable_web_page_preview' => true,
                 'disable_notification'     => $disable_notification,
                 'reply_to_message_id'      => $to,
             ];
@@ -184,16 +168,6 @@ public function sendDraft($chat, $draft_id, $text = '', $mode = 'HTML')
             'parse_mode' => $mode,
         ];
         return $this->request('sendMessageDraft', json_encode($data), 1);
-    }
-
-public function image($chat, $id_url_cFile, $caption = false, $to = false)
-    {
-        return $this->request('sendPhoto', [
-            'chat_id'             => $chat,
-            'photo'               => $id_url_cFile,
-            'caption'             => $caption,
-            'reply_to_message_id' => $to,
-        ]);
     }
 
 public function sendPhoto($chat, $id_url_cFile, $caption = false, $to = false)

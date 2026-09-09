@@ -26,17 +26,14 @@ if (!empty($_GET['hash'])) {
 }
 
 switch (true) {
-    // tlgrm
     case 'POST' == $_SERVER['REQUEST_METHOD'] && preg_match('~^/tlgrm~', $_SERVER['REQUEST_URI']) && $_GET['k'] == $c['key']:
         $bot->input();
         break;
 
-    // save template
     case preg_match('~^' . preg_quote("/webapp$hash/save") . '~', $_SERVER['REQUEST_URI']) && $webapp && !empty($_POST['json']):
         echo json_encode($bot->saveTemplate($_POST['name'], $_POST['type'], $_POST['json']));
         break;
 
-    // adguard cookie
     case preg_match('~^' . preg_quote("/webapp$hash/check") . '~', $_SERVER['REQUEST_URI']) && $webapp:
         setcookie('c', $hash, 0, '/');
         echo "/adguard$hash/";
@@ -46,9 +43,8 @@ switch (true) {
         $bot->sub();
         exit;
 
-    // subs & pac
     case preg_match('~^' . preg_quote("/pac$hash") . '~', $_SERVER['REQUEST_URI']):
-        if (!empty($t = unserialize(base64_decode(explode('/', $_SERVER['REQUEST_URI'])[2])))) { // fix sing-box import
+        if (!empty($t = unserialize(base64_decode(explode('/', $_SERVER['REQUEST_URI'])[2])))) {
             $_GET = array_merge($_GET, $t);
         }
         $type = $_GET['t'] ?? 'pac';
@@ -89,7 +85,6 @@ switch (true) {
                             <script>
                                 jQuery(function($) {
                                     var tg = window.Telegram.WebApp;
-                                    // create the editor
                                     const container = document.getElementById("jsoneditor")
                                     const options = {}
                                     const editor = new JSONEditor(container, options)

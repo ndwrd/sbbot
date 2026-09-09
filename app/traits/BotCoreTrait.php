@@ -74,25 +74,9 @@ public function session()
         }
     }
 
-public function sd($var, $log = false, $json = false, $raw = false)
-    {
-        if ($log) {
-            if ($json) {
-                file_put_contents('/logs/debug', json_encode($var, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            } elseif ($raw) {
-                file_put_contents('/logs/debug', $var);
-            } else {
-                file_put_contents('/logs/debug', var_export($var, true));
-            }
-        } else {
-            $this->send($this->input['chat'], var_export($var, true), $this->input['message_id']);
-        }
-    }
-
 public function action()
     {
         switch (true) {
-            // смена айпи сервера
             case preg_match('~^/menu$~', $this->input['message'], $m):
             case preg_match('~^/start$~', $this->input['message'], $m):
             case preg_match('~^/menu$~', $this->input['callback'], $m):
@@ -105,68 +89,17 @@ public function action()
             case preg_match('~^/mainOutbound$~', $this->input['callback'], $m):
                 $this->mainOutbound();
                 break;
-            case preg_match('~^/importIps (.+)$~', $this->input['callback'], $m):
-                $this->importIps($m[1]);
-                break;
-            case preg_match('~^/switchBanIp$~', $this->input['callback'], $m):
-                $this->switchBanIp();
-                break;
             case preg_match('~^/switchMonthlyStats$~', $this->input['callback'], $m):
                 $this->switchMonthlyStats();
                 break;
             case preg_match('~^/changePort(?: (\w+))?$~', $this->input['callback'], $m):
                 $this->changePort($m[1] ?? null);
                 break;
-            case preg_match('~^/searchLogs (.+)$~', $this->input['message'], $m):
-                $this->searchLogs($m[1]);
-                break;
-            case preg_match('~^/searchLogs (.+?)(?:\s(.+?))?(?:\s(.+?))?(?:\s(.+?))?$~', $this->input['callback'], $m):
-                $this->searchLogs($m[1], $m[2], $m[3], $m[4]);
-                break;
-            case preg_match('~^/switchSilence$~', $this->input['callback'], $m):
-                $this->switchSilence();
-                break;
-            case preg_match('~^/switchScanIp$~', $this->input['callback'], $m):
-                $this->switchScanIp();
-                break;
-            case preg_match('~^/autoScanTimeout$~', $this->input['callback'], $m):
-                $this->autoScanTimeout();
-                break;
             case preg_match('~^/autoupdate$~', $this->input['callback'], $m):
                 $this->autoupdate();
                 break;
             case preg_match('~^/ports$~', $this->input['callback'], $m):
                 $this->ports();
-                break;
-            case preg_match('~^/analysisIp(?:\s(\d+))?$~', $this->input['callback'], $m):
-                $this->analysisIp(($m[1] ?? null) ?: 0);
-                break;
-            case preg_match('~^/ipMenu$~', $this->input['callback'], $m):
-                $this->ipMenu();
-                break;
-            case preg_match('~^/cleanDeny(?:\s(\d))?$~', $this->input['callback'], $m):
-                $this->cleanDeny($m[1]);
-                break;
-            case preg_match('~^/denyList (.+?)(?:\s(\d))?$~', $this->input['callback'], $m):
-                $this->denyList($m[1], ($m[2] ?? null) ?: 0);
-                break;
-            case preg_match('~^/cleanLogs (.+?)(?:\s(1))?$~', $this->input['callback'], $m):
-                $this->cleanLogs($m[1], $m[2]);
-                break;
-            case preg_match('~^/allowIp (.+?) (\d+)(?:\s(\d+))?$~', $this->input['callback'], $m):
-                $this->allowIp($m[1], $m[2], $m[3]);
-                break;
-            case preg_match('~^/searchIp (.+)$~', $this->input['callback'], $m):
-                $this->searchIp($m[1]);
-                break;
-            case preg_match('~^/searchSuspiciousIp (.+)$~', $this->input['callback'], $m):
-                $this->searchSuspiciousIp($m[1]);
-                break;
-            case preg_match('~^/denyIp (.+?)(?:\s(.+?)\s(\d+?)\s(\d))?$~', $this->input['callback'], $m):
-                $this->denyIp($m[1], $m[2], $m[3], $m[4]);
-                break;
-            case preg_match('~^/whiteIp (.+?)(?:\s(.+?)\s(\d+?)\s(\d))?$~', $this->input['callback'], $m):
-                $this->whiteIp($m[1], $m[2], $m[3], $m[4]);
                 break;
             case preg_match('~^/adgFillAllowedClients(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->adgFillAllowedClients(($m[1] ?? null) ?: false);
@@ -481,7 +414,6 @@ public function cron()
             $this->checkLogs();
             $this->checkResetSingboxStats();
             $this->checkCert();
-            $this->autoAnalyzeLogs();
             $this->singboxStatsUser();
             sleep($period);
         }
@@ -610,40 +542,6 @@ public function setPage($text) {
         $this->menu('config');
     }
 
-public function guidv4($data = null) {
-        // Generate 16 bytes (128 bits) of random data or use the data passed into the function.
-        $data = $data ?? random_bytes(16);
-        assert(strlen($data) == 16);
-
-        // Set version to 0100
-        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
-        // Set bits 6-7 to 10
-        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
-
-        // Output the 36 character UUID.
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-    }
-
-public function pad($text, $length, $symbol = ' ')
-    {
-        for ($i = 0; $i < $length; $i++) {
-            $text .= $symbol;
-        }
-        return $text;
-    }
-
-public function sizeFormat($bytes)
-    {
-        if (floor($bytes / 1024 ** 2) > 0) {
-            $r = round($bytes / 1024 ** 2, 2) . 'MB';
-        } elseif (floor($bytes / 1024) > 0) {
-            $r = round($bytes / 1024, 2) . 'KB';
-        } else {
-            $r = $bytes . 'B';
-        }
-        return $r;
-    }
-
 public function i18n(string $menu): string
     {
         return ($this->i18n[$menu][$this->language] ?? null) ?: $menu;
@@ -651,7 +549,6 @@ public function i18n(string $menu): string
 
 public function alignColumns(array $columns): string
     {
-        // Находим максимальную длину для каждого столбца
         $columnLengths = [];
         foreach ($columns as $column) {
             $maxLength = 0;
@@ -662,11 +559,9 @@ public function alignColumns(array $columns): string
             $columnLengths[] = $maxLength;
         }
 
-        // Получаем количество строк из первого столбца
         $rowCount = count($columns[0]);
         $columnCount = count($columns);
 
-        // Формируем строки с выравниванием
         $result = [];
         for ($row = 0; $row < $rowCount; $row++) {
             $line = '';
@@ -675,9 +570,8 @@ public function alignColumns(array $columns): string
                 $padding = str_repeat(' ', $columnLengths[$col] - mb_strlen($cell, 'UTF-8'));
                 $line .= $cell . $padding;
 
-                // Добавляем разделитель между столбцами, кроме последнего
                 if ($col < $columnCount - 1) {
-                    $line .= '  '; // Два пробела между столбцами
+                    $line .= '  ';
                 }
             }
             $result[] = $line;
@@ -741,23 +635,23 @@ public function menu($type = false, $arg = false, $return = false)
                     $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
                     $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
                     $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
+                    $this->i18n($this->warpStatus() == 'on' ? 'on' : 'off') . ' ' . $this->i18n('warp'),
                 ],
                 [
                     $this->i18n('on') . ' 443',
                     $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
                     $this->i18n($ports['ad']['enable'] ? 'on' : 'off') . ($ports['ad']['enable'] ? ' ' . $ports['ad']['port'] : 'port unavailable'),
+                    '',
                 ],
             ]);
             $main[] = '';
             $main[] = $this->alignColumns([
                 [
                     $this->i18n($backup ? 'on' : 'off') . ' autobackup',
-                    $this->i18n(!empty($conf['autoupdate']) ? 'on' : 'off') . ' autoupdate',
-                    $this->i18n(!empty($conf['autoscan']) ? 'on' : 'off') . ' autoscan',
+                    $this->i18n(!empty($conf['reset_monthly']) ? 'on' : 'off') . ' autoreset',
                 ],
                 [
-                    $this->i18n(!empty($conf['autodeny']) ? 'on' : 'off') . ' autoblock' . (!empty($conf['deny']) ? ': ' . count($conf['deny']) : ''),
-                    $this->i18n(!empty($conf['reset_monthly']) ? 'on' : 'off') . ' autoreset',
+                    $this->i18n(!empty($conf['autoupdate']) ? 'on' : 'off') . ' autoupdate',
                     $cron,
                 ],
             ]);
@@ -838,41 +732,6 @@ public function menu($type = false, $arg = false, $return = false)
         }
     }
 
-protected function isBrowserRequest()
-    {
-        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $accept    = $_SERVER['HTTP_ACCEPT'] ?? '';
-
-        if ($userAgent === '' && $accept === '') {
-            return false;
-        }
-
-        $browserPatterns = [
-            'Mozilla/',
-            'Chrome/',
-            'Safari/',
-            'Firefox/',
-            'Edge/',
-            'Edg/',
-            'MSIE ',
-            'Trident/',
-            'Opera/',
-            'OPR/',
-        ];
-
-        foreach ($browserPatterns as $pattern) {
-            if (stripos($userAgent, $pattern) !== false) {
-                return true;
-            }
-        }
-
-        if (stripos($accept, 'text/html') !== false) {
-            return true;
-        }
-
-        return false;
-    }
-
 public function dockerApi($url, $method = 'GET', $data = [])
     {
         $ch = curl_init();
@@ -944,11 +803,6 @@ public function getBytes($bytes)
                 return round($bytes / (1024 ** ($k - 1)), 2) . " {$t[$k - 1]}";
             }
         }
-    }
-
-public function getGB($bytes)
-    {
-        return round(($bytes ?: 0) / (1024 ** 3), 2) . ' GB';
     }
 
 public function getMB($bytes)
@@ -1033,11 +887,6 @@ public function autoupdate()
         $this->menu('config');
     }
 
-public function disconnect(...$args)
-    {
-        $this->send($this->input['chat'], "disconnect: \n" . var_export($args, true) . "\n", $this->input['message_id']);
-    }
-
 public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null')
     {
         try {
@@ -1050,14 +899,9 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
                 throw new Exception("auth fail: \n$cmd\n" . var_export($a, true));
             }
 
-            // Оборачиваем команду для выполнения в фоновом режиме
             if (!$wait) {
-                // nohup запускает процесс независимо от SSH-сессии
-                // & переносит процесс в фон
-                // </dev/null >/dev/null 2>&1 перенаправляет все потоки ввода-вывода
                 $cmd = "nohup sh -c \"$cmd 2>&1 | tee -a $log >&3\" 3>/proc/1/fd/1 </dev/null &";
             }
-
 
             $s = ssh2_exec($c, $cmd);
             if (empty($s)) {
@@ -1066,15 +910,13 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
 
             $data = "";
             if ($wait) {
-                // Только для синхронных команд читаем вывод
                 stream_set_blocking($s, true);
                 while ($buf = fread($s, 4096)) {
                     $data .= $buf;
                 }
             } else {
-                // Для фоновых команд просто даем время запуститься
                 stream_set_blocking($s, false);
-                usleep(100000); // 100ms для запуска процесса
+                usleep(100000);
             }
 
             fclose($s);

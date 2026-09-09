@@ -5,7 +5,6 @@ require_once __DIR__ . '/traits/BotMtprotoTrait.php';
 require_once __DIR__ . '/traits/BotSingboxTrait.php';
 require_once __DIR__ . '/traits/BotPacTrait.php';
 require_once __DIR__ . '/traits/BotAdminSettingsTrait.php';
-require_once __DIR__ . '/traits/BotIpAnalysisTrait.php';
 require_once __DIR__ . '/traits/BotDomainSslTrait.php';
 require_once __DIR__ . '/traits/BotTelegramTrait.php';
 require_once __DIR__ . '/traits/BotAdguardTrait.php';
@@ -19,7 +18,6 @@ class Bot
     use BotSingboxTrait;
     use BotPacTrait;
     use BotAdminSettingsTrait;
-    use BotIpAnalysisTrait;
     use BotDomainSslTrait;
     use BotTelegramTrait;
     use BotAdguardTrait;
@@ -34,8 +32,6 @@ class Bot
     public $limit;
     public $key;
     public $file;
-    public $logs;
-    public $reg;
     public $api;
     public $pac;
     public $i18n;
@@ -46,7 +42,6 @@ class Bot
     public $input_raw;
     public $time;
     public $time2;
-    public $time3;
     public $time_singbox_stats;
     public $admin;
     public $ports;
@@ -64,17 +59,6 @@ class Bot
         $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
         $this->adguard  = '/config/AdGuardHome.yaml';
         $this->update   = '/update/json';
-        $this->logs = [
-            'nginx_default_access',
-            'nginx_domain_access',
-            'upstream_access',
-            'singbox.log',
-        ];
-        $this->reg = '~' . implode('|', [
-            'GET / HTTP',
-            'GET /favicon.ico HTTP',
-            preg_quote($this->getHashBot(1))
-        ]) . '~';
         $this->ports = [
             'tg'    => '443',
             'ad'    => '853',

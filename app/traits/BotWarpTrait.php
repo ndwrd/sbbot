@@ -38,13 +38,11 @@ public function addWarpPlus($key)
             return;
         }
 
-        // Удаляем старые профиль и аккаунт
         if (!$step('removing old profile', 'rm -f /etc/warp/wgcf-profile.conf /etc/warp/wgcf-account.toml', 'wp')) {
             $this->send($chat, $log);
             return;
         }
 
-        // Регистрируем новый аккаунт
         if (!$step('[warp] Registering WARP account...', 'cd /etc/warp && wgcf register --accept-tos', 'wp')) {
             $this->send($chat, $log);
             return;
@@ -52,12 +50,10 @@ public function addWarpPlus($key)
 
         if (!empty($key)) {
             $c['warp'] = $key;
-            // Заменяем ключ в wgcf-account.toml
             if (!$step('setting license key', "sed -i 's/^license_key.*/license_key = \"$key\"/' /etc/warp/wgcf-account.toml", 'wp')) {
                 $this->send($chat, $log);
                 return;
             }
-            // Обновляем аккаунт с ключом
             if (!$step('applying license key', 'cd /etc/warp && wgcf update', 'wp')) {
                 $this->send($chat, $log);
                 return;

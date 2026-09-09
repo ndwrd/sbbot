@@ -353,17 +353,10 @@ public function checkResetSingboxStats()
                 && !empty($period)
                 && $now >= $start
             ) {
-                // Вычисляем, сколько полных периодов прошло с момента start
                 $elapsed = $now - $start;
                 $periodsElapsed = floor($elapsed / $period);
-
-                // Время последнего планового сброса статистики
                 $lastScheduledReset = $start + ($periodsElapsed * $period);
-
-                // Проверяем, делали ли уже сброс в этом периоде
                 $lastResetTime = $pac['last_reset_singbox_time'] ?? 0;
-
-                // Если последний сброс был сделан до начала текущего периода - делаем сброс
                 if ($lastResetTime < $lastScheduledReset) {
                     $pac['last_reset_singbox_time'] = $now;
                     $this->setPacConf($pac);
@@ -473,11 +466,6 @@ public function backXtlsList($type, $page = 0)
                 break;
             case 'rulessetlist':
                 $this->xtlsrulesset($page);
-                break;
-            case 'white':
-            case 'deny':
-                $this->syncDeny();
-                $this->denyList($page, $type == 'white' ? 1 : 0);
                 break;
         }
     }

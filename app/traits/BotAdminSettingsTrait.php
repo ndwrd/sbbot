@@ -80,17 +80,10 @@ public function checkBackup()
                 && !empty($period)
                 && $now >= $start
             ) {
-                // Вычисляем, сколько полных периодов прошло с момента start
                 $elapsed = $now - $start;
                 $periodsElapsed = floor($elapsed / $period);
-
-                // Время последнего планового бэкапа
                 $lastScheduledBackup = $start + ($periodsElapsed * $period);
-
-                // Проверяем, делали ли уже бэкап в этом периоде
                 $lastBackupTime = $c['last_backup_time'] ?? 0;
-
-                // Если последний бэкап был сделан до начала текущего периода - делаем бэкап
                 if ($lastBackupTime < $lastScheduledBackup) {
                     $c['last_backup_time'] = $now;
                     $this->setPacConf($c);
@@ -175,14 +168,12 @@ public function importFile($file = false)
         if (empty($json) || !is_array($json)) {
             $this->answer($this->input['callback_id'], 'error', true);
         } else {
-            // certs
             if (!empty($json['ssl'])) {
                 $out[] = 'update certificates';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 file_put_contents('/certs/cert_private', $json['ssl']['private']);
                 file_put_contents('/certs/cert_public', $json['ssl']['public']);
             }
-            // pac
             $domainMigrated = false;
             if (!empty($json['pac'])) {
                 $out[] = 'update pac';
@@ -190,7 +181,6 @@ public function importFile($file = false)
                 $domainMigrated = $this->reconcileDomainForNewServer($json['pac']);
                 $this->setPacConf($json['pac']);
             }
-            // ad
             if (!empty($json['ad'])) {
                 $out[] = 'update adguard';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -198,7 +188,6 @@ public function importFile($file = false)
                 yaml_emit_file($this->adguard, $json['ad']);
                 $this->startAd();
             }
-            // mtproto
             if (!empty($json['mtproto'])) {
                 $out[] = 'update mtproto';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -207,7 +196,6 @@ public function importFile($file = false)
                 file_put_contents('/config/mtprotoadtag', trim($json['mtprotoadtag'] ?? ''));
                 $this->restartTG();
             }
-            // singbox
             if (!empty($json['singbox'])) {
                 $out[] = 'update singbox';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -215,7 +203,6 @@ public function importFile($file = false)
                 $this->adguardSingboxClients();
                 $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
             }
-            // dnstt
             if (!empty($json['dnstt'])) {
                 $out[] = 'update dnstt certificates';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -229,7 +216,6 @@ public function importFile($file = false)
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $this->setSSL('letsencrypt');
             }
-            // nginx
             $out[] = 'reset nginx';
             $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
 
@@ -500,8 +486,8 @@ public function configMenu()
                 'callback_data' => "/logs",
             ],
             [
-                'text'          => $this->i18n('IP ban'),
-                'callback_data' => "/ipMenu",
+                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
+                'callback_data' => "/enterPage",
             ],
         ];
         $data[] = [
@@ -534,28 +520,28 @@ public function configMenu()
         ];
         $data[] = [
             [
-                'text'          => $this->i18n('restart'),
-                'callback_data' => "/restart",
-            ],
-            [
-                'text'          => "{$this->i18n('add')} {$this->i18n('admin')}",
-                'callback_data' => "/addadmin",
-            ],
-        ];
-        $data[] = [
-            [
                 'text'          => $this->i18n('lang'),
                 'callback_data' => "/menu lang",
             ],
             [
-                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
-                'callback_data' => "/enterPage",
+                'text'          => $this->i18n('restart'),
+                'callback_data' => "/restart",
             ],
         ];
         $file = dirname(__DIR__) . '/config.php';
         opcache_invalidate($file);
         require $file;
-        foreach ($c['admin'] as $k => $v) {
+        $data[] = [
+            [
+                'text'          => "{$this->i18n('add')} {$this->i18n('admin')}",
+                'callback_data' => "/addadmin",
+            ],
+            [
+                'text'          => $this->i18n('delete') . " {$c['admin'][0]}",
+                'callback_data' => "/deladmin {$c['admin'][0]}",
+            ],
+        ];
+        foreach (array_slice($c['admin'], 1) as $v) {
             $data[] = [
                 [
                     'text'          => $this->i18n('delete') . " $v",
@@ -626,7 +612,6 @@ public function hidePort($container)
         $f = '/docker/compose';
         $content = file_exists($f) ? file_get_contents($f) : '';
 
-        // Находим все сервисы с !override для ports
         $overrides = [];
         if (preg_match_all('/(\w+):\s*\n\s+ports:\s*!override/m', $content, $matches)) {
             foreach ($matches[1] as $service) {
@@ -634,24 +619,19 @@ public function hidePort($container)
             }
         }
 
-        // Парсим YAML
         $c = $content ? yaml_parse($content) : [];
 
-        // Изменяем структуру
         if (!empty($c['services'][$container])) {
             unset($c['services'][$container]);
         } else {
             $c['services'][$container]['ports'][] = $ports[$container];
         }
 
-        // Записываем обратно
         if (empty($c['services'])) {
             file_put_contents($f, '');
         } else {
             $yaml = yaml_emit($c);
-            // Восстанавливаем !override для ports тех сервисов где он был
             foreach ($overrides as $service => $val) {
-                // Заменяем "ports:" на "ports: !override" для конкретного сервиса
                 $yaml = preg_replace(
                     '/(' . preg_quote($service, '/') . ':\s*\n\s+)ports:/m',
                     '${1}ports: !override',
@@ -674,7 +654,6 @@ public function setPort($port, $container)
         $f = '/docker/compose';
         $content = file_exists($f) ? file_get_contents($f) : '';
 
-        // Находим все сервисы с !override для ports
         $overrides = [];
         if (preg_match_all('/(\w+):\s*\n\s+ports:\s*!override/m', $content, $matches)) {
             foreach ($matches[1] as $service) {
@@ -682,24 +661,19 @@ public function setPort($port, $container)
             }
         }
 
-        // Парсим YAML
         $c = $content ? yaml_parse($content) : [];
 
-        // Изменяем структуру
         if (!empty($port) && is_numeric($port) && $port != 443 && $port != 80) {
             $c['services'][$container]['ports'] = ["$port:$ports[$container]"];
         } else {
             unset($c['services'][$container]);
         }
 
-        // Записываем обратно
         if (empty($c['services'])) {
             file_put_contents($f, '');
         } else {
             $yaml = yaml_emit($c);
-            // Восстанавливаем !override для ports тех сервисов где он был
             foreach ($overrides as $service => $val) {
-                // Заменяем "ports:" на "ports: !override" для конкретного сервиса
                 $yaml = preg_replace(
                     '/(' . preg_quote($service, '/') . ':\s*\n\s+)ports:/m',
                     '${1}ports: !override',
@@ -797,6 +771,33 @@ public function cleanLog()
             file_put_contents("/logs/$v", '');
         }
         $this->logs();
+    }
+
+public function checkLogs()
+    {
+        $c = $this->getPacConf();
+        if (!empty($c['autocleanlogs'])) {
+            $now = time();
+            [$start, $period] = explode('/', $c['autocleanlogs']);
+            $start  = strtotime(trim($start));
+            $period = strtotime(trim($period), 0);
+
+            if (
+                !empty($start)
+                && !empty($period)
+                && $now >= $start
+            ) {
+                $elapsed = $now - $start;
+                $periodsElapsed = floor($elapsed / $period);
+                $lastScheduledClean = $start + ($periodsElapsed * $period);
+                $lastCleanTime = $c['last_clean_logs_time'] ?? 0;
+                if ($lastCleanTime < $lastScheduledClean) {
+                    $c['last_clean_logs_time'] = $now;
+                    $this->setPacConf($c);
+                    $this->cleanLog();
+                }
+            }
+        }
     }
 
 public function delLog($i)

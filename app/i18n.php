@@ -250,7 +250,7 @@ $i = [
         'ru' => 'Режим отладки',
     ],
     'backup'  => [
-        'en' => 'Auto backup',
+        'en' => 'Autobackup',
         'ru' => 'Автобэкап',
     ],
     'logs'  => [

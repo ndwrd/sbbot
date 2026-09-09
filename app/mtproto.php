@@ -28,5 +28,4 @@ if (empty($p)) {
     $bot->setPort(4443, 'tg');
     echo "need restart: make r\n";
 }
-// Вывод ссылки на MTProto-прокси
 echo $bot->linkMtproto();
