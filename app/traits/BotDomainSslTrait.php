@@ -33,6 +33,11 @@ public function addDomain($domain, $nomenu = false)
             $conf = $this->ensureProtocolSubdomains($conf);
             $this->setPacConf($conf);
             $this->cloakNginx();
+            // nip.io резолвится сам по IP в имени — DNS настраивать не нужно,
+            // уведомление имеет смысл только для обычного домена.
+            if (!preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $conf['domain'])) {
+                $this->send($this->input['chat'], "Настройте DNS A-записи на IP этого сервера для: {$conf['domain']}, {$conf['naiveSubdomain']}.{$conf['domain']}, {$conf['anytlsSubdomain']}.{$conf['domain']} — и только после этого нажимайте «Letsencrypt SSL».");
+            }
         }
         if (empty($nomenu)) {
             sleep(3);

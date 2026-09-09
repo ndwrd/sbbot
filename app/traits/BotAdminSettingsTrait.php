@@ -395,9 +395,6 @@ public function domainsMenu()
                 $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
             }
             $text[] = "</blockquote>";
-            if (empty($cert)) {
-                $text[] = "Настройте DNS A-записи на IP этого сервера для: {$conf['domain']}, {$conf['naiveSubdomain']}.{$conf['domain']}, {$conf['anytlsSubdomain']}.{$conf['domain']} — и только после этого нажимайте «Letsencrypt SSL».";
-            }
         } else {
             $text[] = $this->i18n('domain explain');
         }
