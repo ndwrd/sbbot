@@ -1206,11 +1206,12 @@ public function singbox($page = 0)
         $clients = $page != -1 ? array_slice($clients, $page * $this->limit, $this->limit, true) : $clients;
         foreach ($clients as $k => $v) {
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
+            $limit    = !empty($v['trafficlimit']) ? '| ' . round($v['trafficlimit'] / (1024 ** 3), 2) . ' GB' : '';
             $download = ($st['users'][$k]['global']['download'] ?? 0) + ($st['users'][$k]['session']['download'] ?? 0);
             $upload   = ($st['users'][$k]['global']['upload']   ?? 0) + ($st['users'][$k]['session']['upload']   ?? 0);
             $data[]   = [
                 [
-                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . " ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}",
+                    'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . $limit . " ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}",
                     'callback_data' => "/userXr $k",
                 ],
             ];
