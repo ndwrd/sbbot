@@ -78,7 +78,7 @@
                 "tlsSettings": {
                     "allowInsecure": false,
                     "serverName": "~domain~",
-                    "fingerprint": "chrome"
+                    "fingerprint": "firefox"
                 }
             }
         },

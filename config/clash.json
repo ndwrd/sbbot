@@ -717,7 +717,17 @@
             "tls": true,
             "skip-cert-verify": false,
             "servername": "~domain~",
-            "client-fingerprint": "chrome"
+            "client-fingerprint": "firefox",
+            "smux": {
+                "enabled": true,
+                "protocol": "smux",
+                "max-connections": 3,
+                "min-streams": 4,
+                "max-streams": 0,
+                "only-tcp": false,
+                "padding": true,
+                "statistic": false
+            }
         },
         {
             "name": "hysteria2",
