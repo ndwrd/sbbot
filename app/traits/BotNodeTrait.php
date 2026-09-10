@@ -816,17 +816,23 @@ public function assignGeoTag($countryCode)
 public function ensureMainGeoTag()
     {
         $pac = $this->getPacConf();
-        if (!empty($pac['geoTag'])) {
-            return $pac['geoTag'];
+        if (empty($pac['geoTag'])) {
+            $pac['geoTag'] = $this->assignGeoTag($this->geoCountryCode($this->ip) ?: 'XX');
+            $this->setPacConf($pac);
         }
-        $tag = $this->assignGeoTag($this->geoCountryCode($this->ip) ?: 'XX');
-        $pac['geoTag'] = $tag;
-        $this->setPacConf($pac);
-        // Разово — origin-шаблон ещё несёт "родовые" Vless/HY2/Naive/AnyTLS,
-        // корректируем на реальный тег Бота с флагом прямо в файле (см.
-        // correctSingOriginTags()), а не на лету при каждой подписке.
-        $flag = $this->countryFlag(preg_replace('~\d+$~', '', $tag));
-        $this->correctSingOriginTags($flag . $tag);
+        // Отдельный флаг, не завязанный на то, был ли geoTag уже посчитан
+        // раньше (до появления самой коррекции) — иначе первое условие тут
+        // же возвращало бы старый тег и до correctSingOriginTags() код
+        // никогда бы не доходил. correctSingOriginTags() идемпотентна
+        // (сопоставляет по type, а не по текущему тегу), так что безопасно
+        // звать её и повторно, если флаг почему-то не выставился.
+        if (empty($pac['singOriginCorrected'])) {
+            $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
+            $this->correctSingOriginTags($flag . $pac['geoTag']);
+            $pac['singOriginCorrected'] = true;
+            $this->setPacConf($pac);
+        }
+        $tag = $pac['geoTag'];
         return $tag;
     }
 
