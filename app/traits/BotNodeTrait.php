@@ -218,36 +218,42 @@ public function nodeDomains($id)
         if (empty($node)) {
             return;
         }
-        $pac    = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
-        $expiry = $this->nodeConsole($node['ip'], 'expireCert');
+        // Рефреш при каждом открытии — не только по событию смены домена/
+        // сертификата. Раньше кэш обновлялся только внутри nodeSetDomain()/
+        // nodeIssueSSL()/nodeDelDomain(); если те выполнялись, пока ещё был
+        // жив баг docker exec (см. предыдущий фикс), в кэш уходила пустота
+        // навсегда — нода на самом деле готова, а getSubscriptionServers()
+        // её не видел. Так самостоятельно не расходится.
+        $this->nodeCacheDomain($id);
+        $node = $this->getNode($id);
 
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('Domains') . '/' . $this->i18n('Ports');
-        if (!empty($pac['domain'])) {
-            $text[] = "Domain: {$pac['domain']}";
-            if (!empty($pac['naiveSubdomain'])) {
-                $text[] = "Naive: {$pac['naiveSubdomain']}.{$pac['domain']}";
+        if (!empty($node['domain'])) {
+            $text[] = "Domain: {$node['domain']}";
+            if (!empty($node['naiveSubdomain'])) {
+                $text[] = "Naive: {$node['naiveSubdomain']}.{$node['domain']}";
             }
-            if (!empty($pac['anytlsSubdomain'])) {
-                $text[] = "Anytls: {$pac['anytlsSubdomain']}.{$pac['domain']}";
+            if (!empty($node['anytlsSubdomain'])) {
+                $text[] = "Anytls: {$node['anytlsSubdomain']}.{$node['domain']}";
             }
-            $text[] = "SSL: " . (!empty($expiry) ? date('Y-m-d H:i:s', $expiry) : $this->i18n('not configured'));
+            $text[] = "SSL: " . (!empty($node['certExpiry']) ? date('Y-m-d H:i:s', $node['certExpiry']) : $this->i18n('not configured'));
         }
 
         $data = [
             [
                 [
-                    'text'          => !empty($pac['domain']) ? "{$this->i18n('delete')} {$pac['domain']}" : $this->i18n('install domain'),
-                    'callback_data' => !empty($pac['domain']) ? "/nodeDelDomain $id" : "/nodeSetDomainDialog $id",
+                    'text'          => !empty($node['domain']) ? "{$this->i18n('delete')} {$node['domain']}" : $this->i18n('install domain'),
+                    'callback_data' => !empty($node['domain']) ? "/nodeDelDomain $id" : "/nodeSetDomainDialog $id",
                 ],
             ],
         ];
-        if (empty($pac['domain'])) {
+        if (empty($node['domain'])) {
             $data[0][] = [
                 'text'          => $this->i18n('nip.io'),
                 'callback_data' => "/nodeAddNip $id",
             ];
         }
-        if (!empty($pac['domain']) && empty($expiry)) {
+        if (!empty($node['domain']) && empty($node['certExpiry'])) {
             $data[] = [
                 [
                     'text'          => $this->i18n('Letsencrypt SSL'),
@@ -310,15 +316,17 @@ public function nodeCacheDomain($id)
         if (empty($node)) {
             return;
         }
-        $pac  = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
-        $cert = $this->nodeConsole($node['ip'], 'nginxGetTypeCert');
-        $hash = $this->nodeConsole($node['ip'], 'getHashBot');
+        $pac    = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
+        $cert   = $this->nodeConsole($node['ip'], 'nginxGetTypeCert');
+        $expiry = $this->nodeConsole($node['ip'], 'expireCert');
+        $hash   = $this->nodeConsole($node['ip'], 'getHashBot');
         $conf = $this->getPacConf();
         $conf['nodes'][$id]['domain']          = $pac['domain'] ?? null;
         $conf['nodes'][$id]['naiveSubdomain']  = $pac['naiveSubdomain'] ?? null;
         $conf['nodes'][$id]['anytlsSubdomain'] = $pac['anytlsSubdomain'] ?? null;
         $conf['nodes'][$id]['hash']            = $hash ?: null;
         $conf['nodes'][$id]['cert']            = $cert ?: null;
+        $conf['nodes'][$id]['certExpiry']      = !empty($expiry) ? $expiry : null;
         $this->setPacConf($conf);
     }
 
