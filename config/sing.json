@@ -7,13 +7,6 @@
         "servers": [
             {
                 "type": "https",
-                "tag": "dns-remote",
-                "server": "~domain~",
-                "path": "~dnspath~",
-                "domain_resolver": "dns-google"
-            },
-            {
-                "type": "https",
                 "tag": "dns-cloudflare",
                 "server": "1.1.1.1",
                 "server_port": 443,
@@ -100,7 +93,7 @@
             }
         ],
         "strategy": "ipv4_only",
-        "final": "dns-remote"
+        "final": "dns-direct"
     },
     "http_clients": [
         {
@@ -675,19 +668,32 @@
         },
         {
             "type": "selector",
-            "tag": "~outbound~",
+            "tag": "Proxy",
             "outbounds": [
-                "vless-out",
-                "hysteria2-out",
-                "naive-out",
-                "anytls-out",
-                "warp-out"
+                "⚡️Auto",
+                "Vless",
+                "HY2",
+                "Naive",
+                "AnyTLS"
             ],
-            "default": "vless-out",
+            "default": "Vless",
             "interrupt_exist_connections": true
         },
         {
-            "tag": "vless-out",
+            "type": "urltest",
+            "tag": "⚡️Auto",
+            "outbounds": [
+                "Vless",
+                "HY2",
+                "Naive",
+                "AnyTLS"
+            ],
+            "interval": "5m",
+            "tolerance": 150,
+            "interrupt_exist_connections": false
+        },
+        {
+            "tag": "Vless",
             "type": "vless",
             "server": "~domain~",
             "server_port": 443,
@@ -716,8 +722,8 @@
             }
         },
         {
+            "tag": "HY2",
             "type": "hysteria2",
-            "tag": "hysteria2-out",
             "server": "~domain~",
             "server_port": 443,
             "password": "~password~",
@@ -727,8 +733,8 @@
             }
         },
         {
+            "tag": "Naive",
             "type": "naive",
-            "tag": "naive-out",
             "server": "~naive_domain~",
             "server_port": 443,
             "username": "~username~",
@@ -743,8 +749,8 @@
             }
         },
         {
+            "tag": "AnyTLS",
             "type": "anytls",
-            "tag": "anytls-out",
             "server": "~anytls_domain~",
             "server_port": 443,
             "password": "~password~",
@@ -752,13 +758,6 @@
                 "enabled": true,
                 "server_name": "~anytls_domain~"
             }
-        },
-		{
-            "type": "socks",
-            "tag": "warp-out",
-            "server": "10.10.0.13",
-            "server_port": 1080,
-            "detour": "vless-out"
         }
     ],
     "route": {
@@ -775,13 +774,13 @@
                 "protocol": "dns",
                 "action": "hijack-dns"
             },
-			{
-				"clash_mode": "Direct",
+            {
+                "clash_mode": "Direct",
                 "outbound": "direct"
             },
-			{
-				"clash_mode": "Global",
-                "outbound": "~outbound~"
+            {
+                "clash_mode": "Global",
+                "outbound": "Proxy"
             },
             {
                 "ip_is_private": true,
@@ -804,7 +803,7 @@
                         ]
                     }
                 ],
-                "outbound": "~outbound~"
+                "outbound": "Proxy"
             },
             {
                 "addruleset": true,
@@ -819,7 +818,7 @@
                         ]
                     }
                 ],
-                "outbound": "~outbound~"
+                "outbound": "Proxy"
             },
             {
                 "addruleset": true,
@@ -834,7 +833,7 @@
                         ]
                     }
                 ],
-                "outbound": "~outbound~"
+                "outbound": "Proxy"
             },
             {
                 "addruleset": true,
@@ -849,7 +848,7 @@
                         ]
                     }
                 ],
-                "outbound": "~outbound~"
+                "outbound": "Proxy"
             },
             {
                 "addruleset": true,
@@ -879,7 +878,7 @@
                         ]
                     }
                 ],
-                "outbound": "~outbound~"
+                "outbound": "Proxy"
             }
         ],
         "final": "direct"

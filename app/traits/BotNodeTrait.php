@@ -24,6 +24,14 @@ public function nodeIsOnline($ip)
         return trim((string) $this->ssh('echo ok', null, true, '/dev/null', $ip)) === 'ok';
     }
 
+public function nodeTagPrefix($node)
+    {
+        if (empty($node['geoTag'])) {
+            return '';
+        }
+        return $this->countryFlag(preg_replace('~\d+$~', '', $node['geoTag'])) . $node['geoTag'];
+    }
+
 public function nodesMenu()
     {
         $text[] = "Menu -> " . $this->i18n('nodes');
@@ -34,9 +42,10 @@ public function nodesMenu()
         $data = [];
         foreach ($nodes as $id => $node) {
             $dot = !empty($node['off']) ? '⚪' : ($this->nodeIsOnline($node['ip']) ? '🟢' : '🔴');
+            $label = $node['label'] . (!empty($node['geoTag']) ? " | {$this->nodeTagPrefix($node)}" : '');
             $data[] = [
                 [
-                    'text'          => "$dot {$node['label']}",
+                    'text'          => "$dot $label",
                     'callback_data' => "/nodeMenu $id",
                 ],
             ];
@@ -83,12 +92,14 @@ public function nodeMenu($id)
         $text[] = "IP: {$node['ip']}";
         $text[] = "$dot $status";
         if (!empty($node['geoTag'])) {
-            // Ровно те же теги, что попадают в selector/proxy-group реальной
-            // подписки (buildSingMultiOutbounds()/buildClashMultiOutbounds())
-            // — чтобы можно было скопировать готовую строку прямо для
-            // "~geo:CODE~" или для ручной группы в своём шаблоне.
-            $tagPrefix = $this->countryFlag(preg_replace('~\d+$~', '', $node['geoTag'])) . $node['geoTag'];
-            $text[]    = '<blockquote>Outbounds:';
+            $tagPrefix = $this->nodeTagPrefix($node);
+            $text[]    = '';
+            $text[]    = 'Node outbound tag:';
+            $text[]    = "<code>~{$tagPrefix}:outbounds~</code>";
+            // Ровно те же теги, что попадают в selector/⚡️Auto реальной
+            // подписки (buildSingMultiOutbounds()) — чтобы можно было
+            // скопировать готовую строку прямо в свой шаблон.
+            $text[] = '<blockquote>Outbounds:';
             foreach (['Vless', 'Naive', 'Hy2', 'Anytls'] as $label) {
                 $text[] = "<code>{$tagPrefix}|{$label}</code>";
             }
@@ -803,7 +814,48 @@ public function ensureMainGeoTag()
         $tag = $this->assignGeoTag($this->geoCountryCode($this->ip) ?: 'XX');
         $pac['geoTag'] = $tag;
         $this->setPacConf($pac);
+        // Разово — origin-шаблон ещё несёт "родовые" Vless/HY2/Naive/AnyTLS,
+        // корректируем на реальный тег Бота с флагом прямо в файле (см.
+        // correctSingOriginTags()), а не на лету при каждой подписке.
+        $flag = $this->countryFlag(preg_replace('~\d+$~', '', $tag));
+        $this->correctSingOriginTags($flag . $tag);
         return $tag;
+    }
+
+public function correctSingOriginTags($tagPrefix)
+    {
+        $path = '/config/sing.json';
+        $c    = json_decode(file_get_contents($path), true);
+        if (empty($c['outbounds'])) {
+            return;
+        }
+        $protocols = [
+            'vless'     => 'Vless',
+            'hysteria2' => 'Hy2',
+            'naive'     => 'Naive',
+            'anytls'    => 'Anytls',
+        ];
+        $renames = [];
+        foreach ($c['outbounds'] as &$o) {
+            $label = $protocols[$o['type'] ?? ''] ?? null;
+            if ($label === null || empty($o['tag'])) {
+                continue;
+            }
+            $newTag           = "{$tagPrefix}|{$label}";
+            $renames[$o['tag']] = $newTag;
+            $o['tag']         = $newTag;
+        }
+        unset($o);
+        foreach ($c['outbounds'] as &$o) {
+            if (!empty($o['outbounds'])) {
+                $o['outbounds'] = array_map(fn ($t) => $renames[$t] ?? $t, $o['outbounds']);
+            }
+            if (!empty($o['default']) && isset($renames[$o['default']])) {
+                $o['default'] = $renames[$o['default']];
+            }
+        }
+        unset($o);
+        file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
 public function nodeBootstrap($ip, $login, $authType, $secret)

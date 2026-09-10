@@ -461,10 +461,6 @@ $i = [
         'en' => 'Cloudflare IPs',
         'ru' => 'IP cloudflare',
     ],
-    'main outbound name: '  => [
-        'en' => 'Outbound: ',
-        'ru' => 'Outbound: ',
-    ],
     'templates'  => [
         'en' => 'Templates',
         'ru' => 'Шаблоны',

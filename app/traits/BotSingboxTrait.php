@@ -1131,34 +1131,6 @@ public function templates($type)
         );
     }
 
-public function mainOutbound()
-    {
-        $r = $this->send(
-            $this->input['chat'],
-            "@{$this->input['username']} send name",
-            $this->input['message_id'],
-            reply: 'send name',
-        );
-        $_SESSION['reply'][$r['result']['message_id']] = [
-            'start_message'  => $this->input['message_id'],
-            'start_callback' => $this->input['callback_id'],
-            'callback'       => 'setMainOutbound',
-            'args'           => [],
-        ];
-    }
-
-public function setMainOutbound($text)
-    {
-        $pac = $this->getPacConf();
-        if (!empty($text)) {
-            $pac['outbound'] = $text;
-        } else {
-            unset($pac['outbound']);
-        }
-        $this->setPacConf($pac);
-        $this->singbox();
-    }
-
 public function singbox($page = 0)
     {
         $c      = $this->getSingbox();
@@ -1171,17 +1143,12 @@ public function singbox($page = 0)
         }
         $text[] = 'Transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
         $text[] = 'Outbounds: Vless, Hysteria2, Naive, Anytls';
+        $geoTag = $this->ensureMainGeoTag();
+        $botTag = $this->countryFlag(preg_replace('~\d+$~', '', $geoTag)) . $geoTag;
+        $text[] = '';
+        $text[] = 'Outbound tag:';
+        $text[] = "<code>~{$botTag}:outbounds~</code>";
         $st = $this->getSingboxStats();
-        $data[] = [
-            [
-                'text'          => $this->i18n('main outbound name: ') . '"' . ($p['outbound'] ?? 'proxy') . '"',
-                'callback_data' => '/mainOutbound',
-            ],
-            [
-                'text'          => $this->i18n('templates'),
-                'callback_data' => "/templatesMenu",
-            ],
-        ];
         $data[] = [
             [
                 'text'          => $this->i18n('routes'),
@@ -1190,6 +1157,10 @@ public function singbox($page = 0)
             [
                 'text'          => 'Stats',
                 'callback_data' => "/statsMenu",
+            ],
+            [
+                'text'          => $this->i18n('templates'),
+                'callback_data' => "/templatesMenu",
             ],
         ];
         $data[] = [
@@ -1712,6 +1683,10 @@ public function subscription($return = false)
         // (сейчас — почти всех) установок.
         $servers     = (!empty($this->getNodes()) && !in_array($pac['transport'] ?? null, ['Reality', 'xhttp'], true)) ? $this->getSubscriptionServers() : [];
         $multiServer = count($servers) > 1;
+        // pac['outbound']/"Outbound name" убраны — sing-box больше не полагается
+        // на этот алиас (см. buildSingMultiOutbounds(), там теги фиксированные —
+        // "Proxy"/"⚡️Auto" в самом шаблоне). clash/xray пока используют его как
+        // раньше, до своей очереди на такую же переделку.
         $outbound = ($pac['outbound'] ?? null) ?: 'proxy';
         $c = json_decode($this->replaceTags(json_encode($c), [
             '~outbound~' => $outbound,
@@ -2170,37 +2145,48 @@ public function applyMultiServerOutbounds($type, $c, $outbound, $uid, $username,
 
 public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username, $password)
     {
-        // ~outbound~ уже резолвнут в $outbound первым replaceTags() в
-        // subscription() — это тег ГРУППЫ/селектора (нейтральный, не тег
-        // конкретного сервера), поэтому ищем шаблон селектора именно по нему.
+        // Главный сервер уже в финальном виде прямо в origin-шаблоне —
+        // correctSingOriginTags() один раз (при первом определении гео-тега
+        // Бота) переименовала Vless/HY2/Naive/AnyTLS в "{флаг}{код}|Протокол"
+        // и поправила outbounds/default у "Proxy"/"⚡️Auto". Поэтому тут
+        // сопоставляем протокольные объекты по type (не по тегу — тег уже не
+        // "vless-out", а конечное имя), и клонируем только под НОД, не под
+        // главный — для него клонировать нечего, он уже там как есть.
         $protocols = [
-            'vless-out'     => 'Vless',
-            'hysteria2-out' => 'Hy2',
-            'naive-out'     => 'Naive',
-            'anytls-out'    => 'Anytls',
+            'vless'     => 'Vless',
+            'hysteria2' => 'Hy2',
+            'naive'     => 'Naive',
+            'anytls'    => 'Anytls',
         ];
-        $templates        = [];
-        $rest             = [];
-        $selectorTemplate = null;
-        foreach ($c['outbounds'] ?? [] as $o) {
-            if (isset($protocols[$o['tag'] ?? ''])) {
-                $templates[$o['tag']] = $o;
-            } elseif (($o['tag'] ?? null) === $outbound) {
-                $selectorTemplate = $o;
-            } else {
-                $rest[] = $o;
+        $templates = [];
+        $proxyIdx  = null;
+        $autoIdx   = null;
+        foreach ($c['outbounds'] ?? [] as $k => $o) {
+            if (isset($protocols[$o['type'] ?? ''])) {
+                $templates[$o['type']] = $o;
+            } elseif (($o['tag'] ?? null) === 'Proxy') {
+                $proxyIdx = $k;
+            } elseif (($o['tag'] ?? null) === '⚡️Auto') {
+                $autoIdx = $k;
             }
         }
-        if (empty($selectorTemplate)) {
+        if ($proxyIdx === null || $autoIdx === null) {
             return $c;
         }
-        $allTags      = [];
+        $newTags      = [];
         $newOutbounds = [];
-        $mainVlessTag = null;
         $byGeo        = [];
         foreach ($servers as $s) {
-            foreach ($protocols as $tplTag => $label) {
-                $tpl = $templates[$tplTag] ?? null;
+            if (!empty($s['isMain'])) {
+                // Уже есть в шаблоне как есть — просто регистрируем теги для
+                // "~{тег}:outbounds~" в ручных группах, ничего не клонируем.
+                foreach ($protocols as $label) {
+                    $byGeo[$s['tag']][] = "{$s['tag']}|{$label}";
+                }
+                continue;
+            }
+            foreach ($protocols as $type => $label) {
+                $tpl = $templates[$type] ?? null;
                 if (empty($tpl)) {
                     continue;
                 }
@@ -2216,40 +2202,18 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
                 ]), true);
                 $clone['tag']   = $tag;
                 $newOutbounds[] = $clone;
-                $allTags[]      = $tag;
-                $byGeo[$s['geoTag']][] = $tag;
-                if (!empty($s['isMain']) && $tplTag === 'vless-out') {
-                    $mainVlessTag = $tag;
-                }
+                $newTags[]      = $tag;
+                $byGeo[$s['tag']][] = $tag;
             }
         }
-        if (empty($mainVlessTag)) {
-            return $c;
+        if (!empty($newTags)) {
+            $c['outbounds'][$proxyIdx]['outbounds'] = array_merge($c['outbounds'][$proxyIdx]['outbounds'], $newTags);
+            $c['outbounds'][$autoIdx]['outbounds']  = array_merge($c['outbounds'][$autoIdx]['outbounds'], $newTags);
         }
-        $selector              = $selectorTemplate;
-        $selector['outbounds'] = array_merge(['⚡️ Auto'], $allTags);
-        $selector['default']   = $mainVlessTag;
-
-        $urltest = [
-            'type'      => 'urltest',
-            'tag'       => '⚡️ Auto',
-            'outbounds' => $allTags,
-            'url'       => 'https://www.gstatic.com/generate_204',
-            'interval'  => '5m',
-            'tolerance' => 150,
-            'default'   => $mainVlessTag,
-        ];
-        foreach ($rest as &$r) {
-            if (($r['tag'] ?? null) === 'warp-out') {
-                $r['detour'] = $mainVlessTag;
-            }
-        }
-        unset($r);
-        $c['outbounds'] = array_merge($rest, [$selector, $urltest], $newOutbounds);
-        // Ручные группы админа (те, что ушли в $rest нетронутыми — не тег
-        // селектора и не один из 4 протокольных шаблонов) могут ссылаться на
-        // конкретную ноду плейсхолдером "~geo:RU~" в своём outbounds — тут он
-        // разворачивается в реальные теги её протоколов.
+        $c['outbounds'] = array_merge($c['outbounds'], $newOutbounds);
+        // Ручные группы админа (любой другой outbound с type:selector/urltest
+        // в шаблоне) могут ссылаться на конкретный сервер плейсхолдером
+        // "~{флаг}{код}:outbounds~" — он разворачивается тут же.
         return $this->expandGeoPlaceholders($c, $byGeo);
     }
 
@@ -2260,18 +2224,21 @@ public function expandGeoPlaceholders($c, $byGeo)
 
 public function expandGeoInArray($arr, $byGeo)
     {
-        // Строковой заменой ("~geo:RU~" -> список тегов) это не сделать
-        // безопасно: если нода недоступна и её нет в $byGeo, надо УБРАТЬ
-        // элемент из массива, а не оставить битый текст — иначе клиент
-        // получит невалидный JSON-конфиг и может отказаться импортировать
-        // его целиком, не только эту группу. Поэтому разбираем как массив.
+        // Строковой заменой ("~🇷🇺RU:outbounds~" -> список тегов) это не
+        // сделать безопасно: если нода недоступна и её нет в $byGeo, надо
+        // УБРАТЬ элемент из массива, а не оставить битый текст — иначе
+        // клиент получит невалидный JSON-конфиг и может отказаться
+        // импортировать его целиком, не только эту группу. Поэтому
+        // разбираем как массив. Плейсхолдер — "~{тег сервера}:outbounds~",
+        // тег сервера — тот же, что уже виден в реальных outbound'ах
+        // ({флаг}{код}, например "🇷🇺RU").
         if (!is_array($arr)) {
             return $arr;
         }
         $isList = array_keys($arr) === range(0, count($arr) - 1);
         $result = [];
         foreach ($arr as $k => $v) {
-            if ($isList && is_string($v) && preg_match('/^~geo:(.+)~$/', $v, $m)) {
+            if ($isList && is_string($v) && preg_match('/^~(.+):outbounds~$/u', $v, $m)) {
                 foreach ($byGeo[$m[1]] ?? [] as $tag) {
                     $result[] = $tag;
                 }
@@ -2321,7 +2288,7 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
                 $clone['name'] = $name;
                 $newProxies[]  = $clone;
                 $allNames[]    = $name;
-                $byGeo[$s['geoTag']][] = $name;
+                $byGeo[$s['tag']][] = $name;
             }
         }
         if (empty($allNames)) {
@@ -2345,7 +2312,7 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
             'tolerance' => 150,
         ];
         // Свои proxy-groups админа (уже в $c как есть — их тут никто не
-        // трогал) могут ссылаться на конкретную ноду через "~geo:RU~".
+        // трогал) могут ссылаться на конкретную ноду через "~🇷🇺RU:outbounds~".
         return $this->expandGeoPlaceholders($c, $byGeo);
     }
 
