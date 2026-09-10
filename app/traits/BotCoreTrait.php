@@ -715,23 +715,30 @@ public function menu($type = false, $arg = false, $return = false)
 
             $ports  = $this->getPorts();
 
+            $statusCol1 = [
+                $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
+                $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
+                $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
+                $this->i18n($this->warpStatus() == 'on' ? 'on' : 'off') . ' ' . $this->i18n('warp'),
+            ];
+            $statusCol2 = [
+                $this->i18n('on') . ' 443',
+                $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
+                $this->i18n($ports['ad']['enable'] ? 'on' : 'off') . ($ports['ad']['enable'] ? ' ' . $ports['ad']['port'] : 'port unavailable'),
+                '',
+            ];
+            // Кнопка/статус dnstt в меню появляются насовсем после первой
+            // настройки (dnsttUsed, см. setdnsttDomain()/setdnsttPassword())
+            // — до этого dnstt никак себя не проявляет. Порт у него всегда
+            // 53 (сменить нельзя, в отличие от tg), поэтому без ветки
+            // "port unavailable" — есть/нет только по on/off сервиса.
+            if (!empty($conf['dnsttUsed'])) {
+                $statusCol1[] = $this->i18n($this->ssh('pgrep dnstt-server', 'dnstt') ? 'on' : 'off') . ' dnstt';
+                $statusCol2[] = $this->i18n($ports['dnstt']['enable'] ? 'on' : 'off') . ' 53';
+            }
+
             $main[] = '<code>';
-            $main[] = $this->alignColumns([
-                [
-                    $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
-                    $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
-                    $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
-                    $this->i18n($this->warpStatus() == 'on' ? 'on' : 'off') . ' ' . $this->i18n('warp'),
-                    $this->i18n($this->ssh('pgrep dnstt-server', 'dnstt') ? 'on' : 'off') . ' dnstt',
-                ],
-                [
-                    $this->i18n('on') . ' 443',
-                    $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
-                    $this->i18n($ports['ad']['enable'] ? 'on' : 'off') . ($ports['ad']['enable'] ? ' ' . $ports['ad']['port'] : 'port unavailable'),
-                    '',
-                    $this->i18n($ports['dnstt']['enable'] ? 'on' : 'off') . ($ports['dnstt']['enable'] ? ' ' . $ports['dnstt']['port'] : ' port unavailable'),
-                ],
-            ]);
+            $main[] = $this->alignColumns([$statusCol1, $statusCol2]);
             $main[] = '';
             $main[] = $this->alignColumns([
                 [
@@ -746,40 +753,51 @@ public function menu($type = false, $arg = false, $return = false)
             $main[] = '</code>';
 
         }
+        $mainButtons = [
+            [
+                [
+                    'text'          => $this->i18n('vless'),
+                    'callback_data' => "/singbox",
+                ],
+                [
+                    'text'          => $this->i18n('mtproto'),
+                    'callback_data' => "/mtproto",
+                ],
+            ],
+            [
+                [
+                    'text'          => $this->i18n('ad_title'),
+                    'callback_data' => "/menu adguard",
+                ],
+            ],
+        ];
+        // Кнопка появляется насовсем после первой настройки dnstt — см.
+        // setdnsttDomain()/setdnsttPassword(); до этого в меню её нет.
+        if (!empty($conf['dnsttUsed'])) {
+            $mainButtons[] = [
+                [
+                    'text'          => 'DNSTT',
+                    'callback_data' => "/dnstt",
+                ],
+            ];
+        }
+        $mainButtons[] = [
+            [
+                'text'          => $this->i18n('nodes'),
+                'callback_data' => "/menu nodes",
+            ],
+        ];
+        $mainButtons[] = [
+            [
+                'text'          => $this->i18n('config'),
+                'callback_data' => "/menu config",
+            ],
+        ];
         $menu   = [
             'main' => [
                 'text' => implode("\n", $main ?: []),
                 'data' => array_merge(
-                    [
-                        [
-                            [
-                                'text'          => $this->i18n('vless'),
-                                'callback_data' => "/singbox",
-                            ],
-                            [
-                                'text'          => $this->i18n('mtproto'),
-                                'callback_data' => "/mtproto",
-                            ],
-                        ],
-                        [
-                            [
-                                'text'          => $this->i18n('ad_title'),
-                                'callback_data' => "/menu adguard",
-                            ],
-                        ],
-                        [
-                            [
-                                'text'          => $this->i18n('nodes'),
-                                'callback_data' => "/menu nodes",
-                            ],
-                        ],
-                        [
-                            [
-                                'text'          => $this->i18n('config'),
-                                'callback_data' => "/menu config",
-                            ],
-                        ],
-                    ]
+                    $mainButtons
                 )
             ],
             'adguard'      => $type == 'adguard' ? $this->adguardMenu()                    : false,

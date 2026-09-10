@@ -37,6 +37,9 @@ public function setdnsttPassword($text)
         $c = $this->getPacConf();
         if ($text) {
             $c['dnsttPassword'] = $text;
+            // Раз в жизни конфига — кнопка/статус dnstt в главном меню после
+            // этого остаются насовсем, даже если потом домен/пароль снимут.
+            $c['dnsttUsed'] = true;
         } else {
             unset($c['dnsttPassword']);
         }
@@ -50,6 +53,7 @@ public function setdnsttDomain($text)
         $c = $this->getPacConf();
         if ($text) {
             $c['dnsttDomain'] = $text;
+            $c['dnsttUsed']   = true;
         } else {
             unset($c['dnsttDomain']);
         }
