@@ -1012,7 +1012,15 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
         // docker-compose.override.yml).
         $target = $host ?: $service;
         if ($host && $service) {
-            $cmd = 'docker exec ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
+            // `docker exec` требует настоящее имя контейнера, а не имя
+            // сервиса из compose — а оно на ноде "app-${VER}"/"core-${VER}"/…
+            // (container_name: в docker-compose.yml), не "php"/"sbx"/"tg".
+            // `docker exec php ...` тихо падал ("No such container") — ошибка
+            // уходит в stderr, который здесь не читается, так что nodeConsole()
+            // просто получал '' и это выглядело как "нода недоступна", а не
+            // как явная ошибка. `docker compose exec` резолвит по имени
+            // сервиса правильно, как и было задумано.
+            $cmd = 'cd ~/sbbot && docker compose exec -T ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
         }
         try {
             // ssh2_connect() не берёт таймаут и может зависнуть надолго, если
