@@ -530,7 +530,7 @@ $i = [
         'ru' => 'Пока нет нод',
     ],
     'add node'     => [
-        'en' => 'Add node',
+        'en' => 'Add Node',
         'ru' => 'Добавить ноду',
     ],
     'enter node label' => [
@@ -618,15 +618,15 @@ $i = [
         'ru' => 'перезапуск...',
     ],
     'sync users' => [
-        'en' => 'Sync users',
+        'en' => 'Sync Users',
         'ru' => 'Синхр. пользователей',
     ],
     'turn off' => [
-        'en' => 'Turn off',
+        'en' => 'Turn Off',
         'ru' => 'Выключить',
     ],
     'turn on' => [
-        'en' => 'Turn on',
+        'en' => 'Turn On',
         'ru' => 'Включить',
     ],
     'node online' => [
