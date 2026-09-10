@@ -708,7 +708,7 @@
             },
             "multiplex": {
                 "enabled": true,
-                "protocol": "smux",
+                "protocol": "h2mux",
                 "max_connections": 3,
                 "min_streams": 4,
                 "max_streams": 0,

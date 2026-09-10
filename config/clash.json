@@ -720,7 +720,7 @@
             "client-fingerprint": "firefox",
             "smux": {
                 "enabled": true,
-                "protocol": "smux",
+                "protocol": "h2mux",
                 "max-connections": 3,
                 "min-streams": 4,
                 "max-streams": 0,
