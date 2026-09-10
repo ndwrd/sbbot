@@ -2130,6 +2130,7 @@ public function getSubscriptionServers()
         $mainCountry = preg_replace('~\d+$~', '', $mainGeoTag);
         $servers     = [[
             'tag'             => $this->countryFlag($mainCountry) . $mainGeoTag,
+            'geoTag'          => $mainGeoTag,
             'domain'          => $pac['domain'] ?: $this->ip,
             'hash'            => $this->getHashBot(),
             'naiveSubdomain'  => $pac['naiveSubdomain'] ?? '',
@@ -2143,6 +2144,7 @@ public function getSubscriptionServers()
             $country   = preg_replace('~\d+$~', '', $node['geoTag']);
             $servers[] = [
                 'tag'             => $this->countryFlag($country) . $node['geoTag'],
+                'geoTag'          => $node['geoTag'],
                 'domain'          => $node['domain'],
                 'hash'            => $node['hash'] ?? '',
                 'naiveSubdomain'  => $node['naiveSubdomain'] ?? '',
@@ -2195,6 +2197,7 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
         $allTags      = [];
         $newOutbounds = [];
         $mainVlessTag = null;
+        $byGeo        = [];
         foreach ($servers as $s) {
             foreach ($protocols as $tplTag => $label) {
                 $tpl = $templates[$tplTag] ?? null;
@@ -2214,6 +2217,7 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
                 $clone['tag']   = $tag;
                 $newOutbounds[] = $clone;
                 $allTags[]      = $tag;
+                $byGeo[$s['geoTag']][] = $tag;
                 if (!empty($s['isMain']) && $tplTag === 'vless-out') {
                     $mainVlessTag = $tag;
                 }
@@ -2242,7 +2246,23 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
         }
         unset($r);
         $c['outbounds'] = array_merge($rest, [$selector, $urltest], $newOutbounds);
-        return $c;
+        // Ручные группы админа (те, что ушли в $rest нетронутыми — не тег
+        // селектора и не один из 4 протокольных шаблонов) могут ссылаться на
+        // конкретную ноду плейсхолдером "~geo:RU~" в своём outbounds — тут он
+        // разворачивается в реальные теги её протоколов.
+        return $this->expandGeoPlaceholders($c, $byGeo);
+    }
+
+public function expandGeoPlaceholders($c, $byGeo)
+    {
+        $tags = [];
+        foreach ($byGeo as $geoTag => $list) {
+            $tags["\"~geo:{$geoTag}~\""] = implode(',', array_map(fn ($t) => json_encode($t), $list));
+        }
+        if (empty($tags)) {
+            return $c;
+        }
+        return json_decode($this->replaceTags(json_encode($c), $tags), true);
     }
 
 public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $password)
@@ -2261,6 +2281,7 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
         }
         $allNames   = [];
         $newProxies = [];
+        $byGeo      = [];
         foreach ($servers as $s) {
             foreach ($protocols as $tplName => $label) {
                 $tpl = $templates[$tplName] ?? null;
@@ -2278,6 +2299,7 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
                 $clone['name'] = $name;
                 $newProxies[]  = $clone;
                 $allNames[]    = $name;
+                $byGeo[$s['geoTag']][] = $name;
             }
         }
         if (empty($allNames)) {
@@ -2300,7 +2322,9 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
             'interval'  => 300,
             'tolerance' => 150,
         ];
-        return $c;
+        // Свои proxy-groups админа (уже в $c как есть — их тут никто не
+        // трогал) могут ссылаться на конкретную ноду через "~geo:RU~".
+        return $this->expandGeoPlaceholders($c, $byGeo);
     }
 
 public function buildXrayMultiOutbounds($c, $servers, $uid)
