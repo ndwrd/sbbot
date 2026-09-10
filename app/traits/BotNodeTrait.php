@@ -82,6 +82,18 @@ public function nodeMenu($id)
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";
         $text[] = "IP: {$node['ip']}";
         $text[] = "$dot $status";
+        if (!empty($node['geoTag'])) {
+            // Ровно те же теги, что попадают в selector/proxy-group реальной
+            // подписки (buildSingMultiOutbounds()/buildClashMultiOutbounds())
+            // — чтобы можно было скопировать готовую строку прямо для
+            // "~geo:CODE~" или для ручной группы в своём шаблоне.
+            $tagPrefix = $this->countryFlag(preg_replace('~\d+$~', '', $node['geoTag'])) . $node['geoTag'];
+            $text[]    = '<blockquote>Outbounds:';
+            foreach (['Vless', 'Naive', 'Hy2', 'Anytls'] as $label) {
+                $text[] = "<code>{$tagPrefix}|{$label}</code>";
+            }
+            $text[] = '</blockquote>';
+        }
         $data   = [
             [
                 [
