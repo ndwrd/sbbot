@@ -92,10 +92,6 @@ public function nodeMenu($id)
                     'text'          => $this->i18n('mtproto'),
                     'callback_data' => "/nodeMtproto $id",
                 ],
-                [
-                    'text'          => 'dnstt',
-                    'callback_data' => "/nodeDnstt $id",
-                ],
             ],
             [
                 [
