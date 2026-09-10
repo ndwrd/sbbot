@@ -525,6 +525,62 @@ $i = [
         'en' => 'QR singbox',
         'ru' => 'QR singbox',
     ],
+    'nodes'        => [
+        'en' => 'Nodes',
+        'ru' => 'Ноды',
+    ],
+    'no nodes yet' => [
+        'en' => 'No nodes yet',
+        'ru' => 'Пока нет нод',
+    ],
+    'add node'     => [
+        'en' => 'Add node',
+        'ru' => 'Добавить ноду',
+    ],
+    'enter node label' => [
+        'en' => 'enter node label',
+        'ru' => 'введите имя ноды',
+    ],
+    'enter node ip'     => [
+        'en' => 'enter node IP',
+        'ru' => 'введите IP ноды',
+    ],
+    'choose auth method' => [
+        'en' => 'choose auth method',
+        'ru' => 'выберите способ авторизации',
+    ],
+    'password'     => [
+        'en' => 'Password',
+        'ru' => 'Пароль',
+    ],
+    'ssh key'      => [
+        'en' => 'SSH key',
+        'ru' => 'SSH-ключ',
+    ],
+    'key is safer warning' => [
+        'en' => 'SSH key is safer than a password.',
+        'ru' => 'SSH-ключ безопаснее пароля.',
+    ],
+    'enter node password' => [
+        'en' => 'enter node password',
+        'ru' => 'введите пароль ноды',
+    ],
+    'send ssh key file or text' => [
+        'en' => 'send the private key as a file, or paste it as text',
+        'ru' => 'отправьте приватный ключ файлом или текстом',
+    ],
+    'node added'   => [
+        'en' => 'Node added',
+        'ru' => 'Нода добавлена',
+    ],
+    'confirm delete node' => [
+        'en' => 'Delete this node',
+        'ru' => 'Удалить эту ноду',
+    ],
+    'not configured' => [
+        'en' => 'not configured',
+        'ru' => 'не настроено',
+    ],
 ];
 
 if (file_exists(__DIR__ . '/i18n.override.php')) {

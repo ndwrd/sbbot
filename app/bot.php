@@ -10,6 +10,7 @@ require_once __DIR__ . '/traits/BotTelegramTrait.php';
 require_once __DIR__ . '/traits/BotAdguardTrait.php';
 require_once __DIR__ . '/traits/BotDnsttTrait.php';
 require_once __DIR__ . '/traits/BotWarpTrait.php';
+require_once __DIR__ . '/traits/BotNodeTrait.php';
 
 class Bot
 {
@@ -23,6 +24,7 @@ class Bot
     use BotAdguardTrait;
     use BotDnsttTrait;
     use BotWarpTrait;
+    use BotNodeTrait;
 
 
     public $input;

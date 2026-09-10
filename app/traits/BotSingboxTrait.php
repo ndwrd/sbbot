@@ -32,6 +32,14 @@ public function restartSingbox($c, $norestart = false)
         }
         $this->setPacConf($pac);
 
+        // Единый хук на все места правки списка клиентов (restartSingbox()
+        // вызывается отсюда 13 местами) — как список поменялся, все ноды
+        // считаются "устаревшими" до подтверждённого пуша; subscription()
+        // не должен предлагать клиенту ноду, пока usersSynced не true.
+        if (!empty($this->getNodes())) {
+            $this->nodeSyncAllUsers();
+        }
+
         $sing = $this->buildSingboxConfig($pac);
         if (empty($norestart)) {
             $this->collectSession();
@@ -229,14 +237,16 @@ public function renameXrUser($i)
         ];
     }
 
-public function queryV2raySingboxStats()
+public function queryV2raySingboxStats($host = null)
     {
         // experimental.v2ray_api (тег with_v2ray_api) — v2ray-совместимый gRPC
         // StatsService; PHP не умеет gRPC/protobuf нативно, поэтому спрашиваем через
         // grpcurl (готовый gRPC-клиент, как curl, только для gRPC) с тем же
         // stats.proto, что и собранный sing-box — оба зашиты в образ sbx.
         // Пустой pattern в QueryStats — значит "отдай вообще все счётчики разом".
-        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/QueryStats", 'sbx');
+        // $host — та же нода, что и везде: без него idёт локальный sbx, с ним —
+        // docker exec в sbx на удалённом хосте (см. ssh()).
+        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/QueryStats", 'sbx', true, '/dev/null', $host);
         $json = json_decode($out, true);
         $result = ['users' => [], 'inbounds' => []];
         foreach ($json['stat'] ?? [] as $stat) {
@@ -253,9 +263,9 @@ public function queryV2raySingboxStats()
         return $result;
     }
 
-public function getSingboxSysStats()
+public function getSingboxSysStats($host = null)
     {
-        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/GetSysStats", 'sbx');
+        $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/GetSysStats", 'sbx', true, '/dev/null', $host);
         // Регистр ключей в JSON-выдаче grpcurl под вопросом (поля в .proto — не
         // snake_case, а PascalCase, как есть) — приводим к нижнему регистру, чтобы
         // не гадать точное написание.
@@ -1690,6 +1700,18 @@ public function subscription($return = false)
                 break;
         }
 
+        // Ноды в подписку подмешиваются только для активного (не dormant
+        // Reality/xhttp) транспорта — там шаблон уже в финальном WS-виде, и
+        // есть повторяющийся набор протокольных outbound'ов, который можно
+        // клонировать на сервер. $outbound остаётся тем же нейтральным тегом
+        // группы/селектора, что и раньше — это НЕ тег конкретного сервера
+        // (иначе он бы совпал с тегом клона главного сервера ниже).
+        // getSubscriptionServers() трогает ensureMainGeoTag() (сетевой geo-IP
+        // запрос на первый вызов) — не зовём её вообще, если нод ещё нет,
+        // чтобы не тащить лишнюю сетевую зависимость в подписку однонодовых
+        // (сейчас — почти всех) установок.
+        $servers     = (!empty($this->getNodes()) && !in_array($pac['transport'] ?? null, ['Reality', 'xhttp'], true)) ? $this->getSubscriptionServers() : [];
+        $multiServer = count($servers) > 1;
         $outbound = ($pac['outbound'] ?? null) ?: 'proxy';
         $c = json_decode($this->replaceTags(json_encode($c), [
             '~outbound~' => $outbound,
@@ -1883,6 +1905,9 @@ public function subscription($return = false)
                     }
                 }
                 break;
+        }
+        if ($multiServer) {
+            $c = $this->applyMultiServerOutbounds($type, $c, $outbound, $uid, $username, $password);
         }
         $c = json_decode($this->replaceTags(json_encode($c), [
             '"~domains~"'    => json_encode(array_keys(array_filter(($pac['includelist'] ?? null) ?: []))),
@@ -2090,6 +2115,221 @@ public function clashRules($c, $uid, $domain)
             }
         }
         $c['rules'] = $tmp;
+        return $c;
+    }
+
+public function getSubscriptionServers()
+    {
+        // Гео-теги считаются один раз при создании сервера (assignGeoTag()) и
+        // тут просто читаются — пересчёта на лету нет, чтобы обозначение не
+        // "плавало" между запросами подписки. Нода попадает в список только
+        // если синхронизирована по пользователям и у неё есть рабочий домен+
+        // сертификат — иначе клиент получил бы нерабочий фоллбэк.
+        $pac         = $this->getPacConf();
+        $mainGeoTag  = $this->ensureMainGeoTag();
+        $mainCountry = preg_replace('~\d+$~', '', $mainGeoTag);
+        $servers     = [[
+            'tag'             => $this->countryFlag($mainCountry) . $mainGeoTag,
+            'domain'          => $pac['domain'] ?: $this->ip,
+            'hash'            => $this->getHashBot(),
+            'naiveSubdomain'  => $pac['naiveSubdomain'] ?? '',
+            'anytlsSubdomain' => $pac['anytlsSubdomain'] ?? '',
+            'isMain'          => true,
+        ]];
+        foreach ($pac['nodes'] ?? [] as $node) {
+            if (empty($node['usersSynced']) || empty($node['domain']) || empty($node['cert']) || empty($node['geoTag'])) {
+                continue;
+            }
+            $country   = preg_replace('~\d+$~', '', $node['geoTag']);
+            $servers[] = [
+                'tag'             => $this->countryFlag($country) . $node['geoTag'],
+                'domain'          => $node['domain'],
+                'hash'            => $node['hash'] ?? '',
+                'naiveSubdomain'  => $node['naiveSubdomain'] ?? '',
+                'anytlsSubdomain' => $node['anytlsSubdomain'] ?? '',
+                'isMain'          => false,
+            ];
+        }
+        return $servers;
+    }
+
+public function applyMultiServerOutbounds($type, $c, $outbound, $uid, $username, $password)
+    {
+        switch ($type) {
+            case 'sing':
+                return $this->buildSingMultiOutbounds($c, $this->getSubscriptionServers(), $outbound, $uid, $username, $password);
+            case 'clash':
+                return $this->buildClashMultiOutbounds($c, $this->getSubscriptionServers(), $outbound, $uid, $password);
+            case 'xray':
+                return $this->buildXrayMultiOutbounds($c, $this->getSubscriptionServers(), $uid);
+        }
+        return $c;
+    }
+
+public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username, $password)
+    {
+        // ~outbound~ уже резолвнут в $outbound первым replaceTags() в
+        // subscription() — это тег ГРУППЫ/селектора (нейтральный, не тег
+        // конкретного сервера), поэтому ищем шаблон селектора именно по нему.
+        $protocols = [
+            'vless-out'     => 'Vless',
+            'hysteria2-out' => 'Hy2',
+            'naive-out'     => 'Naive',
+            'anytls-out'    => 'Anytls',
+        ];
+        $templates        = [];
+        $rest             = [];
+        $selectorTemplate = null;
+        foreach ($c['outbounds'] ?? [] as $o) {
+            if (isset($protocols[$o['tag'] ?? ''])) {
+                $templates[$o['tag']] = $o;
+            } elseif (($o['tag'] ?? null) === $outbound) {
+                $selectorTemplate = $o;
+            } else {
+                $rest[] = $o;
+            }
+        }
+        if (empty($selectorTemplate)) {
+            return $c;
+        }
+        $allTags      = [];
+        $newOutbounds = [];
+        $mainVlessTag = null;
+        foreach ($servers as $s) {
+            foreach ($protocols as $tplTag => $label) {
+                $tpl = $templates[$tplTag] ?? null;
+                if (empty($tpl)) {
+                    continue;
+                }
+                $tag   = "{$s['tag']}|{$label}";
+                $clone = json_decode($this->replaceTags(json_encode($tpl), [
+                    '~domain~'        => $s['domain'],
+                    '~uid~'           => $uid,
+                    '~wspath~'        => "/ws{$s['hash']}",
+                    '~naive_domain~'  => "{$s['naiveSubdomain']}.{$s['domain']}",
+                    '~anytls_domain~' => "{$s['anytlsSubdomain']}.{$s['domain']}",
+                    '~password~'      => $password,
+                    '~username~'      => $username,
+                ]), true);
+                $clone['tag']   = $tag;
+                $newOutbounds[] = $clone;
+                $allTags[]      = $tag;
+                if (!empty($s['isMain']) && $tplTag === 'vless-out') {
+                    $mainVlessTag = $tag;
+                }
+            }
+        }
+        if (empty($mainVlessTag)) {
+            return $c;
+        }
+        $selector              = $selectorTemplate;
+        $selector['outbounds'] = array_merge(['⚡️ Auto'], $allTags);
+        $selector['default']   = $mainVlessTag;
+
+        $urltest = [
+            'type'      => 'urltest',
+            'tag'       => '⚡️ Auto',
+            'outbounds' => $allTags,
+            'url'       => 'https://www.gstatic.com/generate_204',
+            'interval'  => '5m',
+            'tolerance' => 150,
+            'default'   => $mainVlessTag,
+        ];
+        foreach ($rest as &$r) {
+            if (($r['tag'] ?? null) === 'warp-out') {
+                $r['detour'] = $mainVlessTag;
+            }
+        }
+        unset($r);
+        $c['outbounds'] = array_merge($rest, [$selector, $urltest], $newOutbounds);
+        return $c;
+    }
+
+public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $password)
+    {
+        // mihomo/clash naive не поддерживает — в шаблоне его нет, пропускаем.
+        $protocols = [
+            'vless'     => 'Vless',
+            'hysteria2' => 'Hy2',
+            'anytls'    => 'Anytls',
+        ];
+        $templates = [];
+        foreach ($c['proxies'] ?? [] as $p) {
+            if (isset($protocols[$p['name'] ?? ''])) {
+                $templates[$p['name']] = $p;
+            }
+        }
+        $allNames   = [];
+        $newProxies = [];
+        foreach ($servers as $s) {
+            foreach ($protocols as $tplName => $label) {
+                $tpl = $templates[$tplName] ?? null;
+                if (empty($tpl)) {
+                    continue;
+                }
+                $name  = "{$s['tag']}|{$label}";
+                $clone = json_decode($this->replaceTags(json_encode($tpl), [
+                    '~domain~'        => $s['domain'],
+                    '~uid~'           => $uid,
+                    '~wspath~'        => "/ws{$s['hash']}",
+                    '~anytls_domain~' => "{$s['anytlsSubdomain']}.{$s['domain']}",
+                    '~password~'      => $password,
+                ]), true);
+                $clone['name'] = $name;
+                $newProxies[]  = $clone;
+                $allNames[]    = $name;
+            }
+        }
+        if (empty($allNames)) {
+            return $c;
+        }
+        $c['proxies'] = $newProxies;
+        foreach ($c['proxy-groups'] ?? [] as &$g) {
+            if (($g['name'] ?? null) === $outbound) {
+                $g['type']    = 'select';
+                $g['proxies'] = array_merge(['⚡️ Auto'], $allNames);
+                unset($g['url'], $g['interval'], $g['timeout'], $g['lazy']);
+            }
+        }
+        unset($g);
+        $c['proxy-groups'][] = [
+            'name'      => '⚡️ Auto',
+            'type'      => 'url-test',
+            'proxies'   => $allNames,
+            'url'       => 'https://www.gstatic.com/generate_204',
+            'interval'  => 300,
+            'tolerance' => 150,
+        ];
+        return $c;
+    }
+
+public function buildXrayMultiOutbounds($c, $servers, $uid)
+    {
+        // Нативного selector/urltest в xray-core нет — по договорённости
+        // просто добавляем ноды как ещё outbound'ы в список, без auto-test.
+        $tpl = null;
+        foreach ($c['outbounds'] ?? [] as $o) {
+            if (($o['protocol'] ?? null) === 'vless' && isset($o['settings']['vnext'])) {
+                $tpl = $o;
+                break;
+            }
+        }
+        if (empty($tpl)) {
+            return $c;
+        }
+        foreach ($servers as $s) {
+            if (!empty($s['isMain'])) {
+                continue;
+            }
+            $tag   = "{$s['tag']}|Vless";
+            $clone = json_decode($this->replaceTags(json_encode($tpl), [
+                '~domain~' => $s['domain'],
+                '~uid~'    => $uid,
+                '~wspath~' => "/ws{$s['hash']}",
+            ]), true);
+            $clone['tag']     = $tag;
+            $c['outbounds'][] = $clone;
+        }
         return $c;
     }
 

@@ -86,14 +86,18 @@ public function linkMtproto()
 public function mtproto()
     {
         $d      = file_get_contents('/config/mtprotodomain') ?: 'yandex.ru';
-        $adtag  = trim(file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '');
         $st     = $this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off';
         $text[] = "Menu -> MTProto";
         $text[] = "status: $st";
         $text[] = "fake domain: <code>$d</code>";
-        $text[] = "adtag: <code>" . ($adtag ?: 'off') . "</code>";
         if ($st == 'on') {
             $text[] = $this->linkMtproto();
+        }
+        foreach ($this->getNodes() as $id => $node) {
+            $text[] = '';
+            $text[] = "<b>MTProto {$node['label']}</b>";
+            $link   = $this->nodeLinkMtproto($id);
+            $text[] = $link ?: $this->i18n('not configured');
         }
         $data[] = [
             [

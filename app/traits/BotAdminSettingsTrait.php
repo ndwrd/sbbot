@@ -479,6 +479,12 @@ public function configMenu()
         ];
         $data[] = [
             [
+                'text'          => $this->i18n('nodes'),
+                'callback_data' => "/menu nodes",
+            ],
+        ];
+        $data[] = [
+            [
                 'text'          => $this->i18n('logs'),
                 'callback_data' => "/logs",
             ],

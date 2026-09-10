@@ -80,8 +80,74 @@ public function action()
             case preg_match('~^/menu$~', $this->input['message'], $m):
             case preg_match('~^/start$~', $this->input['message'], $m):
             case preg_match('~^/menu$~', $this->input['callback'], $m):
-            case preg_match('~^/menu (?P<type>adguard|config|ss|lang|domains)$~', $this->input['callback'], $m):
+            case preg_match('~^/menu (?P<type>adguard|config|ss|lang|domains|nodes)$~', $this->input['callback'], $m):
                 $this->menu(type: $m['type'] ?? false, arg: $m['arg'] ?? false);
+                break;
+            case preg_match('~^/addNode$~', $this->input['callback'], $m):
+                $this->addNode();
+                break;
+            case preg_match('~^/nodeMenu (\w+)$~', $this->input['callback'], $m):
+                $this->nodeMenu($m[1]);
+                break;
+            case preg_match('~^/delNode (\w+)$~', $this->input['callback'], $m):
+                $this->delNode($m[1]);
+                break;
+            case preg_match('~^/delNodeYes (\w+)$~', $this->input['callback'], $m):
+                $this->delNodeYes($m[1]);
+                break;
+            case preg_match('~^/nodeAuthPassword (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAuthPassword($m[1]);
+                break;
+            case preg_match('~^/nodeAuthKey (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAuthKey($m[1]);
+                break;
+            case preg_match('~^/nodeMtproto (\w+)$~', $this->input['callback'], $m):
+                $this->nodeMtprotoMenu($m[1]);
+                break;
+            case preg_match('~^/nodeGenerateSecret (\w+)$~', $this->input['callback'], $m):
+                $this->nodeGenerateSecret($m[1]);
+                break;
+            case preg_match('~^/nodeSetSecret (\w+)$~', $this->input['callback'], $m):
+                $this->nodeSetSecret($m[1]);
+                break;
+            case preg_match('~^/nodeChangeTGDomain (\w+)$~', $this->input['callback'], $m):
+                $this->nodeChangeTGDomain($m[1]);
+                break;
+            case preg_match('~^/nodeDomains (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDomains($m[1]);
+                break;
+            case preg_match('~^/nodeSetDomainDialog (\w+)$~', $this->input['callback'], $m):
+                $this->nodeSetDomainDialog($m[1]);
+                break;
+            case preg_match('~^/nodeDelDomain (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDelDomain($m[1]);
+                break;
+            case preg_match('~^/nodeIssueSSL (\w+)$~', $this->input['callback'], $m):
+                $this->nodeIssueSSL($m[1]);
+                break;
+            case preg_match('~^/nodePortsDialog (\w+)$~', $this->input['callback'], $m):
+                $this->nodePortsDialog($m[1]);
+                break;
+            case preg_match('~^/nodeStats (\w+)$~', $this->input['callback'], $m):
+                $this->nodeStats($m[1]);
+                break;
+            case preg_match('~^/nodeRestart (\w+)$~', $this->input['callback'], $m):
+                $this->nodeRestart($m[1]);
+                break;
+            case preg_match('~^/nodeLogs (\w+)$~', $this->input['callback'], $m):
+                $this->nodeLogs($m[1]);
+                break;
+            case preg_match('~^/nodeGetLog (\w+) (\d+)$~', $this->input['callback'], $m):
+                $this->nodeGetLog($m[1], $m[2]);
+                break;
+            case preg_match('~^/nodeClearLog (\w+) (\d+)$~', $this->input['callback'], $m):
+                $this->nodeClearLog($m[1], $m[2]);
+                break;
+            case preg_match('~^/nodeCleanLog (\w+)$~', $this->input['callback'], $m):
+                $this->nodeCleanLog($m[1]);
+                break;
+            case preg_match('~^/nodeSyncUsers (\w+)$~', $this->input['callback'], $m):
+                $this->nodeSyncUsers($m[1]);
                 break;
             case preg_match('~^/changeTransport(?: (\w+))?$~', $this->input['callback'], $m):
                 $this->changeTransport($m[1] ?? false);
@@ -692,6 +758,7 @@ public function menu($type = false, $arg = false, $return = false)
             'config'       => $type == 'config'  ? $this->configMenu()                     : false,
             'lang'         => $type == 'lang'    ? $this->menuLang()                       : false,
             'domains'      => $type == 'domains' ? $this->domainsMenu()                    : false,
+            'nodes'        => $type == 'nodes'   ? $this->nodesMenu()                      : false,
         ];
 
         $text = $menu[$type ?: 'main' ]['text'];
@@ -887,12 +954,24 @@ public function autoupdate()
         $this->menu('config');
     }
 
-public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null')
+public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null', $host = null)
     {
+        // $host — контейнер-таргет живёт не в нашей docker-network, а на удалённой
+        // ноде: прямого коннекта к hostname контейнера там нет, поэтому вместо
+        // ssh2_connect($service) идём на host ноды (тот же ключ, что и везде —
+        // main-провижининг ставит его в authorized_keys ноды один раз). Если
+        // $service задан — просим её docker поднять команду в нужном контейнере;
+        // $service = null — команда идёт прямо на хост ноды (restart/ports/
+        // certbot — то, что живёт вне контейнеров, как /update/pipe или
+        // docker-compose.override.yml).
+        $target = $host ?: $service;
+        if ($host && $service) {
+            $cmd = 'docker exec ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
+        }
         try {
-            $c = ssh2_connect($service, 22);
+            $c = ssh2_connect($target, 22);
             if (empty($c)) {
-                throw new Exception("no connection to $service: \n$cmd\n" . var_export($c, true));
+                throw new Exception("no connection to $target: \n$cmd\n" . var_export($c, true));
             }
             $a = ssh2_auth_pubkey_file($c, 'root', '/ssh/key.pub', '/ssh/key');
             if (empty($a)) {
