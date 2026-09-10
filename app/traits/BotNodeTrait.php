@@ -207,8 +207,8 @@ public function nodeDomains($id)
         if (empty($node)) {
             return;
         }
-        $pac  = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
-        $cert = $this->nodeConsole($node['ip'], 'nginxGetTypeCert');
+        $pac    = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
+        $expiry = $this->nodeConsole($node['ip'], 'expireCert');
 
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('Domains') . '/' . $this->i18n('Ports');
         if (!empty($pac['domain'])) {
@@ -219,7 +219,7 @@ public function nodeDomains($id)
             if (!empty($pac['anytlsSubdomain'])) {
                 $text[] = "Anytls: {$pac['anytlsSubdomain']}.{$pac['domain']}";
             }
-            $text[] = "SSL: " . ($cert ?: $this->i18n('not configured'));
+            $text[] = "SSL: " . (!empty($expiry) ? date('Y-m-d H:i:s', $expiry) : $this->i18n('not configured'));
         }
 
         $data = [
@@ -236,7 +236,7 @@ public function nodeDomains($id)
                 'callback_data' => "/nodeAddNip $id",
             ];
         }
-        if (!empty($pac['domain']) && empty($cert)) {
+        if (!empty($pac['domain']) && empty($expiry)) {
             $data[] = [
                 [
                     'text'          => $this->i18n('Letsencrypt SSL'),
@@ -681,6 +681,36 @@ public function finishAddNode($tmpId, $authType, $secret)
         ];
         $this->setPacConf($conf);
         $this->nodeMenu($id);
+    }
+
+public function checkNodeCerts()
+    {
+        // Тот же принцип, что и checkCert() для главного — раз в сутки, в
+        // 12 часов, шлём админам предупреждение за 14 дней до истечения. Но
+        // expireCert() тут читает сертификат НЕ локально, а по SSH на каждую
+        // ноду — свой троттлинг-таймер (time_node_cert), не общий с checkCert().
+        try {
+            require dirname(__DIR__) . '/config.php';
+            if (empty($c['admin']) || date('H') != 12) {
+                return;
+            }
+            if (!empty($this->time_node_cert) && (time() - $this->time_node_cert) < 4600) {
+                return;
+            }
+            $this->time_node_cert = time();
+            foreach ($this->getNodes() as $node) {
+                if (empty($node['ip']) || !empty($node['off'])) {
+                    continue;
+                }
+                $expiry = $this->nodeConsole($node['ip'], 'expireCert');
+                if (!empty($expiry) && is_numeric($expiry) && $expiry - 60 * 60 * 24 * 14 < time()) {
+                    foreach ($c['admin'] as $admin) {
+                        $this->send($admin, "{$node['label']}: certificate expire: " . date('Y-m-d H:i:s', $expiry));
+                    }
+                }
+            }
+        } catch (Exception $e) {
+        }
     }
 
 public function checkNodeProvisioning()

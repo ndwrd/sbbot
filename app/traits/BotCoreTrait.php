@@ -503,6 +503,7 @@ public function cron()
             $this->checkCert();
             $this->singboxStatsUser();
             $this->checkNodeProvisioning();
+            $this->checkNodeCerts();
             sleep($period);
         }
     }

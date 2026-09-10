@@ -45,6 +45,7 @@ class Bot
     public $time;
     public $time2;
     public $time_singbox_stats;
+    public $time_node_cert;
     public $admin;
     public $ports;
 
