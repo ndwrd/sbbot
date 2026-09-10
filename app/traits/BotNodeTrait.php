@@ -99,14 +99,8 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeStats $id",
                 ],
                 [
-                    'text'          => $this->i18n('restart'),
-                    'callback_data' => "/nodeRestart $id",
-                ],
-            ],
-            [
-                [
-                    'text'          => $this->i18n('update'),
-                    'callback_data' => "/nodeUpdate $id",
+                    'text'          => $this->i18n('sync users'),
+                    'callback_data' => "/nodeSyncUsers $id",
                 ],
             ],
             [
@@ -115,14 +109,18 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeLogs $id",
                 ],
                 [
-                    'text'          => $this->i18n('sync users'),
-                    'callback_data' => "/nodeSyncUsers $id",
+                    'text'          => $this->i18n('update'),
+                    'callback_data' => "/nodeUpdate $id",
                 ],
             ],
             [
                 [
                     'text'          => $off ? $this->i18n('turn on') : $this->i18n('turn off'),
                     'callback_data' => "/nodeToggleOff $id",
+                ],
+                [
+                    'text'          => $this->i18n('restart'),
+                    'callback_data' => "/nodeRestart $id",
                 ],
             ],
             [
