@@ -19,6 +19,11 @@ public function setNode($id, array $node)
         $this->setPacConf($conf);
     }
 
+public function nodeIsOnline($ip)
+    {
+        return trim((string) $this->ssh('echo ok', null, true, '/dev/null', $ip)) === 'ok';
+    }
+
 public function nodesMenu()
     {
         $text[] = "Menu -> " . $this->i18n('nodes');
@@ -28,10 +33,19 @@ public function nodesMenu()
         }
         $data = [];
         foreach ($nodes as $id => $node) {
+            $dot = !empty($node['off']) ? '⚪' : ($this->nodeIsOnline($node['ip']) ? '🟢' : '🔴');
             $data[] = [
                 [
-                    'text'          => $node['label'] ?? $id,
+                    'text'          => "$dot {$node['label']}",
                     'callback_data' => "/nodeMenu $id",
+                ],
+            ];
+        }
+        if (!empty($nodes)) {
+            $data[] = [
+                [
+                    'text'          => '─────────────',
+                    'callback_data' => "/menu nodes",
                 ],
             ];
         }
@@ -44,7 +58,7 @@ public function nodesMenu()
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/menu config",
+                'callback_data' => "/menu",
             ],
         ];
         return [
@@ -61,8 +75,13 @@ public function nodeMenu($id)
             $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
             return;
         }
+        $off    = !empty($node['off']);
+        $online = $this->nodeIsOnline($node['ip']);
+        $dot    = $off ? '⚪' : ($online ? '🟢' : '🔴');
+        $status = $off ? $this->i18n('node off') : ($online ? $this->i18n('node online') : $this->i18n('node offline'));
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";
         $text[] = "IP: {$node['ip']}";
+        $text[] = "$dot $status";
         $data   = [
             [
                 [
@@ -90,8 +109,14 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeLogs $id",
                 ],
                 [
-                    'text'          => 'Sync users',
+                    'text'          => $this->i18n('sync users'),
                     'callback_data' => "/nodeSyncUsers $id",
+                ],
+            ],
+            [
+                [
+                    'text'          => $off ? $this->i18n('turn on') : $this->i18n('turn off'),
+                    'callback_data' => "/nodeToggleOff $id",
                 ],
             ],
             [
@@ -108,6 +133,18 @@ public function nodeMenu($id)
             ],
         ];
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+public function nodeToggleOff($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $conf = $this->getPacConf();
+        $conf['nodes'][$id]['off'] = empty($node['off']);
+        $this->setPacConf($conf);
+        $this->nodeMenu($id);
     }
 
 public function nodeConsole($ip, $method, ...$args)
@@ -157,6 +194,12 @@ public function nodeDomains($id)
                 ],
             ],
         ];
+        if (empty($pac['domain'])) {
+            $data[0][] = [
+                'text'          => $this->i18n('nip.io'),
+                'callback_data' => "/nodeAddNip $id",
+            ];
+        }
         if (!empty($pac['domain']) && empty($cert)) {
             $data[] = [
                 [
@@ -195,6 +238,21 @@ public function nodeSetDomainDialog($id)
         ];
     }
 
+public function nodeAddNip($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        // addNipdomain() зовётся без аргументов и внутри сама берёт $this->ip —
+        // а это уже IP ноды (console.php создаёт Bot в её собственном
+        // контексте), поэтому домен получится "{ip-через-дефисы}.nip.io" ноды,
+        // не главного. DNS-уведомление не нужно — nip.io резолвится сам.
+        $this->nodeConsole($node['ip'], 'addNipdomain');
+        $this->nodeCacheDomain($id);
+        $this->nodeDomains($id);
+    }
+
 public function nodeCacheDomain($id)
     {
         // subscription() генерируется на каждый запрос клиента — ходить по
@@ -230,7 +288,9 @@ public function nodeSetDomain($domain, $id)
         $this->nodeCacheDomain($id);
         $node = $this->getNode($id);
         if (!empty($node['domain']) && !preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $node['domain'])) {
-            $this->send($this->input['chat'], "Настройте DNS A-записи на IP ноды ({$node['ip']}) для: {$node['domain']}, {$node['naiveSubdomain']}.{$node['domain']}, {$node['anytlsSubdomain']}.{$node['domain']} — и только после этого нажимайте «Letsencrypt SSL».");
+            $hosts = "{$node['domain']}, {$node['naiveSubdomain']}.{$node['domain']}, {$node['anytlsSubdomain']}.{$node['domain']}";
+            $notice = str_replace(['%ip%', '%hosts%'], [$node['ip'], $hosts], $this->i18n('node dns notice'));
+            $this->send($this->input['chat'], $notice);
         }
         $this->nodeDomains($id);
     }
@@ -252,7 +312,7 @@ public function nodeIssueSSL($id)
         if (empty($node)) {
             return;
         }
-        $this->send($this->input['chat'], 'Install certificate...');
+        $this->send($this->input['chat'], $this->i18n('installing certificate'));
         $this->nodeConsole($node['ip'], 'setSSL', 'letsencrypt');
         $this->nodeCacheDomain($id);
         $node = $this->getNode($id);
@@ -282,7 +342,7 @@ public function nodeSetPort($port, $id)
             return;
         }
         $this->nodeConsole($node['ip'], 'setPort', trim($port), 'tg');
-        $this->send($this->input['chat'], $this->i18n('restart') . '?');
+        $this->send($this->input['chat'], "{$this->i18n('restart')}?");
         $this->nodeDomains($id);
     }
 
@@ -292,11 +352,19 @@ public function nodeStats($id)
         if (empty($node)) {
             return;
         }
-        $st  = $this->queryV2raySingboxStats($node['ip']);
-        $sys = $this->getSingboxSysStats($node['ip']);
+        $st   = $this->queryV2raySingboxStats($node['ip']);
+        $sys  = $this->getSingboxSysStats($node['ip']);
+        // getHostStats() читает /proc/stat, /proc/meminfo и df локально в том
+        // же процессе, что её вызывает — через console.php это уже процесс
+        // на самой ноде, поэтому дополнительных параметров не нужно.
+        $host = $this->nodeConsole($node['ip'], 'getHostStats') ?: [];
 
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> Stats";
-        $text[] = "Sing-box uptime: " . $this->formatUptime($sys['uptime'] ?? 0);
+        $text[] = '<blockquote>';
+        $text[] = '<b>' . $this->i18n('system') . '</b>';
+        $text[] = "CPU {$host['cpu']}% · MEM {$host['mem']}% · DISK {$host['disk']}%";
+        $text[] = 'Sing-box uptime: ' . $this->formatUptime($sys['uptime'] ?? 0);
+        $text[] = '</blockquote>';
         // queryV2raySingboxStats() отдаёт плоскую структуру (download/upload
         // прямо в inbounds[tag]), в отличие от getSingboxStats() с её global/
         // session — тут это разовый живой снимок, не накопленный кэш, поэтому
@@ -338,7 +406,7 @@ public function nodeRestart($id)
         // /update/pipe, а уже поднятый на ноде update.sh (стартует автоматом
         // с make u при провижининге) сам делает down+up на своём хосте.
         $this->ssh('echo 2 > ~/sbbot/update/pipe', null, true, '/dev/null', $node['ip']);
-        $this->send($this->input['chat'], "{$node['label']}: restarting...");
+        $this->send($this->input['chat'], "{$node['label']}: {$this->i18n('restarting')}");
         $this->nodeMenu($id);
     }
 
@@ -484,7 +552,7 @@ public function finishAddNode($tmpId, $authType, $secret)
         unset($conf['nodesPending'][$tmpId]);
         $this->setPacConf($conf);
         if (empty($pending)) {
-            $this->send($this->input['chat'], "ERROR: node request expired, start over with /addNode");
+            $this->send($this->input['chat'], $this->i18n('node request expired'));
             return;
         }
 
@@ -524,8 +592,52 @@ public function finishAddNode($tmpId, $authType, $secret)
             '/root/node_init.log',
             $pending['ip'],
         );
-        $this->send($this->input['chat'], $this->i18n('node added') . ": {$pending['label']} — установка sbbot запущена, займёт пару минут.");
+        $r = $this->send($this->input['chat'], "{$this->i18n('node added')}: {$pending['label']} — {$this->i18n('node install started')}");
+        // checkNodeProvisioning() (дёргается из cron()) редактирует ЭТО ЖЕ
+        // сообщение по мере установки — вместо того чтобы слать новое и
+        // удалять старое, как при обновлении самого Бота через update.sh.
+        $conf = $this->getPacConf();
+        $conf['nodes'][$id]['provisioning'] = [
+            'chat'      => $this->input['chat'],
+            'messageId' => $r['result']['message_id'] ?? null,
+            'startedAt' => time(),
+            'lastPing'  => time(),
+        ];
+        $this->setPacConf($conf);
         $this->nodeMenu($id);
+    }
+
+public function checkNodeProvisioning()
+    {
+        $conf   = $this->getPacConf();
+        $changed = false;
+        foreach ($conf['nodes'] ?? [] as $id => $node) {
+            $p = $node['provisioning'] ?? null;
+            if (empty($p) || empty($p['messageId'])) {
+                continue;
+            }
+            $elapsed = time() - $p['startedAt'];
+            // ssh()/nodeConsole() отдают '' (не null) при недоступности хоста —
+            // getPacConf() на реально поднятой ноде всегда возвращает массив
+            // (даже пустой), так что сравниваем именно с '', а не с null.
+            if ($this->nodeConsole($node['ip'], 'getPacConf') !== '') {
+                $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ✅ {$this->i18n('node install done')}");
+                unset($conf['nodes'][$id]['provisioning']);
+                $changed = true;
+            } elseif ($elapsed > 900) {
+                $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ⚠️ {$this->i18n('node install timeout')}");
+                unset($conf['nodes'][$id]['provisioning']);
+                $changed = true;
+            } elseif (time() - $p['lastPing'] >= 30) {
+                $min = (int) floor($elapsed / 60);
+                $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ⏳ {$this->i18n('node install in progress')} {$min} " . $this->i18n('min'));
+                $conf['nodes'][$id]['provisioning']['lastPing'] = time();
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $this->setPacConf($conf);
+        }
     }
 
 public function geoCountryCode($ip)
@@ -901,7 +1013,7 @@ public function nodeSyncUsers($id)
             return;
         }
         $ok = $this->nodeSyncUsersSilent($id);
-        $this->send($this->input['chat'], "{$node['label']}: " . ($ok ? 'users synced' : 'ERROR, sync failed'));
+        $this->send($this->input['chat'], "{$node['label']}: " . $this->i18n($ok ? 'users synced' : 'sync failed'));
         $this->nodeMenu($id);
     }
 

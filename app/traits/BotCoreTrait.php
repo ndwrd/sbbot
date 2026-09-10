@@ -119,6 +119,12 @@ public function action()
             case preg_match('~^/nodeSetDomainDialog (\w+)$~', $this->input['callback'], $m):
                 $this->nodeSetDomainDialog($m[1]);
                 break;
+            case preg_match('~^/nodeAddNip (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAddNip($m[1]);
+                break;
+            case preg_match('~^/nodeToggleOff (\w+)$~', $this->input['callback'], $m):
+                $this->nodeToggleOff($m[1]);
+                break;
             case preg_match('~^/nodeDelDomain (\w+)$~', $this->input['callback'], $m):
                 $this->nodeDelDomain($m[1]);
                 break;
@@ -481,6 +487,7 @@ public function cron()
             $this->checkResetSingboxStats();
             $this->checkCert();
             $this->singboxStatsUser();
+            $this->checkNodeProvisioning();
             sleep($period);
         }
     }
@@ -743,6 +750,12 @@ public function menu($type = false, $arg = false, $return = false)
                             [
                                 'text'          => $this->i18n('ad_title'),
                                 'callback_data' => "/menu adguard",
+                            ],
+                        ],
+                        [
+                            [
+                                'text'          => $this->i18n('nodes'),
+                                'callback_data' => "/menu nodes",
                             ],
                         ],
                         [

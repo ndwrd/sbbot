@@ -2137,7 +2137,7 @@ public function getSubscriptionServers()
             'isMain'          => true,
         ]];
         foreach ($pac['nodes'] ?? [] as $node) {
-            if (empty($node['usersSynced']) || empty($node['domain']) || empty($node['cert']) || empty($node['geoTag'])) {
+            if (!empty($node['off']) || empty($node['usersSynced']) || empty($node['domain']) || empty($node['cert']) || empty($node['geoTag'])) {
                 continue;
             }
             $country   = preg_replace('~\d+$~', '', $node['geoTag']);

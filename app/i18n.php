@@ -581,6 +581,78 @@ $i = [
         'en' => 'not configured',
         'ru' => 'не настроено',
     ],
+    'node request expired' => [
+        'en' => "ERROR: node request expired, start over with 'Add node'",
+        'ru' => 'ERROR: заявка на ноду устарела, начните заново кнопкой "Добавить ноду"',
+    ],
+    'node install started' => [
+        'en' => "installing sbbot, this takes a couple of minutes",
+        'ru' => 'установка sbbot запущена, займёт пару минут',
+    ],
+    'node install in progress' => [
+        'en' => 'installing... elapsed',
+        'ru' => 'устанавливается... прошло',
+    ],
+    'node install done' => [
+        'en' => 'node installed',
+        'ru' => 'нода установлена',
+    ],
+    'node install timeout' => [
+        'en' => "couldn't confirm the install finished in time, check manually",
+        'ru' => 'не удалось подтвердить установку за отведённое время, проверьте вручную',
+    ],
+    'node dns notice' => [
+        'en' => 'Set up DNS A records pointing at the node IP (%ip%) for: %hosts% — only click "Letsencrypt SSL" after that.',
+        'ru' => 'Настройте DNS A-записи на IP ноды (%ip%) для: %hosts% — и только после этого нажимайте «Letsencrypt SSL».',
+    ],
+    'installing certificate' => [
+        'en' => 'Install certificate...',
+        'ru' => 'Установка сертификата...',
+    ],
+    'users synced' => [
+        'en' => 'users synced',
+        'ru' => 'пользователи синхронизированы',
+    ],
+    'sync failed' => [
+        'en' => 'ERROR, sync failed',
+        'ru' => 'ERROR, синхронизация не удалась',
+    ],
+    'restarting' => [
+        'en' => 'restarting...',
+        'ru' => 'перезапуск...',
+    ],
+    'sync users' => [
+        'en' => 'Sync users',
+        'ru' => 'Синхр. пользователей',
+    ],
+    'turn off' => [
+        'en' => 'Turn off',
+        'ru' => 'Выключить',
+    ],
+    'turn on' => [
+        'en' => 'Turn on',
+        'ru' => 'Включить',
+    ],
+    'node online' => [
+        'en' => 'online',
+        'ru' => 'работает',
+    ],
+    'node offline' => [
+        'en' => 'offline',
+        'ru' => 'недоступна',
+    ],
+    'node off' => [
+        'en' => 'off',
+        'ru' => 'выключена',
+    ],
+    'system' => [
+        'en' => 'System',
+        'ru' => 'Система',
+    ],
+    'min' => [
+        'en' => 'min',
+        'ru' => 'мин',
+    ],
 ];
 
 if (file_exists(__DIR__ . '/i18n.override.php')) {

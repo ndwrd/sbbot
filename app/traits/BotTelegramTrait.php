@@ -25,6 +25,14 @@ public function qrMtproto()
     {
         $link = $this->linkMtproto();
         $this->sendQr('mtproto', $link, "<code>$link</code>");
+        // Один QR = одна ссылка, поэтому у каждой ноды свой QR отдельным
+        // сообщением, а не общий на всё сразу.
+        foreach ($this->getNodes() as $id => $node) {
+            $nodeLink = $this->nodeLinkMtproto($id);
+            if (!empty($nodeLink)) {
+                $this->sendQr("mtproto {$node['label']}", $nodeLink, "{$node['label']}: <code>$nodeLink</code>");
+            }
+        }
     }
 
 public function upload($name, $code, $chat = false)
