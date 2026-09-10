@@ -105,6 +105,12 @@ public function nodeMenu($id)
             ],
             [
                 [
+                    'text'          => $this->i18n('update'),
+                    'callback_data' => "/nodeUpdate $id",
+                ],
+            ],
+            [
+                [
                     'text'          => $this->i18n('logs'),
                     'callback_data' => "/nodeLogs $id",
                 ],
@@ -135,15 +141,37 @@ public function nodeMenu($id)
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
     }
 
+public function nodeStopSingbox($ip)
+    {
+        $this->ssh('pkill sing-box', 'sbx', true, '/dev/null', $ip);
+    }
+
+public function nodeStartSingbox($ip)
+    {
+        $this->ssh('pkill sing-box || sing-box run -c /sing.json', 'sbx', false, '/logs/singbox', $ip);
+    }
+
 public function nodeToggleOff($id)
     {
         $node = $this->getNode($id);
         if (empty($node)) {
             return;
         }
+        $off  = empty($node['off']);
         $conf = $this->getPacConf();
-        $conf['nodes'][$id]['off'] = empty($node['off']);
+        $conf['nodes'][$id]['off'] = $off;
         $this->setPacConf($conf);
+        // off: новые подписки перестают включать ноду (getSubscriptionServers()),
+        // и дополнительно гасим sing-box+mtproto на самой ноде, чтобы уже
+        // выданные клиентам конфиги тоже перестали через неё подключаться.
+        // on: обратное — поднимаем оба сервиса заново.
+        if ($off) {
+            $this->nodeStopSingbox($node['ip']);
+            $this->ssh('pkill mtproto-proxy', 'tg', true, '/dev/null', $node['ip']);
+        } else {
+            $this->nodeStartSingbox($node['ip']);
+            $this->nodeRestartTG($id);
+        }
         $this->nodeMenu($id);
     }
 
@@ -182,8 +210,6 @@ public function nodeDomains($id)
                 $text[] = "Anytls: {$pac['anytlsSubdomain']}.{$pac['domain']}";
             }
             $text[] = "SSL: " . ($cert ?: $this->i18n('not configured'));
-        } else {
-            $text[] = $this->i18n('domain explain');
         }
 
         $data = [
@@ -410,6 +436,22 @@ public function nodeRestart($id)
         $this->nodeMenu($id);
     }
 
+public function nodeUpdate($id)
+    {
+        // Тот же /update/pipe, что и restart(), только cmd=1 — update.sh на
+        // ноде (уже поднят с make u при провижининге) сам делает git reset
+        // --hard/clean/fetch/pull + docker compose pull + make start. Код
+        // ноды — тот же репозиторий, что и у main, так что любое будущее
+        // дополнение (например, мониторинг) доезжает этим же путём.
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $this->ssh('echo 1 > ~/sbbot/update/pipe', null, true, '/dev/null', $node['ip']);
+        $this->send($this->input['chat'], "{$node['label']}: {$this->i18n('node updating')}");
+        $this->nodeMenu($id);
+    }
+
 public function delNode($id)
     {
         $node = $this->getNode($id);
@@ -428,8 +470,32 @@ public function delNode($id)
         $this->update($this->input['chat'], $this->input['message_id'], $this->i18n('confirm delete node') . '?', $data);
     }
 
+public function nodeTeardown($ip)
+    {
+        // make delete само по себе не гарантированно чистит именованные
+        // volume'ы (sbbot_warp/sbbot_adguard — по опыту, system/volume prune
+        // не всегда их подбирают) и не трогает authorized_keys, куда
+        // nodeBootstrap() дописал ключ main — убираем явно, чтобы не
+        // оставлять ни ключ, ни данные warp/adguard после "удаления".
+        $pubkey = trim(file_get_contents('/ssh/key.pub'));
+        $cmd = 'cd ~/sbbot && make d 2>/dev/null; '
+             . 'docker volume rm -f sbbot_warp sbbot_adguard 2>/dev/null; '
+             . 'docker system prune -f -a 2>/dev/null; '
+             . 'docker volume prune -f -a 2>/dev/null; '
+             . 'grep -vxF ' . escapeshellarg($pubkey) . ' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp 2>/dev/null '
+             . '&& mv ~/.ssh/authorized_keys.tmp ~/.ssh/authorized_keys; '
+             . 'rm -rf ~/sbbot';
+        $this->ssh($cmd, null, false, '/dev/null', $ip);
+    }
+
 public function delNodeYes($id)
     {
+        $node = $this->getNode($id);
+        if (!empty($node['ip'])) {
+            // Неблокирующе — prune/rm -rf может занять время, а сам факт
+            // "удаления" на стороне main не должен его ждать.
+            $this->nodeTeardown($node['ip']);
+        }
         $conf = $this->getPacConf();
         unset($conf['nodes'][$id]);
         $this->setPacConf($conf);
@@ -586,7 +652,7 @@ public function finishAddNode($tmpId, $authType, $secret)
         // Ключ — случайный, не настоящий токен бота (нода не должна его знать).
         $nodeKey = bin2hex(random_bytes(16));
         $this->ssh(
-            "curl -fsSL https://raw.githubusercontent.com/ndwrd/sbbot/main/scripts/init.sh | bash -s $nodeKey main",
+            "curl -fsSL https://raw.githubusercontent.com/ndwrd/sbbot/main/scripts/init.sh | bash -s $nodeKey main node",
             null,
             false,
             '/root/node_init.log',

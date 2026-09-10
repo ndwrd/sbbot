@@ -395,8 +395,6 @@ public function domainsMenu()
                 $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
             }
             $text[] = "</blockquote>";
-        } else {
-            $text[] = $this->i18n('domain explain');
         }
 
         $data = [

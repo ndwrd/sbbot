@@ -165,10 +165,6 @@ $i = [
         'en' => 'Web interface',
         'ru' => 'Вебморда адгварда',
     ],
-    'domain explain'       => [
-        'en' => 'Some clients require a valid certificate when connecting, such as windows 11 DoH or ShadowSocks Android (PAC url), this requires a domain',
-        'ru' => 'Некоторым клиентам требуется валидный сертификат при подключении, например Windows 11 DoH или ShadowSocks Android (URL-адрес PAC), для этого требуется домен',
-    ],
     'self list explain'    => [
         'en' => ' - domains that will work through a proxy, all others directly',
         'ru' => ' - домены, которые будут работать через прокси, все остальные напрямую',
@@ -652,6 +648,10 @@ $i = [
     'min' => [
         'en' => 'min',
         'ru' => 'мин',
+    ],
+    'node updating' => [
+        'en' => 'updating...',
+        'ru' => 'обновление...',
     ],
 ];
 

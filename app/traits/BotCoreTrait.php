@@ -140,6 +140,9 @@ public function action()
             case preg_match('~^/nodeRestart (\w+)$~', $this->input['callback'], $m):
                 $this->nodeRestart($m[1]);
                 break;
+            case preg_match('~^/nodeUpdate (\w+)$~', $this->input['callback'], $m):
+                $this->nodeUpdate($m[1]);
+                break;
             case preg_match('~^/nodeLogs (\w+)$~', $this->input['callback'], $m):
                 $this->nodeLogs($m[1]);
                 break;
@@ -694,8 +697,6 @@ public function menu($type = false, $arg = false, $return = false)
                         $main[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
                     }
                     $main[] = "</blockquote>";
-                } else {
-                    $main[] = $this->i18n('domain explain');
                 }
             }
 

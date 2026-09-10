@@ -1,4 +1,5 @@
 TAG="${2:-main}"
+NODE="${3:-}"
 apt update
 apt install -y \
     ca-certificates \
@@ -45,7 +46,17 @@ git checkout $TAG
 # needs port 80 reachable and has nothing to open it.
 bash scripts/install_watch_port80.sh
 
-echo "<?php
+if [ "$NODE" = "node" ]; then
+    # Ключ ноды случайный, не настоящий токен бота — 'node'=>true говорит
+    # init.php не гонять polling() (он бы всегда получал 401 и никогда не
+    # создавал /start, а без него healthcheck php-контейнера не проходит
+    # никогда — именно так и ловится "dependency failed... unhealthy").
+    echo "<?php
+
+\$c = ['key' => '$1', 'node' => true];" > ./app/config.php
+else
+    echo "<?php
 
 \$c = ['key' => '$1'];" > ./app/config.php
+fi
 make u
