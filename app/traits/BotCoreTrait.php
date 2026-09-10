@@ -143,6 +143,18 @@ public function action()
             case preg_match('~^/nodeUpdate (\w+)$~', $this->input['callback'], $m):
                 $this->nodeUpdate($m[1]);
                 break;
+            case preg_match('~^/nodeDnstt (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDnstt($m[1]);
+                break;
+            case preg_match('~^/nodeDnsttDomainDialog (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDnsttDomainDialog($m[1]);
+                break;
+            case preg_match('~^/nodeDnsttPasswordDialog (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDnsttPasswordDialog($m[1]);
+                break;
+            case preg_match('~^/nodeDnsttDownload (\w+)$~', $this->input['callback'], $m):
+                $this->nodeDnsttDownload($m[1]);
+                break;
             case preg_match('~^/nodeLogs (\w+)$~', $this->input['callback'], $m):
                 $this->nodeLogs($m[1]);
                 break;

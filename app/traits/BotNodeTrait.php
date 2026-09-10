@@ -92,6 +92,10 @@ public function nodeMenu($id)
                     'text'          => $this->i18n('mtproto'),
                     'callback_data' => "/nodeMtproto $id",
                 ],
+                [
+                    'text'          => 'dnstt',
+                    'callback_data' => "/nodeDnstt $id",
+                ],
             ],
             [
                 [
@@ -1095,6 +1099,124 @@ public function applyUsers($json)
         file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         $this->ssh('pkill -HUP sing-box || sing-box run -c /sing.json', 'sbx', false);
         return 'ok';
+    }
+
+public function nodeDnstt($id)
+    {
+        // dnsttStart()/dnstt() на ноде переиспользуются как есть через
+        // console-мост (как addDomain()/setSSL()) — они уже сами берут
+        // правильные $c['domain']/$this->ip из контекста ноды, поэтому
+        // инструкция по NS/A-записям получается для ноды автоматически.
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $pac    = $this->nodeConsole($node['ip'], 'getPacConf') ?: [];
+        $pubkey = trim((string) $this->ssh('cat /config/dnstt/server.pub 2>/dev/null', 'php', true, '/dev/null', $node['ip']));
+
+        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> dnstt";
+        if (!empty($pac['dnsttDomain']) && !empty($pac['dnsttPassword'])) {
+            $text[] = "<pre>set the NS record for {$pac['dnsttDomain']}: tns.{$pac['domain']}\nset A record for tns.{$pac['domain']}: {$node['ip']}</pre>";
+            $text[] = "account: <code>vpnbot:{$pac['dnsttPassword']}</code>";
+            $text[] = "server name: <code>{$pac['dnsttDomain']}</code>";
+            if (!empty($pubkey)) {
+                $text[] = "public key: <code>$pubkey</code>";
+            }
+        } else {
+            $text[] = "set subdomain and password";
+        }
+
+        $data = [];
+        if (!empty($pubkey)) {
+            $data[] = [
+                [
+                    'text'          => $this->i18n('download pubkey'),
+                    'callback_data' => "/nodeDnsttDownload $id",
+                ],
+            ];
+        }
+        $data[] = [
+            [
+                'text'          => $this->i18n('set subdomain'),
+                'callback_data' => "/nodeDnsttDomainDialog $id",
+            ],
+        ];
+        $data[] = [
+            [
+                'text'          => $this->i18n('set password'),
+                'callback_data' => "/nodeDnsttPasswordDialog $id",
+            ],
+        ];
+        $data[] = [
+            [
+                'text'          => $this->i18n('back'),
+                'callback_data' => "/nodeMenu $id",
+            ],
+        ];
+        $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+public function nodeDnsttDomainDialog($id)
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter domain",
+            $this->input['message_id'],
+            reply: 'enter domain',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'nodeSetDnsttDomain',
+            'args'          => [$id],
+        ];
+    }
+
+public function nodeSetDnsttDomain($domain, $id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $this->nodeConsole($node['ip'], 'setdnsttDomain', trim($domain));
+        $this->nodeDnstt($id);
+    }
+
+public function nodeDnsttPasswordDialog($id)
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter password",
+            $this->input['message_id'],
+            reply: 'enter password',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'nodeSetDnsttPassword',
+            'args'          => [$id],
+        ];
+    }
+
+public function nodeSetDnsttPassword($password, $id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $this->nodeConsole($node['ip'], 'setdnsttPassword', trim($password));
+        $this->nodeDnstt($id);
+    }
+
+public function nodeDnsttDownload($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $content = $this->ssh('cat /config/dnstt/server.pub', 'php', true, '/dev/null', $node['ip']);
+        $tmp     = tempnam(sys_get_temp_dir(), 'ndk');
+        file_put_contents($tmp, $content);
+        $this->sendFile($this->input['chat'], curl_file_create($tmp, 'text/plain', "{$node['label']}_dnstt.pub"));
+        unlink($tmp);
     }
 
 public function nodeLinkMtproto($id)
