@@ -1015,6 +1015,19 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
             $cmd = 'docker exec ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
         }
         try {
+            // ssh2_connect() не берёт таймаут и может зависнуть надолго, если
+            // порт фильтруется, а не сразу отвечает отказом — соседей по
+            // docker-сети это не касалось (коннект туда всегда мгновенный),
+            // а вот ноду через интернет так подвесить может — и тогда
+            // однопоточный cron() встаёт целиком, не только эта задача.
+            // Пробуем raw TCP отдельно с коротким таймаутом, чтобы быстро
+            // отвалиться, если хост недоступен, вместо зависания внутри ssh2.
+            $probe = @fsockopen($target, 22, $errno, $errstr, 5);
+            if (empty($probe)) {
+                throw new Exception("no connection to $target: $errstr ($errno)");
+            }
+            fclose($probe);
+
             $c = ssh2_connect($target, 22);
             if (empty($c)) {
                 throw new Exception("no connection to $target: \n$cmd\n" . var_export($c, true));
@@ -1036,8 +1049,15 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
             $data = "";
             if ($wait) {
                 stream_set_blocking($s, true);
+                // Тот же класс риска на чтение — команда на удалённом конце
+                // может никогда не закрыть вывод (зависший процесс и т.п.),
+                // и fread() будет ждать вечно без этого таймаута.
+                stream_set_timeout($s, 20);
                 while ($buf = fread($s, 4096)) {
                     $data .= $buf;
+                    if (!empty(stream_get_meta_data($s)['timed_out'])) {
+                        break;
+                    }
                 }
             } else {
                 stream_set_blocking($s, false);
