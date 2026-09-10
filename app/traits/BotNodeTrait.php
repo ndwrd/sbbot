@@ -234,7 +234,7 @@ public function nodeDomains($id)
         }
         $data[] = [
             [
-                'text'          => "MTProto {$this->i18n('Ports')}",
+                'text'          => "MTProto Port",
                 'callback_data' => "/nodePortsDialog $id",
             ],
         ];
