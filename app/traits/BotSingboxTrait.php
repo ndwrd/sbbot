@@ -2255,14 +2255,36 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
 
 public function expandGeoPlaceholders($c, $byGeo)
     {
-        $tags = [];
-        foreach ($byGeo as $geoTag => $list) {
-            $tags["\"~geo:{$geoTag}~\""] = implode(',', array_map(fn ($t) => json_encode($t), $list));
+        return $this->expandGeoInArray($c, $byGeo);
+    }
+
+public function expandGeoInArray($arr, $byGeo)
+    {
+        // Строковой заменой ("~geo:RU~" -> список тегов) это не сделать
+        // безопасно: если нода недоступна и её нет в $byGeo, надо УБРАТЬ
+        // элемент из массива, а не оставить битый текст — иначе клиент
+        // получит невалидный JSON-конфиг и может отказаться импортировать
+        // его целиком, не только эту группу. Поэтому разбираем как массив.
+        if (!is_array($arr)) {
+            return $arr;
         }
-        if (empty($tags)) {
-            return $c;
+        $isList = array_keys($arr) === range(0, count($arr) - 1);
+        $result = [];
+        foreach ($arr as $k => $v) {
+            if ($isList && is_string($v) && preg_match('/^~geo:(.+)~$/', $v, $m)) {
+                foreach ($byGeo[$m[1]] ?? [] as $tag) {
+                    $result[] = $tag;
+                }
+                continue;
+            }
+            $v = is_array($v) ? $this->expandGeoInArray($v, $byGeo) : $v;
+            if ($isList) {
+                $result[] = $v;
+            } else {
+                $result[$k] = $v;
+            }
         }
-        return json_decode($this->replaceTags(json_encode($c), $tags), true);
+        return $result;
     }
 
 public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $password)
