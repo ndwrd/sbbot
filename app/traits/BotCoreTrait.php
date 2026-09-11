@@ -164,6 +164,9 @@ public function action()
             case preg_match('~^/nodeClearLog (\w+) (\d+)$~', $this->input['callback'], $m):
                 $this->nodeClearLog($m[1], $m[2]);
                 break;
+            case preg_match('~^/nodeAutoCleanLogsDialog (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAutoCleanLogsDialog($m[1]);
+                break;
             case preg_match('~^/nodeCleanLog (\w+)$~', $this->input['callback'], $m):
                 $this->nodeCleanLog($m[1]);
                 break;
@@ -504,6 +507,7 @@ public function cron()
             $this->singboxStatsUser();
             $this->checkNodeProvisioning();
             $this->checkNodeCerts();
+            $this->checkNodeAutoCleanLogs();
             sleep($period);
         }
     }

@@ -1087,6 +1087,22 @@ public function nodeLogs($id)
                 'callback_data' => "/nodeCleanLog $id",
             ],
         ];
+        // Тот же формат ("start / period"), что и autocleanlogs у Бота
+        // (см. logs()/checkLogs()) — просто в записи ноды, не в общем pac.
+        $autoclean = array_filter(explode('/', $node['autocleanlogs'] ?? ''));
+        if (!empty($autoclean)) {
+            if (!empty(strtotime($autoclean[0])) && !empty(strtotime($autoclean[1]))) {
+                $autoclean = "{$autoclean[0]} start / {$autoclean[1]} period";
+            } else {
+                $autoclean = $this->i18n('off') . " {$node['autocleanlogs']} - wrong format";
+            }
+        }
+        $data[] = [
+            [
+                'text'          => $this->i18n('autoclean') . ': ' . ($autoclean ?: $this->i18n('off')),
+                'callback_data' => "/nodeAutoCleanLogsDialog $id",
+            ],
+        ];
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
@@ -1094,6 +1110,76 @@ public function nodeLogs($id)
             ],
         ];
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text ?: ['...']), $data);
+    }
+
+public function nodeAutoCleanLogsDialog($id)
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter like: start / period",
+            $this->input['message_id'],
+            reply: 'enter like: now / 12 hours',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'nodeSetAutoCleanLogs',
+            'args'          => [$id],
+        ];
+    }
+
+public function nodeSetAutoCleanLogs($text, $id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $text = trim($text);
+        $conf = $this->getPacConf();
+        if (empty($text)) {
+            $conf['nodes'][$id]['autocleanlogs'] = '';
+        } else {
+            [$start, $period] = array_pad(explode('/', $text), 2, '');
+            if (!empty(strtotime($start)) && !empty(strtotime($period))) {
+                $conf['nodes'][$id]['autocleanlogs'] = implode(' / ', [date('Y-m-d H:i', strtotime($start)), trim($period)]);
+            } else {
+                $this->send($this->input['chat'], $text . ' - wrong format');
+            }
+        }
+        $this->setPacConf($conf);
+        $this->nodeLogs($id);
+    }
+
+public function checkNodeAutoCleanLogs()
+    {
+        // То же вычисление расписания, что и checkLogs() у Бота, только по
+        // каждой ноде отдельно (own lastCleanLogsTime, не общий с Ботом) и
+        // сама очистка — прямой SSH, без рендера меню (это фон, не клик).
+        $conf    = $this->getPacConf();
+        $changed = false;
+        $now     = time();
+        foreach ($conf['nodes'] ?? [] as $id => $node) {
+            if (empty($node['autocleanlogs']) || empty($node['ip'])) {
+                continue;
+            }
+            [$start, $period] = array_pad(explode('/', $node['autocleanlogs']), 2, '');
+            $start  = strtotime(trim($start));
+            $period = strtotime(trim($period), 0);
+            if (empty($start) || empty($period) || $now < $start) {
+                continue;
+            }
+            $elapsed             = $now - $start;
+            $periodsElapsed      = floor($elapsed / $period);
+            $lastScheduledClean  = $start + ($periodsElapsed * $period);
+            $lastCleanTime       = $node['lastCleanLogsTime'] ?? 0;
+            if ($lastCleanTime < $lastScheduledClean) {
+                $this->ssh('for f in /logs/*; do [ -f "$f" ] && > "$f"; done', 'php', true, '/dev/null', $node['ip']);
+                $conf['nodes'][$id]['lastCleanLogsTime'] = $now;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $this->setPacConf($conf);
+        }
     }
 
 public function nodeGetLog($id, $k)
