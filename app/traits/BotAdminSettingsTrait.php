@@ -123,7 +123,6 @@ public function pinBackup($file = false)
 public function export()
     {
         $conf = [
-            'ad'  => yaml_parse_file($this->adguard),
             'pac' => $this->getPacConf(),
             'ssl' => file_exists('/certs/cert_private') && preg_match('~BEGIN PRIVATE KEY~', file_get_contents('/certs/cert_private')) ? [
                 'private' => file_get_contents('/certs/cert_private'),
@@ -181,13 +180,6 @@ public function importFile($file = false)
                 $domainMigrated = $this->reconcileDomainForNewServer($json['pac']);
                 $this->setPacConf($json['pac']);
             }
-            if (!empty($json['ad'])) {
-                $out[] = 'update adguard';
-                $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-                $this->stopAd();
-                yaml_emit_file($this->adguard, $json['ad']);
-                $this->startAd();
-            }
             if (!empty($json['mtproto'])) {
                 $out[] = 'update mtproto';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -200,7 +192,6 @@ public function importFile($file = false)
                 $out[] = 'update singbox';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $this->restartSingbox($json['singbox']);
-                $this->adguardSingboxClients();
                 $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
             }
             if (!empty($json['dnstt'])) {
@@ -278,24 +269,6 @@ public function delAdmin($id)
         unset($c['admin'][array_search($id, $c['admin'])]);
         file_put_contents($file, "<?php\n\n\$c = " . var_export($c, true) . ";\n");
         $this->menu('config');
-    }
-
-public function chpsswd($pass)
-    {
-        $out[] = 'Restart Adguard Home';
-        $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-        $out[] = $this->stopAd();
-        $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-        $c = yaml_parse_file($this->adguard);
-        $c['users'][0]['password'] = password_hash($pass, PASSWORD_DEFAULT);
-        yaml_emit_file($this->adguard, $c);
-        $p = $this->getPacConf();
-        $p['adpswd'] = $pass;
-        $this->setPacConf($p);
-        $out[] = $this->startAd();
-        $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
-        sleep(3);
-        $this->menu('adguard');
     }
 
 public function getPorts()
@@ -387,9 +360,6 @@ public function domainsMenu()
             }
             if (!empty($conf['anytlsSubdomain'])) {
                 $text[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
-            }
-            if (!empty($conf['adguardkey'])) {
-                $text[] = "{$conf['adguardkey']}.{$conf['domain']} adguard DOT";
             }
             if (in_array($conf['domain'], $certs)) {
                 $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
@@ -568,10 +538,6 @@ public function ports()
                 'callback_data' => "/changePort tg",
             ]],
             [[
-                'text'          => $this->i18n($c['ad'] ? 'on' : 'off') . ' 853 AdguardHome DoT',
-                'callback_data' => "/hidePort ad",
-            ]],
-            [[
                 'text'          => $this->i18n($c['dnstt'] ? 'on' : 'off') . ' 53 dnstt',
                 'callback_data' => "/hidePort dnstt",
             ]],
@@ -601,7 +567,6 @@ public function ports()
 public function hidePort($container)
     {
         $ports = [
-            'ad'    => '853:853',
             'dnstt' => '53:53/udp',
         ];
         $f = '/docker/compose';

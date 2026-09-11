@@ -794,7 +794,6 @@ public function delxr($i)
                 unset($st['users'][$k]);
                 $this->setSingboxStats($st);
                 $this->restartSingbox($r);
-                $this->adguardSingboxClients();
                 break;
             }
         }
@@ -841,7 +840,6 @@ public function addxrus($users)
             $c['inbounds'][0]['settings']['clients'][] = $client;
         }
         $this->restartSingbox($c);
-        $this->adguardSingboxClients();
         if (count($users) == 1) {
             $this->userXr(count($c['inbounds'][0]['settings']['clients']) - 1);
         } else {
@@ -894,7 +892,6 @@ public function renXrUs($name, $i)
         $c = $this->getSingbox();
         $c['inbounds'][0]['settings']['clients'][$i]['description'] = $name;
         $this->restartSingbox($c);
-        $this->adguardSingboxClients();
         $this->userXr($i);
     }
 

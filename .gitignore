@@ -12,7 +12,6 @@
 /config/wg0.conf
 /config/hwid.json
 /config/pac.json
-/config/AdGuardHome.yaml
 /config/mtprotosecret
 /config/mtprotodomain
 /config/deny

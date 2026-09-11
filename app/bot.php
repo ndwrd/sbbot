@@ -7,7 +7,6 @@ require_once __DIR__ . '/traits/BotPacTrait.php';
 require_once __DIR__ . '/traits/BotAdminSettingsTrait.php';
 require_once __DIR__ . '/traits/BotDomainSslTrait.php';
 require_once __DIR__ . '/traits/BotTelegramTrait.php';
-require_once __DIR__ . '/traits/BotAdguardTrait.php';
 require_once __DIR__ . '/traits/BotDnsttTrait.php';
 require_once __DIR__ . '/traits/BotWarpTrait.php';
 require_once __DIR__ . '/traits/BotNodeTrait.php';
@@ -21,14 +20,12 @@ class Bot
     use BotAdminSettingsTrait;
     use BotDomainSslTrait;
     use BotTelegramTrait;
-    use BotAdguardTrait;
     use BotDnsttTrait;
     use BotWarpTrait;
     use BotNodeTrait;
 
 
     public $input;
-    public $adguard;
     public $update;
     public $ip;
     public $limit;
@@ -60,7 +57,6 @@ class Bot
         $this->i18n     = $i18n;
         $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
         $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
-        $this->adguard  = '/config/AdGuardHome.yaml';
         $this->update   = '/update/json';
         $this->ports = [
             'tg'    => '443',

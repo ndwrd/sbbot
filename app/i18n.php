@@ -17,10 +17,6 @@ $i = [
         'en' => 'Shadowsocks',
         'ru' => 'Shadowsocks',
     ],
-    'ad_title'             => [
-        'en' => 'AdGuard',
-        'ru' => 'AdGuard',
-    ],
     'config'               => [
         'en' => 'Settings',
         'ru' => 'Настройки',
@@ -117,22 +113,6 @@ $i = [
         'en' => 'Self SSL',
         'ru' => 'Собственный SSL',
     ],
-    'change password'      => [
-        'en' => 'Change password',
-        'ru' => 'Изменить пароль',
-    ],
-    'reset settings'       => [
-        'en' => 'Reset settings',
-        'ru' => 'Сбросить настройки',
-    ],
-    'add upstream'         => [
-        'en' => 'Add upstream',
-        'ru' => 'Добавить DNS',
-    ],
-    'check DNS'            => [
-        'en' => 'Check DNS',
-        'ru' => 'Проверить DNS',
-    ],
     'update'               => [
         'en' => 'Update',
         'ru' => 'Обновить',
@@ -160,10 +140,6 @@ $i = [
     'lang'                 => [
         'en' => 'Language',
         'ru' => 'Язык интерфейса',
-    ],
-    'adguard web'          => [
-        'en' => 'Web interface',
-        'ru' => 'Вебморда адгварда',
     ],
     'self list explain'    => [
         'en' => ' - domains that will work through a proxy, all others directly',
@@ -313,18 +289,6 @@ $i = [
         'en' => 'Update bot',
         'ru' => 'Обновить бота',
     ],
-    'third party browser'  => [
-        'en' => 'Third party browser',
-        'ru' => 'Сторонний браузер',
-    ],
-    'browser_notify_on'  => [
-        'en' => 'The web panel can be opened in any browser',
-        'ru' => 'Веб панель может быть открыта в любом браузере',
-    ],
-    'browser_notify_off'  => [
-        'en' => 'Web panel is only available from telegram',
-        'ru' => 'Веб панель доступна только из телеграмма',
-    ],
     'no updates'  => [
         'en' => 'No updates',
         'ru' => 'Нет обновлений',
@@ -340,14 +304,6 @@ $i = [
     'expose-iroutes'  => [
         'en' => 'Expose-iroutes',
         'ru' => 'Изоляция клиентов',
-    ],
-    'fill allowed clients'  => [
-        'en' => 'Fill allowed clients',
-        'ru' => 'Заполнить белый список клиентов',
-    ],
-    'delete allowed clients'  => [
-        'en' => 'Delete allowed clients',
-        'ru' => 'Очистить белый список клиентов',
     ],
     'success'  => [
         'en' => 'Success',

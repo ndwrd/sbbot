@@ -30,9 +30,6 @@ jobs:
           - name: php
             dockerfile: dockerfile/php.dockerfile
             image_arg: alpine:3.18.2
-          - name: ad
-            dockerfile: dockerfile/adguard.dockerfile
-            image_arg: ''
           - name: tg
             dockerfile: dockerfile/telegram.dockerfile
             image_arg: ''

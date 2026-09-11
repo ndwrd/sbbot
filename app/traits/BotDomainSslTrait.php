@@ -49,10 +49,10 @@ public function reconcileDomainForNewServer(array &$conf)
     {
         // nip.io кодирует IP прямо в тексте домена (X-X-X-X.nip.io -> резолвится в
         // X.X.X.X) — восстановление бэкапа на другой сервер тащит за собой домен с
-        // IP старого сервера, и всё, что от него зависит (ссылка mtproto, DoH/DoT
-        // AdGuard, поддомены naive/anytls — они хранятся короткими префиксами и
-        // просто приезжают на новый домен) тихо продолжает указывать на старый
-        // сервер. Свой (не nip.io) домен не трогаем — DNS на него держит админ сам.
+        // IP старого сервера, и всё, что от него зависит (ссылка mtproto, поддомены
+        // naive/anytls — они хранятся короткими префиксами и просто приезжают на
+        // новый домен) тихо продолжает указывать на старый сервер. Свой (не nip.io)
+        // домен не трогаем — DNS на него держит админ сам.
         if (empty($conf['domain']) || !preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $conf['domain'], $m)) {
             return false;
         }
@@ -116,7 +116,6 @@ public function deleteSSL($notmenu = false)
         $conf = $this->getPacConf();
         unset($conf['letsencrypt']);
         $this->setPacConf($conf);
-        $this->adguardSync();
         $this->cloakNginx();
         if (!$notmenu) {
             $this->menu('domains');
@@ -131,7 +130,6 @@ public function setSSL($name)
                 $out[] = 'Install certificate:';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $conf = $this->ensureProtocolSubdomains($conf);
-                $adguardClient = $conf['adguardkey'] ? "-d {$conf['adguardkey']}.{$conf['domain']}" : '';
                 // naive/anytls живут на своих (случайных, не протокол-именованных) поддоменах
                 // (см. cloakNginx()/upstream.conf) — сертификат должен покрывать их SAN-записями,
                 // иначе TLS-хендшейк не пройдёт.
@@ -141,7 +139,7 @@ public function setSSL($name)
                 // firewall хоста напрямую.
                 touch('/certs/.want_port80');
                 usleep(500000);
-                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d {$conf['naiveSubdomain']}.{$conf['domain']} -d {$conf['anytlsSubdomain']}.{$conf['domain']} $adguardClient --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
+                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d {$conf['naiveSubdomain']}.{$conf['domain']} -d {$conf['anytlsSubdomain']}.{$conf['domain']} --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
                 @unlink('/certs/.want_port80');
                 if ($code > 0) {
                     $this->send($this->input['chat'], "ERROR\n" . implode("\n", $out));
@@ -162,7 +160,6 @@ public function setSSL($name)
             $this->setPacConf($conf);
             file_put_contents('/certs/cert_private', $m[0]);
             file_put_contents('/certs/cert_public', preg_replace('~[^\s]+BEGIN PRIVATE KEY.+?END PRIVATE KEY[^\s]+~s', '', $bundle));
-            $this->adguardSync();
             $this->cloakNginx();
         } else {
             $this->update($this->input['chat'], $this->input['message_id'], "wrong format key");
@@ -178,7 +175,6 @@ public function delDomain()
         $conf = $this->getPacConf();
         unset($conf['domain']);
         $this->setPacConf($conf);
-        $this->adguardSync();
         $this->cloakNginx();
         $this->menu('domains');
     }
@@ -264,21 +260,7 @@ public function cloakNginx()
             );
         }
         $h = $this->getHashBot();
-        $s = empty($conf['adgbrowser']) ? '' : '#';
-        $r = <<<CONF
-        location /adguard/ {
-                access_log /logs/nginx_adguard_access;
-                if (\$cookie_c != "$h") {
-                    $s rewrite .* /webapp redirect;
-                }
-                proxy_pass http://ad/;
-                proxy_redirect / /adguard/;
-                proxy_cookie_path / /adguard/;
-            }
-            location
-        CONF;
-        $template = preg_replace('~(location /adguard.+?})\s*location~s', $r, $template);
-        $template = preg_replace('~(/webapp|/pac|/adguard|/ws|location /dns-query)~', '${1}' . $h, $template);
+        $template = preg_replace('~(/webapp|/pac|/ws)~', '${1}' . $h, $template);
         file_put_contents('/config/nginx.conf', $template);
         // путь /ws$hash считается заново в buildSingboxConfig() из getHashBot() при каждом
         // restartSingbox() — достаточно один раз перегенерировать конфиг после смены hash.

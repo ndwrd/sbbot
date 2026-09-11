@@ -19,7 +19,6 @@ networks:
                 - subnet: 10.10.1.0/24
                 - subnet: fd00:10:10:1::/64
 volumes:
-    adguard:
     warp:
 
 services:
@@ -97,8 +96,6 @@ services:
         depends_on:
             php:
                 condition: service_healthy
-            ad:
-                condition: service_started
             sbx:
                 condition: service_started
         healthcheck:
@@ -197,45 +194,9 @@ services:
             - up
             - ng
             - php
-            - ad
             - tg
             - sbx
             - dnstt
-    ad:
-        image: ghcr.io/ndwrd/sbbot/ad:latest
-        build:
-            dockerfile: dockerfile/adguard.dockerfile
-            args:
-                image: ${IMAGE}
-        volumes:
-            - ./config/.profile:/root/.ashrc:ro
-            - type: volume
-              target: /opt/adguardhome/work
-              source: adguard
-            - ./ssh:/ssh
-            - ./config/sshd_config:/etc/ssh/sshd_config
-            - ./config/:/config/
-            - ./certs/:/certs/
-            - ./logs/:/logs/
-            - ./scripts/start_ad.sh:/start_ad.sh
-        hostname: adguard
-        container_name: dns-${VER}
-        depends_on:
-            php:
-                condition: service_healthy
-        env_file:
-            - path: ./.env
-              required: true # default
-            - path: ./override.env
-              required: false
-        stop_grace_period: 1s
-        networks:
-            default:
-                ipv4_address: 10.10.0.5
-        cap_add:
-            - NET_ADMIN
-        entrypoint: ["/bin/sh", "/start_ad.sh"]
-        logging: *default-logging
     tg:
         image: ghcr.io/ndwrd/sbbot/tg:latest
         build:

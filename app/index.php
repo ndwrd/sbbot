@@ -34,11 +34,6 @@ switch (true) {
         echo json_encode($bot->saveTemplate($_POST['name'], $_POST['type'], $_POST['json']));
         break;
 
-    case preg_match('~^' . preg_quote("/webapp$hash/check") . '~', $_SERVER['REQUEST_URI']) && $webapp:
-        setcookie('c', $hash, 0, '/');
-        echo "/adguard$hash/";
-        break;
-
     case preg_match('~^' . preg_quote("/pac$hash/sub") . '~', $_SERVER['REQUEST_URI']) && file_exists(__DIR__ . '/subscription.php'):
         $bot->sub();
         exit;
@@ -52,6 +47,7 @@ switch (true) {
             case 's':
             case 'si':
             case 'cl':
+            case 'hp':
                 $bot->subscription();
                 exit;
 

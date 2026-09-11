@@ -80,7 +80,7 @@ public function action()
             case preg_match('~^/menu$~', $this->input['message'], $m):
             case preg_match('~^/start$~', $this->input['message'], $m):
             case preg_match('~^/menu$~', $this->input['callback'], $m):
-            case preg_match('~^/menu (?P<type>adguard|config|ss|lang|domains|nodes)$~', $this->input['callback'], $m):
+            case preg_match('~^/menu (?P<type>config|ss|lang|domains|nodes)$~', $this->input['callback'], $m):
                 $this->menu(type: $m['type'] ?? false, arg: $m['arg'] ?? false);
                 break;
             case preg_match('~^/addNode$~', $this->input['callback'], $m):
@@ -194,17 +194,11 @@ public function action()
             case preg_match('~^/ports$~', $this->input['callback'], $m):
                 $this->ports();
                 break;
-            case preg_match('~^/adgFillAllowedClients(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->adgFillAllowedClients(($m[1] ?? null) ?: false);
-                break;
             case preg_match('~^/offWarp$~', $this->input['callback'], $m):
                 $this->offWarp();
                 break;
             case preg_match('~^/id$~', $this->input['message'], $m):
                 $this->send($this->input['chat'], "your id: {$this->input['from']}\nchat id: {$this->input['chat']}", $this->input['message_id']);
-                break;
-            case preg_match('~^/adguardChBr$~', $this->input['callback'], $m):
-                $this->adguardChBr();
                 break;
             case preg_match('~^/mtproto$~', $this->input['callback'], $m):
                 $this->mtproto();
@@ -287,26 +281,11 @@ public function action()
             case preg_match('~^/resetXrStats$~', $this->input['callback'], $m):
                 $this->resetXrStats();
                 break;
-            case preg_match('~^/checkdns$~', $this->input['callback'], $m):
-                $this->checkdns();
-                break;
-            case preg_match('~^/adguardpsswd$~', $this->input['callback'], $m):
-                $this->adguardpsswd();
-                break;
-            case preg_match('~^/setAdguardKey$~', $this->input['callback'], $m):
-                $this->setAdguardKey();
-                break;
             case preg_match('~^/addadmin$~', $this->input['callback'], $m):
                 $this->enterAdmin();
                 break;
             case preg_match('~^/enterPage$~', $this->input['callback'], $m):
                 $this->enterPage();
-                break;
-            case preg_match('~^/adguardreset$~', $this->input['callback'], $m):
-                $this->adguardreset();
-                break;
-            case preg_match('~^/addupstream$~', $this->input['callback'], $m):
-                $this->addupstream();
                 break;
             case preg_match('~^/setSSL (\w+)$~', $this->input['callback'], $m):
                 $this->setSSL($m[1]);
@@ -356,9 +335,6 @@ public function action()
                 break;
             case preg_match('~^/qrMtproto$~', $this->input['callback'], $m):
                 $this->qrMtproto();
-                break;
-            case preg_match('~^/delupstream (\d+)$~', $this->input['callback'], $m):
-                $this->delupstream($m[1]);
                 break;
             case preg_match('~^/deldomain$~', $this->input['callback'], $m):
                 $this->delDomain();
@@ -720,9 +696,6 @@ public function menu($type = false, $arg = false, $return = false)
                     if (!empty($conf['anytlsSubdomain'])) {
                         $main[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
                     }
-                    if (!empty($conf['adguardkey'])) {
-                        $main[] = "{$conf['adguardkey']}.{$conf['domain']} adguard DOT";
-                    }
                     if (in_array($conf['domain'], $certs)) {
                         $main[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
                     }
@@ -736,13 +709,11 @@ public function menu($type = false, $arg = false, $return = false)
             $statusCol1 = [
                 $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
                 $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
-                $this->i18n(exec("JSON=1 timeout 2 dnslookup google.com ad") ? 'on' : 'off') . ' ' . $this->i18n('ad_title'),
                 $this->i18n($this->warpStatus() == 'on' ? 'on' : 'off') . ' ' . $this->i18n('warp'),
             ];
             $statusCol2 = [
                 $this->i18n('on') . ' 443',
                 $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
-                $this->i18n($ports['ad']['enable'] ? 'on' : 'off') . ($ports['ad']['enable'] ? ' ' . $ports['ad']['port'] : 'port unavailable'),
                 '',
             ];
             // Кнопка/статус dnstt в меню появляются насовсем после первой
@@ -782,12 +753,6 @@ public function menu($type = false, $arg = false, $return = false)
                     'callback_data' => "/mtproto",
                 ],
             ],
-            [
-                [
-                    'text'          => $this->i18n('ad_title'),
-                    'callback_data' => "/menu adguard",
-                ],
-            ],
         ];
         // Кнопка появляется насовсем после первой настройки dnstt — см.
         // setdnsttDomain()/setdnsttPassword(); до этого в меню её нет.
@@ -818,7 +783,6 @@ public function menu($type = false, $arg = false, $return = false)
                     $mainButtons
                 )
             ],
-            'adguard'      => $type == 'adguard' ? $this->adguardMenu()                    : false,
             'config'       => $type == 'config'  ? $this->configMenu()                     : false,
             'lang'         => $type == 'lang'    ? $this->menuLang()                       : false,
             'domains'      => $type == 'domains' ? $this->domainsMenu()                    : false,

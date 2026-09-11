@@ -27,8 +27,6 @@ ng: # консоль сервиса
 	docker compose exec ng /bin/sh
 up: # консоль сервиса
 	docker compose exec up /bin/sh
-ad: # консоль сервиса
-	docker compose exec ad /bin/sh
 wp: # консоль сервиса
 	docker compose exec wp /bin/sh
 tg: # консоль сервиса
@@ -56,7 +54,7 @@ reset:
 	make d
 	git reset --hard
 	git clean -fd
-	docker volume rm sbbot_adguard sbbot_warp
+	-docker volume rm sbbot_warp
 	make u
 backup:
 	docker compose exec php php backup.php > backup.json
