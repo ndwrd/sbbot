@@ -98,32 +98,42 @@ public function nodeMenu($id)
             $text[]    = "<code>~{$tagPrefix}:outbounds~</code>";
             // Ровно те же теги, что попадают в selector/⚡️Auto реальной
             // подписки (buildSingMultiOutbounds()) — чтобы можно было
-            // скопировать готовую строку прямо в свой шаблон.
-            $text[] = '<blockquote>Outbounds:';
-            foreach (['Vless', 'Naive', 'Hy2', 'Anytls'] as $label) {
-                $text[] = "<code>{$tagPrefix}|{$label}</code>";
+            // скопировать готовую строку прямо в свой шаблон. Выключенный
+            // (toggleOutbound()) протокол пропадает и отсюда, и из реальной
+            // подписки — списки не расходятся.
+            $nodeOff = $node['outboundsOff'] ?? [];
+            $labels  = array_filter(
+                ['vless' => 'Vless', 'naive' => 'Naive', 'hysteria2' => 'Hy2', 'anytls' => 'Anytls'],
+                fn ($k) => empty($nodeOff[$k]),
+                ARRAY_FILTER_USE_KEY
+            );
+            if (!empty($labels)) {
+                $text[] = '<blockquote>Outbounds:';
+                foreach ($labels as $label) {
+                    $text[] = "<code>{$tagPrefix}|{$label}</code>";
+                }
+                $text[] = '</blockquote>';
             }
-            $text[] = '</blockquote>';
         }
         $data   = [
             [
                 [
-                    'text'          => "{$this->i18n('Domains')} & {$this->i18n('Ports')}",
-                    'callback_data' => "/nodeDomains $id",
+                    'text'          => $this->i18n('outbounds'),
+                    'callback_data' => "/nodeOutbounds $id",
                 ],
                 [
-                    'text'          => $this->i18n('mtproto'),
-                    'callback_data' => "/nodeMtproto $id",
+                    'text'          => "{$this->i18n('Domains')} & {$this->i18n('Ports')}",
+                    'callback_data' => "/nodeDomains $id",
                 ],
             ],
             [
                 [
-                    'text'          => 'Stats',
-                    'callback_data' => "/nodeStats $id",
+                    'text'          => $this->i18n('mtproto'),
+                    'callback_data' => "/nodeMtproto $id",
                 ],
                 [
-                    'text'          => $this->i18n('sync users'),
-                    'callback_data' => "/nodeSyncUsers $id",
+                    'text'          => 'Stats',
+                    'callback_data' => "/nodeStats $id",
                 ],
             ],
             [
@@ -132,11 +142,15 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeLogs $id",
                 ],
                 [
-                    'text'          => $this->i18n('update'),
-                    'callback_data' => "/nodeUpdate $id",
+                    'text'          => $this->i18n('sync users'),
+                    'callback_data' => "/nodeSyncUsers $id",
                 ],
             ],
             [
+                [
+                    'text'          => $this->i18n('update'),
+                    'callback_data' => "/nodeUpdate $id",
+                ],
                 [
                     'text'          => $off ? $this->i18n('turn on') : $this->i18n('turn off'),
                     'callback_data' => "/nodeToggleOff $id",

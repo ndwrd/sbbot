@@ -1,0 +1,48 @@
+{
+    "Name": "sbbot",
+    "GlobalProxy": "true",
+    "UseChunkFiles": "false",
+    "RemoteDNSType": "DoH",
+    "RemoteDNSDomain": "https://1.1.1.1/dns-query",
+    "RemoteDNSIP": "1.1.1.1",
+    "DomesticDNSType": "DoH",
+    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+    "DomesticDNSIP": "77.88.8.8",
+    "DnsHosts": {},
+    "RouteOrder": "block-proxy-direct",
+    "DomainStrategy": "IPIfNonMatch",
+    "FakeDNS": "false",
+    "Geositeurl": "https://cdn.jsdelivr.net/gh/DigneZzZ/routing@main/v2ray/happ/geosite.dat",
+    "Geoipurl": "https://cdn.jsdelivr.net/gh/DigneZzZ/routing@main/v2ray/happ/geoip.dat",
+    "DirectSites": [
+        "geosite:private",
+        "geosite:category-ru",
+        "geosite:microsoft",
+        "geosite:apple",
+        "geosite:google-play",
+        "geosite:steam",
+        "geosite:ip-check",
+        "geosite:vpndetect"
+    ],
+    "DirectIp": [
+        "geoip:private",
+        "geoip:ru"
+    ],
+    "BlockSites": [
+        "geosite:category-ads",
+        "geosite:win-spy"
+    ],
+    "BlockIp": [],
+    "ProxySites": [
+        "geosite:telegram",
+        "geosite:github",
+        "geosite:discord",
+        "geosite:whatsapp",
+        "geosite:banned-ru",
+        "geosite:youtube",
+        "geosite:ai"
+    ],
+    "ProxyIp": [
+        "geoip:telegram"
+    ]
+}

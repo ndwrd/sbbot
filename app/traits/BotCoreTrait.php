@@ -89,6 +89,9 @@ public function action()
             case preg_match('~^/nodeMenu (\w+)$~', $this->input['callback'], $m):
                 $this->nodeMenu($m[1]);
                 break;
+            case preg_match('~^/nodeOutbounds (\w+)$~', $this->input['callback'], $m):
+                $this->outboundsMenu($m[1]);
+                break;
             case preg_match('~^/delNode (\w+)$~', $this->input['callback'], $m):
                 $this->delNode($m[1]);
                 break;
@@ -347,6 +350,10 @@ public function action()
             case preg_match('~^/qrVless (\d+)(?:_(\d+))?$~', $this->input['callback'], $m):
                 $this->qrVless($m[1], ($m[2] ?? null) ?: false);
                 break;
+
+            case preg_match('~^/qrHapp (\d+)$~', $this->input['callback'], $m):
+                $this->qrHapp($m[1]);
+                break;
             case preg_match('~^/qrMtproto$~', $this->input['callback'], $m):
                 $this->qrMtproto();
                 break;
@@ -373,6 +380,12 @@ public function action()
                 break;
             case preg_match('~^/singbox(?: (\d+))?$~', $this->input['callback'], $m):
                 $this->singbox(($m[1] ?? null) ?: 0);
+                break;
+            case preg_match('~^/outboundsMenu$~', $this->input['callback'], $m):
+                $this->outboundsMenu();
+                break;
+            case preg_match('~^/toggleOutbound (\w+)(?: (\w+))?$~', $this->input['callback'], $m):
+                $this->toggleOutbound($m[1], $m[2] ?? null);
                 break;
             case preg_match('~^/templatesMenu$~', $this->input['callback'], $m):
                 $this->templatesMenu();

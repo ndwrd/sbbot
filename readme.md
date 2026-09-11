@@ -62,3 +62,30 @@ Mihomo, тот же смысл:
 всякого плейсхолдера. В sing-box это `selector` со вложенной `⚡️Auto`
 (`urltest`); в mihomo отдельной auto-группы нет — сам `Proxy` уже
 `type: fallback` и сам умеет health-check-выбор.
+
+## Подписка для Happ / INCY
+
+В отличие от xray/sing-box/mihomo, Happ и INCY не грузят наш JSON как
+конфиг ядра — у них свой движок и свой формат. Подписка (`t=hp`) отдаёт:
+
+- **Тело** — просто список `vless://`/`hysteria2://` ссылок (base64), по
+  одной паре на каждый готовый сервер (main + ноды), с тем же
+  `{flag}{geoTag}|` префиксом в имени, что и у sing-box/mihomo.
+- **Роутинг** — отдельным HTTP-заголовком `routing:
+  happ://routing/onadd/<base64 JSON>` на том же ответе. База —
+  `config/happ_routing.json` (адаптированный lite-профиль
+  [DigneZzZ/routing](https://github.com/DigneZzZ/routing), `Geositeurl`/
+  `Geoipurl` смотрят на их CDN), поверх которого `buildHappRouting()`
+  дописывает пользовательские списки бота: `blocklist` → `BlockSites`,
+  `includelist`+`warplist` → `ProxySites`, `subnetlist` → `ProxyIp`.
+
+Готового deep-link'а на "добавить подписку в один тап" у Happ/INCY
+официально не задокументировано — подписка добавляется вставкой обычной
+ссылки/QR в форму приложения. А вот сам *routing*-профиль как раз можно
+активировать в один тап: `happ://routing/onadd/<base64>` /
+`incy://routing/onadd/<base64>` — задокументированные deeplink-схемы
+каждого приложения (у Happ и INCY они разные, потому кнопки две). На
+странице пользователя это строки `routing://happ` / `routing://incy` —
+открывают приложение и сразу активируют/перезаписывают профиль, не
+дожидаясь ближайшего обновления подписки (когда профиль и так придёт
+через HTTP-заголовок `routing:`).

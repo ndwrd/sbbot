@@ -4,6 +4,17 @@
         "error": "",
         "loglevel": "warning"
     },
+    "dns": {
+        "servers": [
+            "fakedns",
+            "https://1.1.1.1/dns-query",
+            "https://8.8.8.8/dns-query"
+        ]
+    },
+    "fakedns": {
+        "ipPool": "198.18.0.0/15",
+        "poolSize": 65535
+    },
     "inbounds": [
         {
             "tag": "socks",
@@ -12,10 +23,7 @@
             "protocol": "socks",
             "sniffing": {
                 "enabled": true,
-                "destOverride": [
-                    "http",
-                    "tls"
-                ],
+                "destOverride": ["http", "tls", "quic", "fakedns"],
                 "routeOnly": false
             },
             "settings": {
@@ -31,10 +39,7 @@
             "protocol": "http",
             "sniffing": {
                 "enabled": true,
-                "destOverride": [
-                    "http",
-                    "tls"
-                ],
+                "destOverride": ["http", "tls", "quic", "fakedns"],
                 "routeOnly": false
             },
             "settings": {
@@ -50,7 +55,11 @@
             "protocol": "freedom"
         },
         {
-            "tag": "~outbound~",
+            "tag": "dns-out",
+            "protocol": "dns"
+        },
+        {
+            "tag": "Proxy",
             "protocol": "vless",
             "settings": {
                 "vnext": [
@@ -83,6 +92,27 @@
             }
         },
         {
+            "tag": "HY2",
+            "protocol": "hysteria",
+            "settings": {
+                "version": 2,
+                "address": "~domain~",
+                "port": 443
+            },
+            "streamSettings": {
+                "network": "hysteria",
+                "security": "tls",
+                "tlsSettings": {
+                    "serverName": "~domain~"
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "auth": "~password~",
+                    "udpIdleTimeout": 60
+                }
+            }
+        },
+        {
             "tag": "block",
             "protocol": "blackhole",
             "settings": {
@@ -108,6 +138,12 @@
             },
             {
                 "type": "field",
+                "outboundTag": "dns-out",
+                "network": "udp",
+                "port": "53"
+            },
+            {
+                "type": "field",
                 "outboundTag": "direct",
                 "protocol": ["bittorrent"]
             },
@@ -123,7 +159,7 @@
             },
             {
                 "type": "field",
-                "outboundTag": "~outbound~",
+                "outboundTag": "Proxy",
                 "domain": [
                     "geosite:anthropic",
                     "geosite:github-copilot",
@@ -147,17 +183,17 @@
             },
             {
                 "type": "field",
-                "outboundTag": "~outbound~",
+                "outboundTag": "Proxy",
                 "domain": "~domains~"
             },
             {
                 "type": "field",
-                "outboundTag": "~outbound~",
+                "outboundTag": "Proxy",
                 "ip": "~subnet~"
             },
             {
                 "type": "field",
-                "outboundTag": "~outbound~",
+                "outboundTag": "Proxy",
                 "domain": "~warp~"
             },
             {

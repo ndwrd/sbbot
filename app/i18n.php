@@ -469,6 +469,10 @@ $i = [
         'en' => 'Routes',
         'ru' => 'Маршруты',
     ],
+    'outbounds'  => [
+        'en' => 'Outbounds',
+        'ru' => 'Outbounds',
+    ],
     'rulesset'  => [
         'en' => 'Rulesset',
         'ru' => 'Списки правил',
@@ -516,6 +520,10 @@ $i = [
     'qr singbox'  => [
         'en' => 'QR singbox',
         'ru' => 'QR singbox',
+    ],
+    'qr happ'  => [
+        'en' => 'QR happ/incy',
+        'ru' => 'QR happ/incy',
     ],
     'nodes'        => [
         'en' => 'Nodes',

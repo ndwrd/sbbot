@@ -725,6 +725,65 @@ public function linkVless($i, $s = false)
         }
     }
 
+public function happSubUrl($uid)
+    {
+        $pac    = $this->getPacConf();
+        $domain = $this->getDomain($pac['transport'] != 'Reality');
+        $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
+        $hash   = $this->getHashBot();
+        return "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
+            'h' => $hash,
+            't' => 'hp',
+            's' => $uid,
+        ]));
+    }
+
+public function buildHappRouting($pac)
+    {
+        $c                 = json_decode(file_get_contents('/config/happ_routing.json'), true);
+        $c['LastUpdated']  = date('Y-m-d');
+        foreach (array_keys(array_filter(($pac['blocklist'] ?? null) ?: [])) as $d) {
+            $c['BlockSites'][] = $d;
+        }
+        foreach (array_keys(array_filter(($pac['includelist'] ?? null) ?: [])) as $d) {
+            $c['ProxySites'][] = $d;
+        }
+        foreach (array_keys(array_filter(($pac['warplist'] ?? null) ?: [])) as $d) {
+            $c['ProxySites'][] = $d;
+        }
+        foreach (array_keys(array_filter(($pac['subnetlist'] ?? null) ?: [])) as $d) {
+            $c['ProxyIp'][] = $d;
+        }
+        return base64_encode(json_encode($c, JSON_UNESCAPED_SLASHES));
+    }
+
+public function buildHappLinks($domain, $hash, $uid, $password)
+    {
+        // Своего selector/urltest у Happ нет — просто список ссылок, клиент
+        // сам умеет пинговать/переключаться между ними в своём UI.
+        $servers = !empty($this->getNodes())
+            ? $this->getSubscriptionServers()
+            : [['tag' => null, 'domain' => $domain, 'hash' => $hash, 'isMain' => true]];
+
+        $lines = [];
+        foreach ($servers as $s) {
+            // Для main берём тот же $domain/$hash, что уже посчитан выше
+            // (учитывает ?cdn= оверрайд) — у getSubscriptionServers() для
+            // main это сырой pac['domain'], без CDN-подмены.
+            $d      = !empty($s['isMain']) ? $domain : $s['domain'];
+            $h      = !empty($s['isMain']) ? $hash : $s['hash'];
+            $prefix = $s['tag'] ? "{$s['tag']}|" : '';
+            $wspath = rawurlencode("/ws{$h}");
+            $lines[] = "vless://{$uid}@{$d}:443"
+                . "?flow=&path={$wspath}&security=tls&sni={$d}&fp=chrome&type=ws"
+                . "#{$prefix}Vless";
+            $lines[] = "hysteria2://{$password}@{$d}:443/"
+                . "?insecure=0&sni={$d}"
+                . "#{$prefix}HY2";
+        }
+        return implode("\n", $lines);
+    }
+
 public function delxr($i)
     {
         $r  = $this->getSingbox();
@@ -1142,7 +1201,14 @@ public function singbox($page = 0)
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
         $text[] = 'Transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
-        $text[] = 'Outbounds: Vless, Hysteria2, Naive, Anytls';
+        $off    = $p['outboundsOff'] ?? [];
+        $labels = [];
+        foreach ($this->outboundProtocols() as $key => $label) {
+            if (empty($off[$key])) {
+                $labels[] = $label;
+            }
+        }
+        $text[] = 'Outbounds: ' . (implode(', ', $labels) ?: '—');
         $geoTag = $this->ensureMainGeoTag();
         $botTag = $this->countryFlag(preg_replace('~\d+$~', '', $geoTag)) . $geoTag;
         $text[] = '';
@@ -1151,16 +1217,22 @@ public function singbox($page = 0)
         $st = $this->getSingboxStats();
         $data[] = [
             [
+                'text'          => $this->i18n('outbounds'),
+                'callback_data' => "/outboundsMenu",
+            ],
+            [
+                'text'          => $this->i18n('templates'),
+                'callback_data' => "/templatesMenu",
+            ],
+        ];
+        $data[] = [
+            [
                 'text'          => $this->i18n('routes'),
                 'callback_data' => "/routes",
             ],
             [
                 'text'          => 'Stats',
                 'callback_data' => "/statsMenu",
-            ],
-            [
-                'text'          => $this->i18n('templates'),
-                'callback_data' => "/templatesMenu",
             ],
         ];
         $data[] = [
@@ -1395,6 +1467,8 @@ public function userXr($i)
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['username']}'>import://karing</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['username']}'>import://mihomo</a>";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['username']}'>import://rabbit-hole</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=happ&s={$c['id']}#{$c['username']}'>routing://happ</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=incy&s={$c['id']}#{$c['username']}'>routing://incy</a>";
 
         $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
 
@@ -1417,6 +1491,9 @@ public function userXr($i)
         $text[] = "\nxray config: <pre><code>$xr</code></pre>";
         $text[] = "sing-box config: <pre><code>$si</code></pre>";
         $text[] = "mihomo config: <pre><code>$cl</code></pre>";
+
+        $hp = $this->happSubUrl($c['id']);
+        $text[] = "happ/incy subscription: <pre><code>$hp</code></pre>";
 
         $st       = $this->getSingboxStats();
         $download = $this->getBytes($st['users'][$i]['global']['download'] + $st['users'][$i]['session']['download']);
@@ -1498,6 +1575,10 @@ public function userXr($i)
             [
                 'text'          => $this->i18n('qr singbox'),
                 'callback_data' => "/qrVless {$i}_2",
+            ],
+            [
+                'text'          => $this->i18n('qr happ'),
+                'callback_data' => "/qrHapp $i",
             ],
         ];
         $data[] = [
@@ -1590,6 +1671,9 @@ public function subscription($return = false)
             case 'cl':
                 $type = 'clash';
                 break;
+            case 'hp':
+                $type = 'happ';
+                break;
         }
         $pac    = $this->getPacConf();
         $domain = ($_GET['cdn'] ?? null) ?: (($_SERVER['SERVER_NAME'] ?? null) ?: $this->getDomain($pac['transport'] != 'Reality'));
@@ -1613,6 +1697,28 @@ public function subscription($return = false)
         if ($flag) {
             header('500', true, 500);
             exit;
+        }
+
+        if ($_GET['t'] == 'hp') {
+            // Отдельная кнопка "в один тап" — открывает сразу Happ/INCY и
+            // активирует routing-профиль (happ://routing/onadd/... —
+            // задокументированная у них самих deeplink-схема). Готового
+            // deeplink'а на добавление именно подписки у них не
+            // задокументировано, поэтому им остаётся только сама ссылка/QR
+            // ниже — руками вставить в приложение.
+            if (!empty($_GET['r']) && in_array($_GET['r'], ['happ', 'incy'], true)) {
+                header("Location: {$_GET['r']}://routing/onadd/" . $this->buildHappRouting($pac));
+                exit;
+            }
+            // Happ/INCY — не грузит наш JSON целиком как ядро (у них свой
+            // движок), поэтому тут не тот же путь, что у si/s/cl: тело —
+            // просто список vless/hysteria2 ссылок, а роутинг (direct/proxy/
+            // block по доменам и IP) едет отдельным HTTP-заголовком
+            // routing: happ://routing/onadd/<base64> поверх того же ответа.
+            header('routing: happ://routing/onadd/' . $this->buildHappRouting($pac));
+            header('Content-type: text/plain; charset=utf-8');
+            echo base64_encode($this->buildHappLinks($domain, $hash, $uid, $password));
+            return;
         }
 
         if (!empty($_GET['r'])) {
@@ -1670,6 +1776,7 @@ public function subscription($return = false)
                 $c = $pac["{$type}templates"][base64_decode($pac["default{$type}template"])];
                 break;
         }
+        $c = $this->filterMainOutbounds($type, $c);
 
         // Ноды в подписку подмешиваются только для активного (не dormant
         // Reality/xhttp) транспорта — там шаблон уже в финальном WS-виде, и
@@ -1683,10 +1790,16 @@ public function subscription($return = false)
         // (сейчас — почти всех) установок.
         $servers     = (!empty($this->getNodes()) && !in_array($pac['transport'] ?? null, ['Reality', 'xhttp'], true)) ? $this->getSubscriptionServers() : [];
         $multiServer = count($servers) > 1;
-        // pac['outbound']/"Outbound name" убраны — sing-box больше не полагается
-        // на этот алиас (см. buildSingMultiOutbounds(), там теги фиксированные —
-        // "Proxy"/"⚡️Auto" в самом шаблоне). clash/xray пока используют его как
-        // раньше, до своей очереди на такую же переделку.
+        // pac['outbound']/"Outbound name" убраны — sing-box и xray больше не
+        // полагаются на этот алиас, у обоих в шаблоне фиксированный литерал
+        // "Proxy" (см. buildSingMultiOutbounds(); для xray — просто тег
+        // outbound'а + outboundTag в routing.rules, без selector'а, которого
+        // у xray-core нет). clash пока использует его по-старому, до своей
+        // очереди на такую же переделку. $outbound всегда равен 'proxy' (в
+        // нижнем регистре — сеттера для pac['outbound'] больше нет), поэтому
+        // для sing/xray-шаблонов (там тег "Proxy") ниже ничего не заменяет и
+        // $index не находится — это ок, $index нужен только дормант-веткам
+        // Reality/xhttp, которые сейчас не активны ни для одного из форматов.
         $outbound = ($pac['outbound'] ?? null) ?: 'proxy';
         $c = json_decode($this->replaceTags(json_encode($c), [
             '~outbound~' => $outbound,
@@ -1908,51 +2021,6 @@ public function subscription($return = false)
         ]), true);
 
         switch ($_GET['t']) {
-            case 's':
-                if (!empty($c['routing']['rules'])) {
-                    $ips = $domains = [];
-                    foreach ($c['routing']['rules'] as $k => $v) {
-                        if (array_key_exists('domain', $v) && !empty($v['domain'])) {
-                            foreach ($v['domain'] as $j) {
-                                if (!preg_match('~^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{1,2})?$~', $j)) {
-                                    $domains[$v['outboundTag']][] = $j;
-                                } else {
-                                    $ips[$v['outboundTag']][] = $j;
-                                }
-                            }
-                        }
-                        if (array_key_exists('ip', $v) && !empty($v['ip'])) {
-                            foreach ($v['domain'] as $j) {
-                                if (!preg_match('~^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{1,2})?$~', $j)) {
-                                    $domains[$v['outboundTag']][] = $j;
-                                } else {
-                                    $ips[$v['outboundTag']][] = $j;
-                                }
-                            }
-                        }
-                    }
-                    $c['routing']['rules'] = [];
-
-                    if (!empty($domains)) {
-                        foreach ($domains as $k => $v) {
-                            $c['routing']['rules'][] = [
-                                "type"        => "field",
-                                "outboundTag" => $k,
-                                "domain"      => $v
-                            ];
-                        }
-                    }
-                    if (!empty($ips)) {
-                        foreach ($ips as $k => $v) {
-                            $c['routing']['rules'][] = [
-                                "type"        => "field",
-                                "outboundTag" => $k,
-                                "ip"          => $v
-                            ];
-                        }
-                    }
-                }
-                break;
             case 'si':
                 $c['route'] = $this->addRuleSet($c['route']);
                 $c['route'] = $this->createRuleSet($c['route'], $uid, $domain);
@@ -2110,6 +2178,7 @@ public function getSubscriptionServers()
             'hash'            => $this->getHashBot(),
             'naiveSubdomain'  => $pac['naiveSubdomain'] ?? '',
             'anytlsSubdomain' => $pac['anytlsSubdomain'] ?? '',
+            'outboundsOff'    => $pac['outboundsOff'] ?? [],
             'isMain'          => true,
         ]];
         foreach ($pac['nodes'] ?? [] as $node) {
@@ -2124,10 +2193,195 @@ public function getSubscriptionServers()
                 'hash'            => $node['hash'] ?? '',
                 'naiveSubdomain'  => $node['naiveSubdomain'] ?? '',
                 'anytlsSubdomain' => $node['anytlsSubdomain'] ?? '',
+                'outboundsOff'    => $node['outboundsOff'] ?? [],
                 'isMain'          => false,
             ];
         }
         return $servers;
+    }
+
+public function outboundProtocols()
+    {
+        // Канонический список протоколов-переключателей — общий для Бота и
+        // нод, одни и те же ключи хранятся в pac['outboundsOff']/
+        // node['outboundsOff']. Не каждый формат подписки поддерживает все 4
+        // (clash — без naive, xray — только vless/hysteria2), но сам
+        // переключатель один и тот же для всех форматов сразу.
+        return [
+            'vless'     => 'Vless',
+            'hysteria2' => 'Hysteria2',
+            'naive'     => 'Naive',
+            'anytls'    => 'AnyTLS',
+        ];
+    }
+
+public function outboundsOffFor($nodeId = null)
+    {
+        return $nodeId !== null
+            ? ($this->getNode($nodeId)['outboundsOff'] ?? [])
+            : ($this->getPacConf()['outboundsOff'] ?? []);
+    }
+
+public function toggleOutbound($proto, $nodeId = null)
+    {
+        if ($nodeId !== null) {
+            $node = $this->getNode($nodeId);
+            if (empty($node)) {
+                return;
+            }
+            $node['outboundsOff'][$proto] = empty($node['outboundsOff'][$proto]);
+            $this->setNode($nodeId, $node);
+        } else {
+            $pac = $this->getPacConf();
+            $pac['outboundsOff'][$proto] = empty($pac['outboundsOff'][$proto]);
+            $this->setPacConf($pac);
+        }
+        $this->outboundsMenu($nodeId);
+    }
+
+public function outboundsMenu($nodeId = null)
+    {
+        if ($nodeId !== null && empty($this->getNode($nodeId))) {
+            $r = $this->nodesMenu();
+            $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
+            return;
+        }
+        $off = $this->outboundsOffFor($nodeId);
+        if ($nodeId !== null) {
+            $node = $this->getNode($nodeId);
+            $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('outbounds');
+        } else {
+            $text[] = "Menu -> " . $this->i18n('vless') . " -> " . $this->i18n('outbounds');
+        }
+        $data = [];
+        foreach ($this->outboundProtocols() as $key => $label) {
+            $enabled = empty($off[$key]);
+            $data[]  = [
+                [
+                    'text'          => $label,
+                    'callback_data' => $nodeId !== null ? "/toggleOutbound {$key} {$nodeId}" : "/toggleOutbound {$key}",
+                ],
+                [
+                    'text'          => $enabled ? '🟢' : '🔴',
+                    'callback_data' => $nodeId !== null ? "/toggleOutbound {$key} {$nodeId}" : "/toggleOutbound {$key}",
+                ],
+            ];
+        }
+        $data[] = [
+            [
+                'text'          => $this->i18n('back'),
+                'callback_data' => $nodeId !== null ? "/nodeMenu {$nodeId}" : "/singbox",
+            ],
+        ];
+        $this->update(
+            $this->input['chat'],
+            $this->input['message_id'],
+            implode("\n", $text ?: ['...']),
+            $data ?: false,
+        );
+    }
+
+public function filterMainOutbounds($type, $c)
+    {
+        // Выключенные на Боте протоколы вырезаются из origin-шаблона ещё до
+        // любых других мутаций — единая точка для si/s/cl, срабатывает и без
+        // нод (buildXxxMultiOutbounds() для однонодовых/безнодовых установок
+        // вообще не вызывается).
+        $off = $this->getPacConf()['outboundsOff'] ?? [];
+        if (empty($off)) {
+            return $c;
+        }
+        switch ($type) {
+            case 'sing':
+                return $this->filterSingOutbounds($c, $off);
+            case 'clash':
+                return $this->filterClashOutbounds($c, $off);
+            case 'xray':
+                return $this->filterXrayOutbounds($c, $off);
+        }
+        return $c;
+    }
+
+public function filterSingOutbounds($c, $off)
+    {
+        $removedTags = [];
+        foreach ($c['outbounds'] ?? [] as $k => $o) {
+            if (!empty($o['type']) && !empty($off[$o['type']])) {
+                $removedTags[] = $o['tag'];
+                unset($c['outbounds'][$k]);
+            }
+        }
+        if (empty($removedTags)) {
+            return $c;
+        }
+        $c['outbounds'] = array_values($c['outbounds']);
+        foreach ($c['outbounds'] as $k => $o) {
+            if (!in_array($o['tag'] ?? null, ['Proxy', '⚡️Auto'], true)) {
+                continue;
+            }
+            $c['outbounds'][$k]['outbounds'] = array_values(array_diff($o['outbounds'], $removedTags));
+            if (($o['tag'] ?? null) === 'Proxy' && in_array($o['default'] ?? null, $removedTags, true)) {
+                $c['outbounds'][$k]['default'] = $c['outbounds'][$k]['outbounds'][0] ?? '';
+            }
+        }
+        return $c;
+    }
+
+public function filterClashOutbounds($c, $off)
+    {
+        $removedNames = [];
+        foreach ($c['proxies'] ?? [] as $k => $p) {
+            if (!empty($p['type']) && !empty($off[$p['type']])) {
+                $removedNames[] = $p['name'];
+                unset($c['proxies'][$k]);
+            }
+        }
+        if (empty($removedNames)) {
+            return $c;
+        }
+        $c['proxies'] = array_values($c['proxies']);
+        foreach ($c['proxy-groups'] ?? [] as $k => $g) {
+            if (($g['name'] ?? null) === 'Proxy') {
+                $c['proxy-groups'][$k]['proxies'] = array_values(array_diff($g['proxies'], $removedNames));
+            }
+        }
+        return $c;
+    }
+
+public function filterXrayOutbounds($c, $off)
+    {
+        // У xray-core protocol для HY2 — "hysteria" (не "hysteria2", в
+        // отличие от sing/clash), naive/anytls тут вообще нет outbound'ов.
+        $map         = ['vless' => 'vless', 'hysteria2' => 'hysteria'];
+        $removedTags = [];
+        foreach ($c['outbounds'] ?? [] as $k => $o) {
+            foreach ($map as $key => $xrayType) {
+                if (($o['protocol'] ?? null) === $xrayType && !empty($off[$key])) {
+                    $removedTags[] = $o['tag'];
+                    unset($c['outbounds'][$k]);
+                }
+            }
+        }
+        if (empty($removedTags)) {
+            return $c;
+        }
+        $c['outbounds'] = array_values($c['outbounds']);
+        // "Proxy" (Vless) — единственный тег, на который ссылаются
+        // routing.rules; если его выключили, а HY2 жив — переключаем правила
+        // на HY2. Если выключить оба сразу — роутинг останется битым, это
+        // осознанная граница: для xray без selector'а восстанавливать тут
+        // нечем, а полное отключение проксирования — маловероятный сценарий.
+        if (in_array('Proxy', $removedTags, true)) {
+            $stillHasHy2 = (bool) array_filter($c['outbounds'], fn ($o) => ($o['tag'] ?? null) === 'HY2');
+            if ($stillHasHy2) {
+                foreach ($c['routing']['rules'] ?? [] as $k => $r) {
+                    if (($r['outboundTag'] ?? null) === 'Proxy') {
+                        $c['routing']['rules'][$k]['outboundTag'] = 'HY2';
+                    }
+                }
+            }
+        }
+        return $c;
     }
 
 public function applyMultiServerOutbounds($type, $c, $outbound, $uid, $username, $password)
@@ -2180,12 +2434,20 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
             if (!empty($s['isMain'])) {
                 // Уже есть в шаблоне как есть — просто регистрируем теги для
                 // "~{тег}:outbounds~" в ручных группах, ничего не клонируем.
-                foreach ($protocols as $label) {
+                // Выключенный на Боте протокол уже вырезан из $c
+                // (filterMainOutbounds()) — тег под него не регистрируем.
+                foreach ($protocols as $type => $label) {
+                    if (!empty($s['outboundsOff'][$type])) {
+                        continue;
+                    }
                     $byGeo[$s['tag']][] = "{$s['tag']}|{$label}";
                 }
                 continue;
             }
             foreach ($protocols as $type => $label) {
+                if (!empty($s['outboundsOff'][$type])) {
+                    continue;
+                }
                 $tpl = $templates[$type] ?? null;
                 if (empty($tpl)) {
                     continue;
@@ -2290,13 +2552,20 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
             if (!empty($s['isMain'])) {
                 // Уже корректный вид в самом шаблоне — просто регистрируем
                 // для "~{тег}:outbounds~" в кастомных группах админа, повторно
-                // не клонируем и не дублируем в proxies.
-                foreach ($protocols as $label) {
+                // не клонируем и не дублируем в proxies. Выключенный на Боте
+                // протокол уже вырезан из $c (filterMainOutbounds()).
+                foreach ($protocols as $type => $label) {
+                    if (!empty($s['outboundsOff'][$type])) {
+                        continue;
+                    }
                     $byGeo[$s['tag']][] = "{$s['tag']}|{$label}";
                 }
                 continue;
             }
             foreach ($protocols as $type => $label) {
+                if (!empty($s['outboundsOff'][$type])) {
+                    continue;
+                }
                 $tpl = $templates[$type] ?? null;
                 if (empty($tpl)) {
                     continue;
@@ -2337,7 +2606,7 @@ public function buildXrayMultiOutbounds($c, $servers, $uid)
             return $c;
         }
         foreach ($servers as $s) {
-            if (!empty($s['isMain'])) {
+            if (!empty($s['isMain']) || !empty($s['outboundsOff']['vless'])) {
                 continue;
             }
             $tag   = "{$s['tag']}|Vless";

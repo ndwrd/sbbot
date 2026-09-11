@@ -21,6 +21,14 @@ public function qrVless($i, $s = false)
         $this->sendQr('vless', $link, "<code>$link</code>");
     }
 
+public function qrHapp($i)
+    {
+        $xray = $this->getSingbox();
+        $uid  = $xray['inbounds'][0]['settings']['clients'][$i]['id'];
+        $link = $this->happSubUrl($uid);
+        $this->sendQr('happ', $link, "<code>$link</code>");
+    }
+
 public function qrMtproto()
     {
         $link = $this->linkMtproto();
