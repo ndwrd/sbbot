@@ -2394,14 +2394,23 @@ public function addDnsRuleSet($c)
         // не происходил вовсе (см. обсуждение: reject на 50+/30с уходит в тихий
         // drop, DNS-уровень этого избегает) — add/delete синхронизируются сами
         // собой, т.к. пересчитывается с нуля из route.rules при каждой сборке.
+        // sing-box берёт первое совпавшее правило dns.rules по порядку — если
+        // дописывать block в конец, его перехватывает более ранний catch-all
+        // (например A/AAAA -> fakeip из шаблона) раньше, чем дело доходит до
+        // блокировки, и она фактически не срабатывает. Поэтому block-правила
+        // всегда идут ПЕРЕД всем, что уже есть в dns.rules, а не после.
+        $blockRules = [];
         foreach ($c['route']['rules'] ?? [] as $v) {
             if (($v['action'] ?? null) === 'reject' && !empty($v['rule_set'])) {
-                $c['dns']['rules'][] = [
+                $blockRules[] = [
                     'rule_set' => $v['rule_set'],
                     'action'   => 'predefined',
                     'rcode'    => 'NOERROR',
                 ];
             }
+        }
+        if (!empty($blockRules)) {
+            $c['dns']['rules'] = array_merge($blockRules, $c['dns']['rules'] ?? []);
         }
         if (empty($c['dns']['rules'])) {
             unset($c['dns']['rules']);
