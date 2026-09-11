@@ -704,7 +704,7 @@
     },
     "proxies": [
         {
-            "name": "vless",
+            "name": "Vless",
             "type": "vless",
             "server": "~domain~",
             "port": 443,
@@ -730,7 +730,7 @@
             }
         },
         {
-            "name": "hysteria2",
+            "name": "HY2",
             "type": "hysteria2",
             "server": "~domain~",
             "port": 443,
@@ -738,7 +738,7 @@
             "sni": "~domain~"
         },
         {
-            "name": "anytls",
+            "name": "Anytls",
             "type": "anytls",
             "server": "~anytls_domain~",
             "port": 443,
@@ -748,16 +748,16 @@
     ],
     "proxy-groups": [
         {
-            "name": "~outbound~",
+            "name": "Proxy",
             "type": "fallback",
             "proxies": [
-                "vless",
-                "hysteria2",
-                "anytls"
+                "Vless",
+                "HY2",
+                "Anytls"
             ],
             "url": "https://www.gstatic.com/generate_204",
-            "interval": 1200,
-            "timeout": 2400,
+            "interval": 300,
+            "timeout": 2000,
             "lazy": true
         }
     ],
@@ -775,7 +775,7 @@
         {
             "type": "RULE-SET",
             "list": "~process~",
-            "action": "~outbound~",
+            "action": "Proxy",
             "interval": 60,
             "behavior": "classical",
             "name": "process"
@@ -783,7 +783,7 @@
         {
             "type": "RULE-SET",
             "list": "~package~",
-            "action": "~outbound~",
+            "action": "Proxy",
             "interval": 60,
             "behavior": "classical",
             "name": "package"
@@ -791,7 +791,7 @@
         {
             "type": "RULE-SET",
             "list": "~warp~",
-            "action": "~outbound~",
+            "action": "Proxy",
             "interval": 60,
             "behavior": "classical",
             "name": "warp"
@@ -799,7 +799,7 @@
         {
             "type": "RULE-SET",
             "list": "~domains~",
-            "action": "~outbound~",
+            "action": "Proxy",
             "interval": 60,
             "behavior": "classical",
             "name": "domains"
@@ -807,7 +807,7 @@
         {
             "type": "RULE-SET",
             "list": "~subnet~",
-            "action": "~outbound~",
+            "action": "Proxy",
             "interval": 60,
             "behavior": "classical",
             "name": "subnet"

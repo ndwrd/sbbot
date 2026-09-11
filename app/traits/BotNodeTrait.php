@@ -832,6 +832,14 @@ public function ensureMainGeoTag()
             $pac['singOriginCorrected'] = true;
             $this->setPacConf($pac);
         }
+        // Тот же принцип для mihomo — свой флаг, своя (тоже идемпотентная)
+        // коррекция, независимо друг от друга.
+        if (empty($pac['clashOriginCorrected'])) {
+            $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
+            $this->correctClashOriginTags($flag . $pac['geoTag']);
+            $pac['clashOriginCorrected'] = true;
+            $this->setPacConf($pac);
+        }
         $tag = $pac['geoTag'];
         return $tag;
     }
@@ -869,6 +877,40 @@ public function correctSingOriginTags($tagPrefix)
             }
         }
         unset($o);
+        file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+public function correctClashOriginTags($tagPrefix)
+    {
+        $path = '/config/clash.json';
+        $c    = json_decode(file_get_contents($path), true);
+        if (empty($c['proxies'])) {
+            return;
+        }
+        // mihomo не поддерживает naive — тем же составом, что и в текущих
+        // proxies шаблона.
+        $protocols = [
+            'vless'     => 'Vless',
+            'hysteria2' => 'Hy2',
+            'anytls'    => 'Anytls',
+        ];
+        $renames = [];
+        foreach ($c['proxies'] as &$p) {
+            $label = $protocols[$p['type'] ?? ''] ?? null;
+            if ($label === null || empty($p['name'])) {
+                continue;
+            }
+            $newName            = "{$tagPrefix}|{$label}";
+            $renames[$p['name']] = $newName;
+            $p['name']          = $newName;
+        }
+        unset($p);
+        foreach ($c['proxy-groups'] ?? [] as &$g) {
+            if (!empty($g['proxies'])) {
+                $g['proxies'] = array_map(fn ($n) => $renames[$n] ?? $n, $g['proxies']);
+            }
+        }
+        unset($g);
         file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 

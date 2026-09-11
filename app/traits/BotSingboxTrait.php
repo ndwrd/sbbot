@@ -2256,24 +2256,48 @@ public function expandGeoInArray($arr, $byGeo)
 
 public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $password)
     {
-        // mihomo/clash naive не поддерживает — в шаблоне его нет, пропускаем.
+        // Тот же принцип, что и в buildSingMultiOutbounds(): протоколы matчатся
+        // по type (не по имени — оно уже переименовано одноразовой коррекцией
+        // origin-шаблона, correctClashOriginTags()), группа "Proxy" — по
+        // фиксированному имени, не по алиасу $outbound. mihomo/clash не
+        // поддерживает naive — в шаблоне его и нет. Отдельной "Auto"-группы
+        // тут не нужно — сам type:fallback уже умеет health-check выбор.
         $protocols = [
             'vless'     => 'Vless',
             'hysteria2' => 'Hy2',
             'anytls'    => 'Anytls',
         ];
         $templates = [];
+        $proxyIdx  = null;
         foreach ($c['proxies'] ?? [] as $p) {
-            if (isset($protocols[$p['name'] ?? ''])) {
-                $templates[$p['name']] = $p;
+            if (isset($protocols[$p['type'] ?? ''])) {
+                $templates[$p['type']] = $p;
             }
         }
-        $allNames   = [];
+        foreach ($c['proxy-groups'] ?? [] as $k => $g) {
+            if (($g['name'] ?? null) === 'Proxy') {
+                $proxyIdx = $k;
+                break;
+            }
+        }
+        if ($proxyIdx === null) {
+            return $c;
+        }
+        $newNames   = [];
         $newProxies = [];
         $byGeo      = [];
         foreach ($servers as $s) {
-            foreach ($protocols as $tplName => $label) {
-                $tpl = $templates[$tplName] ?? null;
+            if (!empty($s['isMain'])) {
+                // Уже корректный вид в самом шаблоне — просто регистрируем
+                // для "~{тег}:outbounds~" в кастомных группах админа, повторно
+                // не клонируем и не дублируем в proxies.
+                foreach ($protocols as $label) {
+                    $byGeo[$s['tag']][] = "{$s['tag']}|{$label}";
+                }
+                continue;
+            }
+            foreach ($protocols as $type => $label) {
+                $tpl = $templates[$type] ?? null;
                 if (empty($tpl)) {
                     continue;
                 }
@@ -2287,32 +2311,14 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
                 ]), true);
                 $clone['name'] = $name;
                 $newProxies[]  = $clone;
-                $allNames[]    = $name;
+                $newNames[]    = $name;
                 $byGeo[$s['tag']][] = $name;
             }
         }
-        if (empty($allNames)) {
-            return $c;
+        if (!empty($newNames)) {
+            $c['proxy-groups'][$proxyIdx]['proxies'] = array_merge($c['proxy-groups'][$proxyIdx]['proxies'], $newNames);
         }
-        $c['proxies'] = $newProxies;
-        foreach ($c['proxy-groups'] ?? [] as &$g) {
-            if (($g['name'] ?? null) === $outbound) {
-                $g['type']    = 'select';
-                $g['proxies'] = array_merge(['⚡️ Auto'], $allNames);
-                unset($g['url'], $g['interval'], $g['timeout'], $g['lazy']);
-            }
-        }
-        unset($g);
-        $c['proxy-groups'][] = [
-            'name'      => '⚡️ Auto',
-            'type'      => 'url-test',
-            'proxies'   => $allNames,
-            'url'       => 'https://www.gstatic.com/generate_204',
-            'interval'  => 300,
-            'tolerance' => 150,
-        ];
-        // Свои proxy-groups админа (уже в $c как есть — их тут никто не
-        // трогал) могут ссылаться на конкретную ноду через "~🇷🇺RU:outbounds~".
+        $c['proxies'] = array_merge($c['proxies'], $newProxies);
         return $this->expandGeoPlaceholders($c, $byGeo);
     }
 
