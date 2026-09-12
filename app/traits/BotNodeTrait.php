@@ -1310,6 +1310,8 @@ public function nodeSyncUsersSilent($id)
             'singboxClients' => $pac['singboxClients'] ?? [],
             'transport'      => $pac['transport'] ?? 'Websocket',
             'reality'        => $pac['reality'] ?? [],
+            'blocklist'      => $pac['blocklist'] ?? [],
+            'warplist'       => $pac['warplist'] ?? [],
         ]);
         $ok = $this->nodeConsole($node['ip'], 'applyUsers', $payload) === 'ok';
         if ($ok) {
@@ -1338,6 +1340,16 @@ public function applyUsers($json)
         $pac['singboxClients'] = $data['singboxClients'] ?? [];
         $pac['transport']      = $data['transport'] ?? 'Websocket';
         $pac['reality']        = $data['reality'] ?? [];
+        $pac['blocklist']      = $data['blocklist'] ?? [];
+        $pac['warplist']       = $data['warplist'] ?? [];
+        // Та же сборка block/warp outbound'а и правил, что и на главном
+        // (singboxUpdateRules()) — без этого нода получила бы списки, но
+        // buildSingboxConfig() ниже подхватывает их только из
+        // pac['singboxOutbounds']/['singboxRoutingRules'], которые тут
+        // больше никто не считает.
+        $built = $this->buildWarpBlockOutboundsRules($pac);
+        $pac['singboxOutbounds']    = $built['outbounds'];
+        $pac['singboxRoutingRules'] = $built['rules'];
         $this->setPacConf($pac);
         $sing = $this->buildSingboxConfig($pac);
         file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));

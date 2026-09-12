@@ -176,12 +176,16 @@ public function buildSingboxConfig($pac)
 
         // log/dns — чистая статика из /config/sing-server.json, правится руками прямо
         // в файле. outbounds/route тоже читаются оттуда как база (чтобы админ мог
-        // руками добавить что-то своё), но дальше в них домонтируются singboxUpdateRules()'ные
-        // block/warp — раньше singboxOutbounds/singboxRoutingRules честно копились в
-        // pac.json, но сюда, в реальный конфиг, так ни разу и не попадали.
-        // Теги "warp"/"block" зарезервированы под это — старые записи с ними всегда
-        // вычищаются перед вставкой свежих, иначе при каждом restartSingbox() файл
-        // читает сам себя и они задваивались бы.
+        // руками добавить что-то своё), но дальше в них домонтируются
+        // pac['singboxOutbounds']/['singboxRoutingRules'] — их считает
+        // buildWarpBlockOutboundsRules() (для main — из singboxUpdateRules(),
+        // для ноды — из applyUsers(), куда main теперь пушит blocklist/warplist
+        // вместе со списком клиентов). block — не outbound, а action:"reject"
+        // прямо на правиле (в sing-box отдельного block-outbound'а по смыслу
+        // нет); warp — настоящий socks-outbound на microsocks внутри wp. Тег
+        // "warp" и правила с action:"reject" всегда вычищаются перед вставкой
+        // свежих, иначе при каждом restartSingbox() файл читает сам себя и
+        // они задваивались бы.
         $sing = json_decode(file_get_contents('/config/sing-server.json'), true) ?: [];
         $sing['inbounds']     = $inbounds;
         $sing['experimental'] = [
@@ -199,7 +203,7 @@ public function buildSingboxConfig($pac)
         $baseOutbounds = array_values(array_filter($sing['outbounds'] ?? [], fn($o) => ($o['tag'] ?? null) !== 'warp'));
         $sing['outbounds'] = array_merge($baseOutbounds, $pac['singboxOutbounds'] ?? []);
 
-        $baseRules = array_values(array_filter($sing['route']['rules'] ?? [], fn($r) => !in_array($r['outbound'] ?? null, ['block', 'warp'], true)));
+        $baseRules = array_values(array_filter($sing['route']['rules'] ?? [], fn($r) => ($r['outbound'] ?? null) !== 'warp' && ($r['action'] ?? null) !== 'reject'));
         $sing['route']['rules'] = array_merge($pac['singboxRoutingRules'] ?? [], $baseRules);
 
         return $sing;
@@ -480,26 +484,24 @@ public function backXtlsList($type, $page = 0)
         }
     }
 
-public function singboxUpdateRules()
+public function buildWarpBlockOutboundsRules($pac)
     {
-        $c  = $this->getPacConf();
-        $xr = $this->getSingbox();
-        $xr['outbounds'] = [
-            [
-                'type'        => 'socks',
-                'tag'         => 'warp',
-                'server'      => '10.10.0.13',
-                'server_port' => 1080,
-            ],
-        ];
-
+        // Общая логика для main (singboxUpdateRules()) и для ноды (applyUsers()) —
+        // blocklist/warplist теперь синкаются на ноду вместе со списком клиентов
+        // (nodeSyncUsersSilent()), и каждая нода должна собирать те же block/warp
+        // outbound+правила у себя, а не только главный сервер.
         $toIpCidr = function ($k) {
             if (preg_match('~^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{1,2})?$~', $k, $m)) {
                 return $k . (empty($m[1]) ? '/32' : '');
             }
             return null;
         };
-        $buildRules = function (array $list, string $outbound) use ($toIpCidr) {
+        // block — не outbound (в sing-box его смысла нет, современная схема —
+        // action:"reject" прямо на правиле: https://sing-box.sagernet.org/
+        // configuration/route/rule_action/#reject), warp — реальный outbound
+        // (socks на microsocks внутри контейнера wp), поэтому у них разные
+        // "довески" к правилу.
+        $buildRules = function (array $list, array $extra) use ($toIpCidr) {
             $domains = $ips = [];
             foreach (array_filter($list) as $k => $v) {
                 $cidr = $toIpCidr($k);
@@ -511,20 +513,37 @@ public function singboxUpdateRules()
             }
             $rules = [];
             if (!empty($domains)) {
-                $rules[] = ['domain_suffix' => $domains, 'outbound' => $outbound];
+                $rules[] = array_merge(['domain_suffix' => $domains], $extra);
             }
             if (!empty($ips)) {
-                $rules[] = ['ip_cidr' => $ips, 'outbound' => $outbound];
+                $rules[] = array_merge(['ip_cidr' => $ips], $extra);
             }
             return $rules;
         };
 
-        $rules = array_merge(
-            $buildRules($c['blocklist'] ?? [], 'block'),
-            $buildRules($c['warplist'] ?? [], 'warp'),
-        );
+        return [
+            'outbounds' => [
+                [
+                    'type'        => 'socks',
+                    'tag'         => 'warp',
+                    'server'      => '10.10.0.13',
+                    'server_port' => 1080,
+                ],
+            ],
+            'rules' => array_merge(
+                $buildRules($pac['blocklist'] ?? [], ['action' => 'reject']),
+                $buildRules($pac['warplist'] ?? [], ['outbound' => 'warp']),
+            ),
+        ];
+    }
 
-        $xr['routing']['rules'] = $rules;
+public function singboxUpdateRules()
+    {
+        $c   = $this->getPacConf();
+        $xr  = $this->getSingbox();
+        $built = $this->buildWarpBlockOutboundsRules($c);
+        $xr['outbounds']         = $built['outbounds'];
+        $xr['routing']['rules'] = $built['rules'];
         $this->restartSingbox($xr);
     }
 
@@ -1198,19 +1217,28 @@ public function singbox($page = 0)
             $text[] = "fake domain: <code>{$c['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]}</code>";
         }
         $text[] = 'Transport: ' . (($p['transport'] ?? null) ?: 'Websocket');
-        $off    = $p['outboundsOff'] ?? [];
-        $labels = [];
-        foreach ($this->outboundProtocols() as $key => $label) {
-            if (empty($off[$key])) {
-                $labels[] = $label;
-            }
-        }
-        $text[] = 'Outbounds: ' . (implode(', ', $labels) ?: '—');
         $geoTag = $this->ensureMainGeoTag();
         $botTag = $this->countryFlag(preg_replace('~\d+$~', '', $geoTag)) . $geoTag;
         $text[] = '';
         $text[] = 'Outbound tag:';
         $text[] = "<code>~{$botTag}:outbounds~</code>";
+        // Тот же вид, что и у ноды (nodeMenu()) — ровно те теги, что попадают
+        // в selector/⚡️Auto реальной подписки (buildSingMultiOutbounds()),
+        // чтобы можно было скопировать готовую строку прямо в свой шаблон.
+        // Выключенный (toggleOutbound()) протокол пропадает и отсюда.
+        $off    = $p['outboundsOff'] ?? [];
+        $labels = array_filter(
+            ['vless' => 'Vless', 'naive' => 'Naive', 'hysteria2' => 'Hy2', 'anytls' => 'Anytls'],
+            fn ($k) => empty($off[$k]),
+            ARRAY_FILTER_USE_KEY
+        );
+        if (!empty($labels)) {
+            $text[] = '<blockquote>Outbounds:';
+            foreach ($labels as $label) {
+                $text[] = "<code>{$botTag}|{$label}</code>";
+            }
+            $text[] = '</blockquote>';
+        }
         $st = $this->getSingboxStats();
         $data[] = [
             [
@@ -1773,6 +1801,12 @@ public function subscription($return = false)
                 $c = $pac["{$type}templates"][base64_decode($pac["default{$type}template"])];
                 break;
         }
+        // Копия ДО фильтрации по выключенным на Боте протоколам — нодам нужны
+        // протокольные шаблоны (Vless/HY2/Naive/AnyTLS) для клонирования, даже
+        // если конкретно у Бота этот протокол сейчас выключен: выключатели
+        // Бота и ноды независимые, а "выключен у Бота" раньше по ошибке
+        // означало ещё и "нечего клонировать нодам" — шаблон-то один на всех.
+        $rawTemplate = $c;
         $c = $this->filterMainOutbounds($type, $c);
 
         // Ноды в подписку подмешиваются только для активного (не dormant
@@ -1992,7 +2026,7 @@ public function subscription($return = false)
                 break;
         }
         if ($multiServer) {
-            $c = $this->applyMultiServerOutbounds($type, $c, $outbound, $uid, $username, $password);
+            $c = $this->applyMultiServerOutbounds($type, $c, $rawTemplate, $outbound, $uid, $username, $password);
         }
         $c = json_decode($this->replaceTags(json_encode($c), [
             '"~domains~"'    => json_encode(array_keys(array_filter(($pac['includelist'] ?? null) ?: []))),
@@ -2381,20 +2415,20 @@ public function filterXrayOutbounds($c, $off)
         return $c;
     }
 
-public function applyMultiServerOutbounds($type, $c, $outbound, $uid, $username, $password)
+public function applyMultiServerOutbounds($type, $c, $rawTemplate, $outbound, $uid, $username, $password)
     {
         switch ($type) {
             case 'sing':
-                return $this->buildSingMultiOutbounds($c, $this->getSubscriptionServers(), $outbound, $uid, $username, $password);
+                return $this->buildSingMultiOutbounds($c, $rawTemplate['outbounds'] ?? [], $this->getSubscriptionServers(), $outbound, $uid, $username, $password);
             case 'clash':
-                return $this->buildClashMultiOutbounds($c, $this->getSubscriptionServers(), $outbound, $uid, $password);
+                return $this->buildClashMultiOutbounds($c, $rawTemplate['proxies'] ?? [], $this->getSubscriptionServers(), $outbound, $uid, $password);
             case 'xray':
-                return $this->buildXrayMultiOutbounds($c, $this->getSubscriptionServers(), $uid);
+                return $this->buildXrayMultiOutbounds($c, $rawTemplate['outbounds'] ?? [], $this->getSubscriptionServers(), $uid);
         }
         return $c;
     }
 
-public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username, $password)
+public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, $uid, $username, $password)
     {
         // Главный сервер уже в финальном виде прямо в origin-шаблоне —
         // correctSingOriginTags() один раз (при первом определении гео-тега
@@ -2409,13 +2443,20 @@ public function buildSingMultiOutbounds($c, $servers, $outbound, $uid, $username
             'naive'     => 'Naive',
             'anytls'    => 'Anytls',
         ];
+        // Шаблоны протоколов берём из $rawOutbounds (ДО filterMainOutbounds())
+        // — иначе выключенный на Боте протокол вырезан из $c и клонировать
+        // его для ноды, где он может быть включён, было бы нечем. Proxy/Auto
+        // ищем в уже отфильтрованном $c — их filterMainOutbounds() не трогает.
         $templates = [];
-        $proxyIdx  = null;
-        $autoIdx   = null;
-        foreach ($c['outbounds'] ?? [] as $k => $o) {
+        foreach ($rawOutbounds as $o) {
             if (isset($protocols[$o['type'] ?? ''])) {
                 $templates[$o['type']] = $o;
-            } elseif (($o['tag'] ?? null) === 'Proxy') {
+            }
+        }
+        $proxyIdx = null;
+        $autoIdx  = null;
+        foreach ($c['outbounds'] ?? [] as $k => $o) {
+            if (($o['tag'] ?? null) === 'Proxy') {
                 $proxyIdx = $k;
             } elseif (($o['tag'] ?? null) === '⚡️Auto') {
                 $autoIdx = $k;
@@ -2513,7 +2554,7 @@ public function expandGeoInArray($arr, $byGeo)
         return $result;
     }
 
-public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $password)
+public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $uid, $password)
     {
         // Тот же принцип, что и в buildSingMultiOutbounds(): протоколы matчатся
         // по type (не по имени — оно уже переименовано одноразовой коррекцией
@@ -2521,18 +2562,21 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
         // фиксированному имени, не по алиасу $outbound. mihomo/clash не
         // поддерживает naive — в шаблоне его и нет. Отдельной "Auto"-группы
         // тут не нужно — сам type:fallback уже умеет health-check выбор.
+        // Шаблоны — из $rawProxies (ДО filterMainOutbounds()), см. коммент в
+        // buildSingMultiOutbounds() — иначе выключенный на Боте протокол
+        // нечем клонировать для ноды, у которой он может быть включён.
         $protocols = [
             'vless'     => 'Vless',
             'hysteria2' => 'Hy2',
             'anytls'    => 'Anytls',
         ];
         $templates = [];
-        $proxyIdx  = null;
-        foreach ($c['proxies'] ?? [] as $p) {
+        foreach ($rawProxies as $p) {
             if (isset($protocols[$p['type'] ?? ''])) {
                 $templates[$p['type']] = $p;
             }
         }
+        $proxyIdx = null;
         foreach ($c['proxy-groups'] ?? [] as $k => $g) {
             if (($g['name'] ?? null) === 'Proxy') {
                 $proxyIdx = $k;
@@ -2588,12 +2632,15 @@ public function buildClashMultiOutbounds($c, $servers, $outbound, $uid, $passwor
         return $this->expandGeoPlaceholders($c, $byGeo);
     }
 
-public function buildXrayMultiOutbounds($c, $servers, $uid)
+public function buildXrayMultiOutbounds($c, $rawOutbounds, $servers, $uid)
     {
         // Нативного selector/urltest в xray-core нет — по договорённости
         // просто добавляем ноды как ещё outbound'ы в список, без auto-test.
+        // Шаблон — из $rawOutbounds (ДО filterMainOutbounds()): если Vless
+        // выключен у Бота, клонировать для ноды, где он может быть включён,
+        // всё равно нужно из чего-то.
         $tpl = null;
-        foreach ($c['outbounds'] ?? [] as $o) {
+        foreach ($rawOutbounds as $o) {
             if (($o['protocol'] ?? null) === 'vless' && isset($o['settings']['vnext'])) {
                 $tpl = $o;
                 break;
