@@ -2465,6 +2465,16 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
         if ($proxyIdx === null || $autoIdx === null) {
             return $c;
         }
+        // Нода, явно упомянутая где-то в шаблоне плейсхолдером
+        // "~{тег}:outbounds~" (в любой другой группе — своей кастомной,
+        // например), в дефолтные Proxy/⚡️Auto не попадает — ровно как
+        // задокументировано в readme: только неупомянутые нигде ноды
+        // заполняют группу по умолчанию. Сама она всё равно клонируется и
+        // регистрируется в $byGeo — иначе той кастомной группе нечего будет
+        // подставить.
+        preg_match_all('/~(.+?):outbounds~/u', json_encode($c), $mClaimed);
+        $claimed = array_unique($mClaimed[1] ?? []);
+
         $newTags      = [];
         $newOutbounds = [];
         $byGeo        = [];
@@ -2482,6 +2492,7 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
                 }
                 continue;
             }
+            $excluded = in_array($s['tag'], $claimed, true);
             foreach ($protocols as $type => $label) {
                 if (!empty($s['outboundsOff'][$type])) {
                     continue;
@@ -2502,8 +2513,10 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
                 ]), true);
                 $clone['tag']   = $tag;
                 $newOutbounds[] = $clone;
-                $newTags[]      = $tag;
                 $byGeo[$s['tag']][] = $tag;
+                if (!$excluded) {
+                    $newTags[] = $tag;
+                }
             }
         }
         if (!empty($newTags)) {
@@ -2586,6 +2599,11 @@ public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $
         if ($proxyIdx === null) {
             return $c;
         }
+        // Та же логика "упомянут где-то явно — не попадает в дефолт", что и
+        // в buildSingMultiOutbounds() — см. коммент там.
+        preg_match_all('/~(.+?):outbounds~/u', json_encode($c), $mClaimed);
+        $claimed = array_unique($mClaimed[1] ?? []);
+
         $newNames   = [];
         $newProxies = [];
         $byGeo      = [];
@@ -2603,6 +2621,7 @@ public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $
                 }
                 continue;
             }
+            $excluded = in_array($s['tag'], $claimed, true);
             foreach ($protocols as $type => $label) {
                 if (!empty($s['outboundsOff'][$type])) {
                     continue;
@@ -2621,8 +2640,10 @@ public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $
                 ]), true);
                 $clone['name'] = $name;
                 $newProxies[]  = $clone;
-                $newNames[]    = $name;
                 $byGeo[$s['tag']][] = $name;
+                if (!$excluded) {
+                    $newNames[] = $name;
+                }
             }
         }
         if (!empty($newNames)) {
