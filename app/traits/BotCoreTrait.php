@@ -497,6 +497,7 @@ public function cron()
             $this->checkNodeProvisioning();
             $this->checkNodeCerts();
             $this->checkNodeAutoCleanLogs();
+            $this->checkAppDownloadLinks();
             sleep($period);
         }
     }
@@ -545,6 +546,46 @@ public function checkVersion()
             }
         } catch (Exception $e) {
         }
+    }
+
+public function checkAppDownloadLinks()
+    {
+        // Раз в сутки резолвим версионные GitHub-ассеты (в apps.json/apps.override.json
+        // они помечены полем downloadKey) в текущий актуальный URL — тот же приём, что
+        // используют dockerfile'ы для подтяжки latest-релиза ядра (wget +
+        // releases/latest + grep по имени ассета), только на стороне бота и с кэшем в
+        // /config/apps_cache.json, чтобы страница подписки не дёргала GitHub API на
+        // каждый заход пользователя. Если résolve не удался — resolveDownloadLink()
+        // в subscription.php просто откатится на статический download из apps.json.
+        if (!empty($this->time_apps_cache) && (time() - $this->time_apps_cache) < 86400) {
+            return;
+        }
+        $this->time_apps_cache = time();
+        $targets = [
+            // sing-box for Windows (SFW) — версия зашита в имя ассета, поэтому
+            // releases/latest/download/<файл> не работает, приходится смотреть
+            // список ассетов и матчить по шаблону имени.
+            'singboxWindowsSFW' => [
+                'api'     => 'https://api.github.com/repos/SagerNet/sing-box/releases/latest',
+                'pattern' => '~^SFW-[\d.]+-x64\.exe$~',
+            ],
+        ];
+        $cache = @json_decode((string) @file_get_contents($this->appsCache), true) ?: [];
+        $context = stream_context_create(['http' => [
+            'header'  => "User-Agent: sbbot\r\n",
+            'timeout' => 10,
+        ]]);
+        foreach ($targets as $key => $t) {
+            $json = @file_get_contents($t['api'], false, $context);
+            $data = $json ? json_decode($json, true) : null;
+            foreach ($data['assets'] ?? [] as $asset) {
+                if (preg_match($t['pattern'], $asset['name'] ?? '')) {
+                    $cache[$key] = $asset['browser_download_url'];
+                    break;
+                }
+            }
+        }
+        file_put_contents($this->appsCache, json_encode($cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
 public function getTime(int $seconds)

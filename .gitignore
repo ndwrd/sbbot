@@ -16,6 +16,7 @@
 /config/mtprotodomain
 /config/deny
 /config/singbox.stats
+/config/apps_cache.json
 /todo.todo
 /app/zapretlists/*
 !/app/zapretlists/.gitkeep
@@ -30,10 +31,12 @@ override.html
 override.php
 docker-compose.override.yml
 backup.json
-app/webapp/override/
+app/override/*
+!app/override/.gitkeep
 .rest
 
-subscription.php
+subscription.override.php
+apps.override.json
 location.conf
 override.conf
 i18n.override.php

@@ -1,0 +1,89 @@
+{
+    "ios": [
+        {
+            "name": "sing-box",
+            "icon": "singbox",
+            "hint": {"ru": "Рекомендуется", "en": "Recommended"},
+            "download": "https://apps.apple.com/ru/app/sing-box-mt/id6785326793",
+            "add": "singboxImport"
+        },
+        {
+            "name": "RabbitHole",
+            "icon": "rabbithole",
+            "download": "https://apps.apple.com/ru/app/rabbithole-vpn-client/id6683309629",
+            "add": "rabbitholeAdd"
+        },
+        {
+            "name": "INCY",
+            "icon": "incy",
+            "download": "https://apps.apple.com/us/app/incy/id6756943388",
+            "add": "incyAdd",
+            "routing": "incyRouting"
+        }
+    ],
+    "android": [
+        {
+            "name": "sing-box",
+            "icon": "singbox",
+            "hint": {"ru": "Рекомендуется", "en": "Recommended"},
+            "download": "https://play.google.com/store/apps/details?id=io.nekohasekai.sfa&pcampaignid=web_share",
+            "add": "singboxImport"
+        },
+        {
+            "name": "RabbitHole",
+            "icon": "rabbithole",
+            "download": "https://play.google.com/store/apps/details?id=com.rabbithole.RabbitHole&pcampaignid=web_share",
+            "add": "rabbitholeAdd"
+        },
+        {
+            "name": "INCY",
+            "icon": "incy",
+            "download": "https://play.google.com/store/apps/details?id=llc.itdev.incy&pcampaignid=web_share",
+            "add": "incyAdd",
+            "routing": "incyRouting"
+        }
+    ],
+    "windows": [
+        {
+            "name": "sing-box",
+            "icon": "singbox",
+            "hint": {"ru": "Рекомендуется", "en": "Recommended"},
+            "download": "https://github.com/SagerNet/sing-box/releases/latest",
+            "downloadKey": "singboxWindowsSFW",
+            "add": "singboxImport"
+        },
+        {
+            "name": "Koala Clash",
+            "icon": "mihomo",
+            "download": "https://github.com/coolcoala/koala-clash/releases",
+            "add": "mihomoImport"
+        },
+        {
+            "name": "OneXray",
+            "icon": "onexray",
+            "download": "https://apps.microsoft.com/detail/9NJ0MVHW215D",
+            "add": "onexraySubAdd"
+        }
+    ],
+    "macos": [
+        {
+            "name": "sing-box",
+            "icon": "singbox",
+            "hint": {"ru": "Рекомендуется", "en": "Recommended"},
+            "download": "https://apps.apple.com/app/sing-box-vt/id6673731168",
+            "add": "singboxImport"
+        },
+        {
+            "name": "RabbitHole",
+            "icon": "rabbithole",
+            "download": "https://apps.apple.com/us/app/rabbithole-vpn-client/id6683309629",
+            "add": "rabbitholeAdd"
+        },
+        {
+            "name": "OneXray",
+            "icon": "onexray",
+            "download": "https://apps.apple.com/us/app/onexray/id6745748773",
+            "add": "onexraySubAdd"
+        }
+    ]
+}

@@ -1632,56 +1632,113 @@ public function userXr($i)
 
 public function sub()
     {
+        // Клиентская HTML-страница подписки — сам HTML/CSS/JS живёт в
+        // app/subscription.php (require ниже), сюда собираем только данные.
+        // Файл-переключатель: пока его нет, index.php даже не пускает сюда
+        // (см. file_exists() в роутере) — фактически фича включается самим
+        // наличием этого файла.
         $xr     = $this->getSingbox();
         $pac    = $this->getPacConf();
         $st     = $this->getSingboxStats();
         $domain = ($_GET['cdn'] ?? null) ?: (($_SERVER['SERVER_NAME'] ?? null) ?: $this->getDomain($pac['transport'] != 'Reality'));
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
-        $flag   = true;
+
+        $flag = true;
         foreach ($xr['inbounds'][0]['settings']['clients'] as $k => $v) {
             if ($v['id'] == $_GET['id']) {
                 if (empty($v['off'])) {
                     $flag = false;
                 }
+                $i        = $k;
                 $uid      = $v['id'];
                 $username = $v['username'];
-                $expire   = $v['time'];
+                $expire   = $v['time'] ?? null;
+                $limit    = $v['trafficlimit'] ?? null;
+                $off      = !empty($v['off']);
                 break;
             }
         }
-        if (!$flag) {
+        // Раньше тут было `if (!$flag) { exit; }` — инвертированное условие,
+        // которое пускало неизвестных/выключенных пользователей и обрывало
+        // валидных. $flag остаётся true, если юзера не нашли или он выключен
+        // (симметрично subscription()).
+        if ($flag) {
+            header('500', true, 500);
             exit;
         }
-        $suburl   = "<a href='$scheme://{$domain}/pac$hash/sub?id={$uid}'>subscription</a>";
-        $download = $this->getBytes($st['users'][$k]['global']['download'] + $st['users'][$k]['session']['download']);
-        $upload   = $this->getBytes($st['users'][$k]['global']['upload'] + $st['users'][$k]['session']['upload']);
-        $singbox  = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
-            'h' => $hash,
-            't' => 'si',
-            's' => $uid,
-        ]));
-        $xray = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
-            'h' => $hash,
-            't' => 's',
-            's' => $uid,
-        ]));
-        $clash = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
-            'h' => $hash,
-            't' => 'cl',
-            's' => $uid,
-        ]));
-        $vless   = $this->linkVless($k);
-        $_GET['s'] = $uid;
-        foreach ([
-          'xray'    => 's',
-          'singbox' => 'si',
-          'clash'   => 'cl'
-        ] as $k     => $v) {
-            $_GET['t'] = $v;
-            $configs[$k] = $this->subscription(1);
+
+        $download = ($st['users'][$i]['global']['download'] ?? 0) + ($st['users'][$i]['session']['download'] ?? 0);
+        $upload   = ($st['users'][$i]['global']['upload']   ?? 0) + ($st['users'][$i]['session']['upload']   ?? 0);
+
+        $link = function ($type) use ($scheme, $domain, $hash, $uid) {
+            return "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
+                'h' => $hash,
+                't' => $type,
+                's' => $uid,
+            ]));
+        };
+
+        // Список серверов + их реально включённые протоколы (учитывает
+        // toggleOutbound() — и Бота, и каждой ноды по отдельности), в том же
+        // формате, что уже показывают singbox()/nodeMenu().
+        $protoLabels = $this->outboundProtocols();
+        $buildServer = function ($geoTag, $off) use ($protoLabels) {
+            $protocols = [];
+            foreach ($protoLabels as $key => $label) {
+                if (empty($off[$key])) {
+                    $protocols[] = $label;
+                }
+            }
+            return [
+                'flag'      => $this->countryFlag(preg_replace('~\d+$~', '', $geoTag)),
+                'tag'       => $geoTag,
+                'protocols' => $protocols,
+            ];
+        };
+        $servers = [];
+        if (!empty($this->getNodes())) {
+            foreach ($this->getSubscriptionServers() as $s) {
+                $servers[] = $buildServer($s['geoTag'], $s['outboundsOff']);
+            }
+        } else {
+            $servers[] = $buildServer($this->ensureMainGeoTag(), $pac['outboundsOff'] ?? []);
         }
-        require dirname(__DIR__) . '/subscription.php';
+
+        $happUrl       = $this->happSubUrl($uid);
+        $routingBase64 = $this->buildHappRouting($pac);
+
+        $data = [
+            'username' => $username,
+            'status'   => [
+                'active'   => !$off,
+                'expire'   => $expire ? date('Y-m-d', $expire) : null,
+                'download' => $this->getBytes($download),
+                'upload'   => $this->getBytes($upload),
+                'limit'    => $limit ? $this->getBytes($limit) : null,
+            ],
+            'servers' => $servers,
+            'links'   => [
+                'singbox' => $link('si'),
+                'xray'    => $link('s'),
+                'clash'   => $link('cl'),
+                'happ'    => $happUrl,
+                'vless'   => $this->linkVless($i),
+            ],
+            'happIncy' => [
+                'addIncy'     => "incy://add/{$happUrl}",
+                'routingIncy' => "incy://routing/onadd/{$routingBase64}",
+            ],
+        ];
+
+        header('Content-type: text/html; charset=utf-8');
+        // subscription.override.php (гитигнорится) — если положили руками,
+        // побеждает над трекаемым subscription.php, и правки не теряются
+        // при git pull; тот же принцип, что у i18n.override.php.
+        $subFile = file_exists(dirname(__DIR__) . '/subscription.override.php')
+            ? dirname(__DIR__) . '/subscription.override.php'
+            : dirname(__DIR__) . '/subscription.php';
+        require $subFile;
     }
 
 public function subscription($return = false)

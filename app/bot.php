@@ -43,6 +43,8 @@ class Bot
     public $time2;
     public $time_singbox_stats;
     public $time_node_cert;
+    public $time_apps_cache;
+    public $appsCache;
     public $admin;
     public $ports;
 
@@ -53,6 +55,7 @@ class Bot
         $this->api      = "https://$api/bot$key/";
         $this->file     = "https://$api/file/bot$key/";
         $this->pac      = '/config/pac.json';
+        $this->appsCache = '/config/apps_cache.json';
         $this->ip       = getenv('IP');
         $this->i18n     = $i18n;
         $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
