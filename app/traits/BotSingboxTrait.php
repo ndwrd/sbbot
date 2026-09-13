@@ -1513,33 +1513,34 @@ public function userXr($i)
             't' => 'cl',
             's' => $c['id'],
         ]));
-        $hp = $this->happSubUrl($c['id']);
-
-        // Import-ссылки — тот же набор схем, что уже проверен на странице
-        // подписки (linkVless()/subscription()'s redirect switch) и в
-        // apps.json; тут просто собраны напрямую, без лишнего редиректа
-        // через сервер, раз это уже готовый deep-link. Raw-ссылка под каждой
-        // группой — <pre><code>, в рамке (как и vless выше): тап в Telegram
-        // копирует текст, отдельная кнопка не нужна. <pre> — блочный элемент,
-        // поэтому идёт отдельной строкой, а не рядом с Import на одной.
+        // Telegram не делает кликабельными текстовые <a href> на произвольные
+        // кастомные схемы (sing-box://, karing://, clash://, incy://,
+        // happ://) — рендерит их как обычный текст. Поэтому href у всех
+        // Import/Add-ссылок ведёт на собственный HTTPS-редирект бота
+        // (subscription()'s `if (!empty($_GET['r']))`/`t == 'hp'` блоки),
+        // который уже на сервере отвечает нужным Location: — та же схема,
+        // что и раньше, и что использует linkVless()/страница подписки для
+        // одно-тайповых ссылок. Raw JSON под каждой группой — <pre><code>, в
+        // рамке (как и vless выше): тап в Telegram копирует текст, кнопка не
+        // нужна. <pre> — блочный элемент, поэтому идёт отдельной строкой, а
+        // не рядом с Import на одной.
         $text[] = "<b>Sing-box</b>";
-        $text[] = "<a href='sing-box://import-remote-profile/?url=$si#{$c['username']}'>Import Sing-box</a>";
-        $text[] = "<a href='karing://install-config?url=$si'>Import Karing</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['username']}'>Import Sing-box</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['username']}'>Import Karing</a>";
         $text[] = "<pre><code>$si</code></pre>";
         $text[] = "";
         $text[] = "<b>Mihomo</b>";
-        $text[] = "<a href='clash://install-config/?url=$cl&overwrite=no&name={$c['username']}'>Import Mihomo</a>";
-        $text[] = "<a href='rabbithole://add/$cl'>Import Rabbit Hole</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['username']}'>Import Mihomo</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['username']}'>Import Rabbit Hole</a>";
         $text[] = "<pre><code>$cl</code></pre>";
         $text[] = "";
         $text[] = "<b>Xray</b>";
-        $text[] = "<a href='incy://add/$hp'>Import Incy</a>";
-        $text[] = "<a href='v2rayng://install-config?url=$xr'>Import v2rayNG</a>";
-        $text[] = "<a href='happ://add/$hp'>Import Happ</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=ic&s={$c['id']}#{$c['username']}'>Import Incy</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['username']}'>Import v2rayNG</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=ha&s={$c['id']}#{$c['username']}'>Import Happ</a>";
         $text[] = "<pre><code>$xr</code></pre>";
         $text[] = "";
-        $routingBase64 = $this->buildHappRouting($pac);
-        $text[] = "<a href='incy://routing/onadd/$routingBase64'>Add Incy routing</a>     <a href='happ://routing/onadd/$routingBase64'>Add Happ routing</a>";
+        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=incy&s={$c['id']}#{$c['username']}'>Add Incy (DigneZzZ) routing</a>     <a href='$scheme://{$domain}/pac$hash?t=hp&r=happ&s={$c['id']}#{$c['username']}'>Add Happ (DigneZzZ) routing</a>";
 
         $st       = $this->getSingboxStats();
         $download = $this->getBytes($st['users'][$i]['global']['download'] + $st['users'][$i]['session']['download']);
@@ -1805,12 +1806,20 @@ public function subscription($return = false)
         if ($_GET['t'] == 'hp') {
             // Отдельная кнопка "в один тап" — открывает сразу Happ/INCY и
             // активирует routing-профиль (happ://routing/onadd/... —
-            // задокументированная у них самих deeplink-схема). Готового
-            // deeplink'а на добавление именно подписки у них не
-            // задокументировано, поэтому им остаётся только сама ссылка/QR
-            // ниже — руками вставить в приложение.
+            // задокументированная у них самих deeplink-схема).
             if (!empty($_GET['r']) && in_array($_GET['r'], ['happ', 'incy'], true)) {
                 header("Location: {$_GET['r']}://routing/onadd/" . $this->buildHappRouting($pac));
+                exit;
+            }
+            // Оба задокументированы (incy://add/<url>, happ://add/<url> —
+            // см. user_guide.md/Orion multiapp.json): готовая подписка одним
+            // тапом, без страницы подписки и без ручной вставки ссылки/QR.
+            if (($_GET['r'] ?? null) === 'ic') {
+                header("Location: incy://add/" . $this->happSubUrl($uid));
+                exit;
+            }
+            if (($_GET['r'] ?? null) === 'ha') {
+                header("Location: happ://add/" . $this->happSubUrl($uid));
                 exit;
             }
             // Happ/INCY — не грузит наш JSON целиком как ядро (у них свой
