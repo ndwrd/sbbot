@@ -1495,7 +1495,8 @@ public function userXr($i)
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
             $text[] = "<b><a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>Subscription</a></b>";
         }
-        $text[] = "<code>{$this->linkVless($i)}</code>\n";
+        $text[] = "";
+        $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>";
 
         $si = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
             'h' => $hash,
@@ -1517,20 +1518,25 @@ public function userXr($i)
         // Import-ссылки — тот же набор схем, что уже проверен на странице
         // подписки (linkVless()/subscription()'s redirect switch) и в
         // apps.json; тут просто собраны напрямую, без лишнего редиректа
-        // через сервер, раз это уже готовый deep-link. "Json config" —
-        // <code>, тап по нему в Telegram копирует ссылку без отдельной кнопки.
+        // через сервер, раз это уже готовый deep-link. Raw-ссылка под каждой
+        // группой — <pre><code>, в рамке (как и vless выше): тап в Telegram
+        // копирует текст, отдельная кнопка не нужна. <pre> — блочный элемент,
+        // поэтому идёт отдельной строкой, а не рядом с Import на одной.
         $text[] = "<b>Sing-box</b>";
         $text[] = "<a href='sing-box://import-remote-profile/?url=$si#{$c['username']}'>Import Sing-box</a>";
-        $text[] = "<a href='karing://install-config?url=$si'>Import Karing</a>     <code>$si</code>";
+        $text[] = "<a href='karing://install-config?url=$si'>Import Karing</a>";
+        $text[] = "<pre><code>$si</code></pre>";
         $text[] = "";
         $text[] = "<b>Mihomo</b>";
         $text[] = "<a href='clash://install-config/?url=$cl&overwrite=no&name={$c['username']}'>Import Mihomo</a>";
-        $text[] = "<a href='rabbithole://add/$cl'>Import Rabbit Hole</a>     <code>$cl</code>";
+        $text[] = "<a href='rabbithole://add/$cl'>Import Rabbit Hole</a>";
+        $text[] = "<pre><code>$cl</code></pre>";
         $text[] = "";
         $text[] = "<b>Xray</b>";
         $text[] = "<a href='incy://add/$hp'>Import Incy</a>";
         $text[] = "<a href='v2rayng://install-config?url=$xr'>Import v2rayNG</a>";
-        $text[] = "<a href='happ://add/$hp'>Import Happ</a>     <code>$xr</code>";
+        $text[] = "<a href='happ://add/$hp'>Import Happ</a>";
+        $text[] = "<pre><code>$xr</code></pre>";
         $text[] = "";
         $routingBase64 = $this->buildHappRouting($pac);
         $text[] = "<a href='incy://routing/onadd/$routingBase64'>Add Incy routing</a>     <a href='happ://routing/onadd/$routingBase64'>Add Happ routing</a>";
