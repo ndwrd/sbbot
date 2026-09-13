@@ -438,8 +438,8 @@ $i = [
         'ru' => 'Xray',
     ],
     'singbox'  => [
-        'en' => 'Singbox',
-        'ru' => 'Singbox',
+        'en' => 'Sing-box',
+        'ru' => 'Sing-box',
     ],
     'mihomo'  => [
         'en' => 'Mihomo',
@@ -450,8 +450,8 @@ $i = [
         'ru' => 'Xray ⬇️',
     ],
     'singbox ⬇️'  => [
-        'en' => 'Singbox ⬇️',
-        'ru' => 'Singbox ⬇️',
+        'en' => 'Sing-box ⬇️',
+        'ru' => 'Sing-box ⬇️',
     ],
     'mihomo ⬇️'  => [
         'en' => 'Mihomo ⬇️',
@@ -462,20 +462,20 @@ $i = [
         'ru' => 'Установить лимит',
     ],
     'qr vless'  => [
-        'en' => 'QR vless',
-        'ru' => 'QR vless',
+        'en' => 'QR Vless',
+        'ru' => 'QR Vless',
     ],
     'qr xray'  => [
-        'en' => 'QR xray',
-        'ru' => 'QR xray',
+        'en' => 'QR Xray',
+        'ru' => 'QR Xray',
     ],
     'qr singbox'  => [
-        'en' => 'QR singbox',
-        'ru' => 'QR singbox',
+        'en' => 'QR Sing-box',
+        'ru' => 'QR Sing-box',
     ],
-    'qr happ'  => [
-        'en' => 'QR happ/incy',
-        'ru' => 'QR happ/incy',
+    'qr mihomo'  => [
+        'en' => 'QR Mihomo',
+        'ru' => 'QR Mihomo',
     ],
     'nodes'        => [
         'en' => 'Nodes',

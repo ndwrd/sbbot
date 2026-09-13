@@ -708,12 +708,22 @@ public function linkVless($i, $s = false)
             't' => 's',
             's' => $c['inbounds'][0]['settings']['clients'][$i]['id'],
         ]));
+        $cl     = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
+            'h' => $hash,
+            't' => 'cl',
+            's' => $c['inbounds'][0]['settings']['clients'][$i]['id'],
+        ]));
 
         switch ($s) {
             case 1:
-                return "v2rayng://install-config?url=$v2#{$c['inbounds'][0]['settings']['clients'][$i]['id']}";
+                // Раньше тут была обёртка v2rayng://install-config — теперь QR
+                // Xray показывает голую ссылку на xray-json, без привязки к
+                // конкретному клиенту (см. userXr()).
+                return $v2;
             case 2:
                 return "sing-box://import-remote-profile/?url={$si}#{$c['inbounds'][0]['settings']['clients'][$i]['username']}";
+            case 3:
+                return "clash://install-config/?url=$cl&overwrite=no&name={$c['inbounds'][0]['settings']['clients'][$i]['username']}";
 
             default:
                 switch ($pac['transport']) {
@@ -1602,8 +1612,8 @@ public function userXr($i)
                 'callback_data' => "/qrVless {$i}_2",
             ],
             [
-                'text'          => $this->i18n('qr happ'),
-                'callback_data' => "/qrHapp $i",
+                'text'          => $this->i18n('qr mihomo'),
+                'callback_data' => "/qrVless {$i}_3",
             ],
         ];
         $data[] = [

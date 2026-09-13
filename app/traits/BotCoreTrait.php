@@ -330,9 +330,6 @@ public function action()
                 $this->qrVless($m[1], ($m[2] ?? null) ?: false);
                 break;
 
-            case preg_match('~^/qrHapp (\d+)$~', $this->input['callback'], $m):
-                $this->qrHapp($m[1]);
-                break;
             case preg_match('~^/qrMtproto$~', $this->input['callback'], $m):
                 $this->qrMtproto();
                 break;
