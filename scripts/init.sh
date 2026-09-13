@@ -40,6 +40,13 @@ git clone https://github.com/ndwrd/sbbot.git
 cd ./sbbot
 git checkout $TAG
 
+# Инструкции (readme.md/user_guide.md) нужны только для чтения на GitHub —
+# на сервере им незачем занимать место в рабочей копии. sparse-checkout не
+# трогает сам git-репозиторий (git pull/update.sh продолжают работать как
+# раньше), только вычёркивает эти файлы из checkout'а на диск.
+git sparse-checkout init --no-cone
+git sparse-checkout set '/*' '!/readme.md' '!/user_guide.md'
+
 # Installed before `make u` so it's already watching by the time the `service`
 # container's first-boot sslip() creates the /certs/.want_port80 marker and
 # calls setSSL('letsencrypt') — otherwise that zero-config nip.io+SSL flow

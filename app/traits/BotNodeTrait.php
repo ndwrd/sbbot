@@ -834,28 +834,22 @@ public function ensureMainGeoTag()
             $pac['geoTag'] = $this->assignGeoTag($this->geoCountryCode($this->ip) ?: 'XX');
             $this->setPacConf($pac);
         }
-        // Отдельный флаг, не завязанный на то, был ли geoTag уже посчитан
-        // раньше (до появления самой коррекции) — иначе первое условие тут
-        // же возвращало бы старый тег и до correctSingOriginTags() код
-        // никогда бы не доходил. correctSingOriginTags() идемпотентна
-        // (сопоставляет по type, а не по текущему тегу), так что безопасно
-        // звать её и повторно, если флаг почему-то не выставился.
-        if (empty($pac['singOriginCorrected'])) {
-            $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
-            $this->correctSingOriginTags($flag . $pac['geoTag']);
-            $pac['singOriginCorrected'] = true;
-            $this->setPacConf($pac);
-        }
-        // Тот же принцип для mihomo — свой флаг, своя (тоже идемпотентная)
-        // коррекция, независимо друг от друга.
-        if (empty($pac['clashOriginCorrected'])) {
-            $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
-            $this->correctClashOriginTags($flag . $pac['geoTag']);
-            $pac['clashOriginCorrected'] = true;
-            $this->setPacConf($pac);
-        }
-        $tag = $pac['geoTag'];
-        return $tag;
+        // correctSingOriginTags()/correctClashOriginTags() идемпотентны —
+        // сопоставляют по type, а не по текущему имени/тегу, так что звать их
+        // повторно безопасно и без изменений, если уже поправлено. Раньше
+        // это гейтилось флагом в pac.json ("сделано один раз"), но
+        // застрявший true (например, от раннего прогона до того, как сама
+        // коррекция начала реально что-то менять) навсегда блокировал
+        // перезапуск — clash.json у части инсталляций так и остался с
+        // "Vless"/"HY2" вместо "{флаг}{тег}|Vless" на главном сервере, хотя
+        // sing.json скорректировался нормально. Зовём безусловно каждый раз —
+        // цена лишнего чтения/записи двух небольших json на нечастых путях
+        // (singbox()/subscription()) ничтожна рядом с риском тихо
+        // рассинхронизированных тегов.
+        $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
+        $this->correctSingOriginTags($flag . $pac['geoTag']);
+        $this->correctClashOriginTags($flag . $pac['geoTag']);
+        return $pac['geoTag'];
     }
 
 public function correctSingOriginTags($tagPrefix)
@@ -919,12 +913,20 @@ public function correctClashOriginTags($tagPrefix)
             $p['name']          = $newName;
         }
         unset($p);
-        foreach ($c['proxy-groups'] ?? [] as &$g) {
-            if (!empty($g['proxies'])) {
-                $g['proxies'] = array_map(fn ($n) => $renames[$n] ?? $n, $g['proxies']);
+        // `foreach ($c['proxy-groups'] ?? [] as &$g)` выглядело бы безопаснее,
+        // но `??` возвращает временную копию, а не ссылку на элемент массива
+        // — `&$g` мутировал бы эту копию, и группа "Proxy" никогда не
+        // обновлялась бы (реальный баг: proxies переименовывались, а группа
+        // молча оставалась со старыми именами). Проверяем существование ДО
+        // foreach, а не внутри условия итерации, чтобы не терять ссылку.
+        if (!empty($c['proxy-groups'])) {
+            foreach ($c['proxy-groups'] as &$g) {
+                if (!empty($g['proxies'])) {
+                    $g['proxies'] = array_map(fn ($n) => $renames[$n] ?? $n, $g['proxies']);
+                }
             }
+            unset($g);
         }
-        unset($g);
         file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
