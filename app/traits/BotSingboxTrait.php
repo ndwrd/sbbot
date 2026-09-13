@@ -1493,19 +1493,9 @@ public function userXr($i)
 
         $text[] = "Menu -> " . $this->i18n('vless') . " -> {$c['username']}\n";
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
-            $text[] = "<a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>subscription</a>";
+            $text[] = "<b><a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>Subscription</a></b>";
         }
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=v&s={$c['id']}#{$c['username']}'>import://v2rayng</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=si&s={$c['id']}#{$c['username']}'>import://sing-box</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=s&r=st&s={$c['id']}#{$c['username']}'>import://streisand</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=h&s={$c['id']}#{$c['username']}'>import://hiddify</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=si&r=k&s={$c['id']}#{$c['username']}'>import://karing</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=c&s={$c['id']}#{$c['username']}'>import://mihomo</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=cl&r=rh&s={$c['id']}#{$c['username']}'>import://rabbit-hole</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=happ&s={$c['id']}#{$c['username']}'>routing://happ</a>";
-        $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=incy&s={$c['id']}#{$c['username']}'>routing://incy</a>";
-
-        $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>\n";
+        $text[] = "<code>{$this->linkVless($i)}</code>\n";
 
         $si = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
             'h' => $hash,
@@ -1522,13 +1512,28 @@ public function userXr($i)
             't' => 'cl',
             's' => $c['id'],
         ]));
-
-        $text[] = "\nxray config: <pre><code>$xr</code></pre>";
-        $text[] = "sing-box config: <pre><code>$si</code></pre>";
-        $text[] = "mihomo config: <pre><code>$cl</code></pre>";
-
         $hp = $this->happSubUrl($c['id']);
-        $text[] = "happ/incy subscription: <pre><code>$hp</code></pre>";
+
+        // Import-ссылки — тот же набор схем, что уже проверен на странице
+        // подписки (linkVless()/subscription()'s redirect switch) и в
+        // apps.json; тут просто собраны напрямую, без лишнего редиректа
+        // через сервер, раз это уже готовый deep-link. "Json config" —
+        // <code>, тап по нему в Telegram копирует ссылку без отдельной кнопки.
+        $text[] = "<b>Sing-box</b>";
+        $text[] = "<a href='sing-box://import-remote-profile/?url=$si#{$c['username']}'>Import Sing-box</a>";
+        $text[] = "<a href='karing://install-config?url=$si'>Import Karing</a>     <code>$si</code>";
+        $text[] = "";
+        $text[] = "<b>Mihomo</b>";
+        $text[] = "<a href='clash://install-config/?url=$cl&overwrite=no&name={$c['username']}'>Import Mihomo</a>";
+        $text[] = "<a href='rabbithole://add/$cl'>Import Rabbit Hole</a>     <code>$cl</code>";
+        $text[] = "";
+        $text[] = "<b>Xray</b>";
+        $text[] = "<a href='incy://add/$hp'>Import Incy</a>";
+        $text[] = "<a href='v2rayng://install-config?url=$xr'>Import v2rayNG</a>";
+        $text[] = "<a href='happ://add/$hp'>Import Happ</a>     <code>$xr</code>";
+        $text[] = "";
+        $routingBase64 = $this->buildHappRouting($pac);
+        $text[] = "<a href='incy://routing/onadd/$routingBase64'>Add Incy routing</a>     <a href='happ://routing/onadd/$routingBase64'>Add Happ routing</a>";
 
         $st       = $this->getSingboxStats();
         $download = $this->getBytes($st['users'][$i]['global']['download'] + $st['users'][$i]['session']['download']);
