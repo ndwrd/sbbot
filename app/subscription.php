@@ -69,6 +69,10 @@ function resolveRoutingLink($key, $data)
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sbbot — subscription</title>
+<!-- Пустой data-uri фавикон — без него браузер сам шлёт GET /favicon.ico,
+     который попадает в общий `location /` (decoy-заглушка) с auth_basic и
+     на каждой загрузке страницы всплывает окно ввода логина/пароля. -->
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root{
@@ -198,7 +202,7 @@ function resolveRoutingLink($key, $data)
     <div class="app-platform<?= $first ? ' active' : '' ?>" data-platform-panel="<?= $platform ?>">
       <?php foreach ($list as $app): $addLink = !empty($app['add']) ? resolveAppAddLink($app['add'], $data) : null; $downloadLink = resolveDownloadLink($app); $routingLink = !empty($app['routing']) ? resolveRoutingLink($app['routing'], $data) : null; ?>
       <div class="app">
-        <img class="icon" src="/webapp/icons/<?= rawurlencode($app['icon']) ?>.png" alt="">
+        <img class="icon" src="/webapp<?= $hash ?>/icons/<?= rawurlencode($app['icon']) ?>.png" alt="">
         <div>
           <div class="name"><?= htmlspecialchars($app['name']) ?></div>
           <?php if (!empty($app['hint'])): ?>
