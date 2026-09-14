@@ -33,6 +33,7 @@ class Bot
     public $file;
     public $api;
     public $pac;
+    public $pacCache;
     public $i18n;
     public $language;
     public $selfupdate;

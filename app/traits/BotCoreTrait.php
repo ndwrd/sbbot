@@ -484,6 +484,11 @@ public function cron()
     {
         $period = 10;
         while (true) {
+            // Граница единицы работы для кэша getPacConf(): внутри одного
+            // прохода читаем согласованный снимок, но между проходами обязаны
+            // увидеть всё, что записал polling() (другой процесс) — иначе
+            // cron() работал бы по конфигу десятиминутной давности.
+            $this->resetPacCache();
             $this->shutdownClientXr();
             $this->checkVersion();
             $this->checkBackup();
@@ -1143,6 +1148,12 @@ public function polling()
             if (!empty($r['result'])) {
                 foreach ($r['result'] as $v) {
                     try {
+                        // Граница единицы работы для кэша getPacConf(): один
+                        // апдейт от Telegram = один согласованный снимок
+                        // конфига. Между апдейтами сбрасываем, иначе не
+                        // увидели бы записей cron() (он в другом контейнере), а
+                        // процесс живёт сутками.
+                        $this->resetPacCache();
                         $this->input($v);
                     } catch (Throwable $e) {
                         error_log($e);

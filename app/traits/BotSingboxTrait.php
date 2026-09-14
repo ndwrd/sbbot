@@ -349,39 +349,63 @@ public function singboxStatsUser()
             }
         }
         if ($changed) {
-            $pac['singboxClients'] = $clients;
-            $this->setPacConf($pac);
+            // Пишем ТОЛЬКО флаги limitNotified, а не весь $pac, снятый в начале
+            // функции. Между тем чтением и этой записью успели отработать
+            // queryV2raySingboxStats() (grpcurl по ssh) и рассылка админам —
+            // секунды, за которые админ вполне мог добавить юзера или поменять
+            // настройку через меню. Запись всего снимка целиком такую правку
+            // молча откатывала.
+            $flags = [];
+            foreach ($clients as $i => $client) {
+                if (array_key_exists('limitNotified', $client)) {
+                    $flags[$i] = $client['limitNotified'];
+                }
+            }
+            $this->updatePacConf(function ($conf) use ($flags) {
+                foreach ($flags as $i => $v) {
+                    // Клиента могли удалить, пока мы считали статистику —
+                    // тогда флаг просто некуда класть, создавать запись заново
+                    // нельзя.
+                    if (isset($conf['singboxClients'][$i])) {
+                        $conf['singboxClients'][$i]['limitNotified'] = $v;
+                    }
+                }
+                return $conf;
+            });
         }
     }
 
 public function checkResetSingboxStats()
     {
-        $pac = $this->getPacConf();
-        if (!empty($pac['reset_monthly'])) {
+        // Решение + отметка времени атомарно (см. checkBackup()): отметка тут
+        // — единственное, что не даёт сбросить статистику дважды, а сам сброс
+        // и рассылка админам долгие и идут уже снаружи блокировки.
+        $due = false;
+        $this->updatePacConf(function ($pac) use (&$due) {
+            if (empty($pac['reset_monthly'])) {
+                return null;
+            }
             $now    = time();
             $start  = strtotime('first day of previous month midnight');
             $period = strtotime('1 month', 0);
-
-            if (
-                !empty($start)
-                && !empty($period)
-                && $now >= $start
-            ) {
-                $elapsed = $now - $start;
-                $periodsElapsed = floor($elapsed / $period);
-                $lastScheduledReset = $start + ($periodsElapsed * $period);
-                $lastResetTime = $pac['last_reset_singbox_time'] ?? 0;
-                if ($lastResetTime < $lastScheduledReset) {
-                    $pac['last_reset_singbox_time'] = $now;
-                    $this->setPacConf($pac);
-                    $st = $this->getSingboxStats();
-                    [$download, $upload] = $this->getSingboxTotalTraffic($st);
-                    $this->resetXrStats(1);
-                    require dirname(__DIR__) . '/config.php';
-                    foreach ($c['admin'] as $admin) {
-                        $this->send($admin, "vless: monthly traffic ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}, stats reset");
-                    }
-                }
+            if (empty($start) || empty($period) || $now < $start) {
+                return null;
+            }
+            $lastScheduledReset = $start + (floor(($now - $start) / $period) * $period);
+            if (($pac['last_reset_singbox_time'] ?? 0) >= $lastScheduledReset) {
+                return null;
+            }
+            $pac['last_reset_singbox_time'] = $now;
+            $due = true;
+            return $pac;
+        });
+        if ($due) {
+            $st = $this->getSingboxStats();
+            [$download, $upload] = $this->getSingboxTotalTraffic($st);
+            $this->resetXrStats(1);
+            require dirname(__DIR__) . '/config.php';
+            foreach ($c['admin'] ?? [] as $admin) {
+                $this->send($admin, "vless: monthly traffic ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}, stats reset");
             }
         }
     }

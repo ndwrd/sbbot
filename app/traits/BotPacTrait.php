@@ -9,12 +9,89 @@ public function getPacConf()
         // caller вида "$c = getPacConf(); ...; setPacConf($c)" падает TypeError'ом
         // на всём service.php (см. selfUpdate()). Гарантируем массив на выходе,
         // а не только у отдельных вызовов.
-        return $this->readJsonLocked($this->pac) ?: [];
+        // Кэш на время одной единицы работы. getPacConf() зовётся 10-20 раз на
+        // один запрос подписки (getSingbox(), getHashBot(), getDomain(),
+        // getSubscriptionServers(), ensureMainGeoTag()...), и каждый раз это
+        // open+flock+read+json_decode целого pac.json. На конфиге с большими
+        // списками доменов одно чтение стоит миллисекунды: 200 юзеров + 10k
+        // доменов (~1 МБ) — 7 мс за чтение, то есть больше 100 мс на запрос
+        // впустую.
+        //
+        // Область жизни кэша — ровно одна единица работы, и это не случайность:
+        //   Unit   — Bot создаётся заново на каждый запрос (index.php);
+        //   polling() и cron() — долгоживущие циклы, поэтому там кэш явно
+        //                        сбрасывается в начале каждой итерации.
+        // Внутри одной единицы работы читать согласованный снимок правильнее,
+        // чем подхватывать чужие записи в середине.
+        //
+        // Записи кэш не ломают: setPacConf()/updatePacConf() кладут в него то,
+        // что реально записали, а updatePacConf() читает конфиг заново под
+        // блокировкой, кэш для этого не используется.
+        if ($this->pacCache !== null) {
+            return $this->pacCache;
+        }
+        return $this->pacCache = ($this->readJsonLocked($this->pac) ?: []);
+    }
+
+public function resetPacCache()
+    {
+        $this->pacCache = null;
     }
 
 public function setPacConf(array $conf)
     {
-        return $this->writeJsonLocked($this->pac, $conf);
+        $r = $this->writeJsonLocked($this->pac, $conf);
+        // Держим кэш в согласии с диском. Если запись не удалась — сбрасываем,
+        // чтобы следующий getPacConf() не отдавал то, чего в файле нет.
+        $this->pacCache = $r === false ? null : $conf;
+        return $r;
+    }
+
+public function updatePacConf(callable $fn)
+    {
+        // Атомарный read-modify-write. getPacConf() + setPacConf() по
+        // отдельности так не умеют: блокировка держится только внутри каждого
+        // из них, а между ними другой процесс успевает записать своё — и
+        // следующий setPacConf() затирает его целиком, потому что пишет весь
+        // конфиг из снимка, снятого до чужой записи.
+        //
+        // Параллельные писатели тут есть всегда, это не редкий случай: cron()
+        // крутится в контейнере service каждые 10 секунд, polling() — в php,
+        // плюс Unit-процессы на бутстрапе. Особенно опасны места, где между
+        // чтением и записью идёт что-то медленное (grpcurl по SSH, запрос к
+        // Telegram, SSH на ноду) — там окно на секунды, и админская правка из
+        // меню, попавшая в это окно, просто исчезает.
+        //
+        // $fn получает свежий конфиг, прочитанный уже ПОД блокировкой, и
+        // возвращает изменённый — либо null, если писать не нужно. Внутри $fn
+        // ничего медленного делать нельзя: на это время конфиг не могут
+        // прочитать все остальные, включая запросы подписки.
+        $fp = @fopen($this->pac, 'c+');
+        if (!$fp) {
+            error_log("updatePacConf: cannot open {$this->pac}");
+            return false;
+        }
+        flock($fp, LOCK_EX);
+        $conf   = json_decode(stream_get_contents($fp), true) ?: [];
+        $new    = $fn($conf);
+        $result = false;
+        if (is_array($new)) {
+            $json = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json === false) {
+                error_log('updatePacConf: json_encode failed: ' . json_last_error_msg());
+            } else {
+                ftruncate($fp, 0);
+                rewind($fp);
+                $result = fwrite($fp, $json);
+                fflush($fp);
+            }
+        }
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        // $conf прочитан под блокировкой, то есть заведомо свежее кэша — кладём
+        // его даже когда $fn ничего не вернул и записи не было.
+        $this->pacCache = is_array($new) && $result !== false ? $new : $conf;
+        return $result;
     }
 
 public function readJsonLocked($path)

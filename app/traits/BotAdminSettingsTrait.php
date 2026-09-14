@@ -68,28 +68,33 @@ public function importListFile($message, $type)
 
 public function checkBackup()
     {
-        $c = $this->getPacConf();
-        if (!empty($c['backup'])) {
+        // Решение "пора" и отметка времени — одной атомарной транзакцией, а не
+        // getPacConf()/setPacConf() вокруг них: отметка тут работает как
+        // "заявка" (чтобы бэкап не сделался дважды), а она этого не гарантирует,
+        // если между чтением и записью влезет чужая запись всего конфига. Сам
+        // pinBackup() — уже снаружи блокировки, он долгий.
+        $due = false;
+        $this->updatePacConf(function ($c) use (&$due) {
+            if (empty($c['backup'])) {
+                return null;
+            }
             $now = time();
             [$start, $period] = explode('/', $c['backup']);
             $start  = strtotime(trim($start));
             $period = strtotime(trim($period), 0);
-
-            if (
-                !empty($start)
-                && !empty($period)
-                && $now >= $start
-            ) {
-                $elapsed = $now - $start;
-                $periodsElapsed = floor($elapsed / $period);
-                $lastScheduledBackup = $start + ($periodsElapsed * $period);
-                $lastBackupTime = $c['last_backup_time'] ?? 0;
-                if ($lastBackupTime < $lastScheduledBackup) {
-                    $c['last_backup_time'] = $now;
-                    $this->setPacConf($c);
-                    $this->pinBackup();
-                }
+            if (empty($start) || empty($period) || $now < $start) {
+                return null;
             }
+            $lastScheduledBackup = $start + (floor(($now - $start) / $period) * $period);
+            if (($c['last_backup_time'] ?? 0) >= $lastScheduledBackup) {
+                return null;
+            }
+            $c['last_backup_time'] = $now;
+            $due = true;
+            return $c;
+        });
+        if ($due) {
+            $this->pinBackup();
         }
     }
 
@@ -735,28 +740,30 @@ public function cleanLog()
 
 public function checkLogs()
     {
-        $c = $this->getPacConf();
-        if (!empty($c['autocleanlogs'])) {
+        // Решение + отметка времени атомарно, сама чистка — снаружи блокировки.
+        // См. checkBackup().
+        $due = false;
+        $this->updatePacConf(function ($c) use (&$due) {
+            if (empty($c['autocleanlogs'])) {
+                return null;
+            }
             $now = time();
             [$start, $period] = explode('/', $c['autocleanlogs']);
             $start  = strtotime(trim($start));
             $period = strtotime(trim($period), 0);
-
-            if (
-                !empty($start)
-                && !empty($period)
-                && $now >= $start
-            ) {
-                $elapsed = $now - $start;
-                $periodsElapsed = floor($elapsed / $period);
-                $lastScheduledClean = $start + ($periodsElapsed * $period);
-                $lastCleanTime = $c['last_clean_logs_time'] ?? 0;
-                if ($lastCleanTime < $lastScheduledClean) {
-                    $c['last_clean_logs_time'] = $now;
-                    $this->setPacConf($c);
-                    $this->cleanLog();
-                }
+            if (empty($start) || empty($period) || $now < $start) {
+                return null;
             }
+            $lastScheduledClean = $start + (floor(($now - $start) / $period) * $period);
+            if (($c['last_clean_logs_time'] ?? 0) >= $lastScheduledClean) {
+                return null;
+            }
+            $c['last_clean_logs_time'] = $now;
+            $due = true;
+            return $c;
+        });
+        if ($due) {
+            $this->cleanLog();
         }
     }
 

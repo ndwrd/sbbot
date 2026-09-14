@@ -748,8 +748,14 @@ public function checkNodeCerts()
 
 public function checkNodeProvisioning()
     {
-        $conf   = $this->getPacConf();
-        $changed = false;
+        // $conf тут — только снимок для принятия решений; сами изменения
+        // копим в $ops и применяем одной атомарной транзакцией в конце.
+        // Раньше весь снимок писался обратно целиком, а между его чтением и
+        // записью успевали отработать nodeConsole() (SSH на ноду, до секунд) и
+        // update() (запрос к Telegram) на каждую ноду — всё, что админ менял
+        // через меню в это окно, молча откатывалось.
+        $conf = $this->getPacConf();
+        $ops  = [];
         foreach ($conf['nodes'] ?? [] as $id => $node) {
             $p = $node['provisioning'] ?? null;
             if (empty($p) || empty($p['messageId'])) {
@@ -761,21 +767,32 @@ public function checkNodeProvisioning()
             // (даже пустой), так что сравниваем именно с '', а не с null.
             if ($this->nodeConsole($node['ip'], 'getPacConf') !== '') {
                 $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ✅ {$this->i18n('node install done')}");
-                unset($conf['nodes'][$id]['provisioning']);
-                $changed = true;
+                $ops[$id] = null;
             } elseif ($elapsed > 900) {
                 $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ⚠️ {$this->i18n('node install timeout')}");
-                unset($conf['nodes'][$id]['provisioning']);
-                $changed = true;
+                $ops[$id] = null;
             } elseif (time() - $p['lastPing'] >= 30) {
                 $min = (int) floor($elapsed / 60);
                 $this->update($p['chat'], $p['messageId'], "{$this->i18n('node added')}: {$node['label']} — ⏳ {$this->i18n('node install in progress')} {$min} " . $this->i18n('min'));
-                $conf['nodes'][$id]['provisioning']['lastPing'] = time();
-                $changed = true;
+                $ops[$id] = time();
             }
         }
-        if ($changed) {
-            $this->setPacConf($conf);
+        if (!empty($ops)) {
+            $this->updatePacConf(function ($c) use ($ops) {
+                foreach ($ops as $id => $lastPing) {
+                    // Ноду могли удалить, пока мы её опрашивали — тогда
+                    // возвращать ей provisioning-запись нельзя.
+                    if (!isset($c['nodes'][$id])) {
+                        continue;
+                    }
+                    if ($lastPing === null) {
+                        unset($c['nodes'][$id]['provisioning']);
+                    } elseif (isset($c['nodes'][$id]['provisioning'])) {
+                        $c['nodes'][$id]['provisioning']['lastPing'] = $lastPing;
+                    }
+                }
+                return $c;
+            });
         }
     }
 
@@ -1229,9 +1246,12 @@ public function checkNodeAutoCleanLogs()
         // То же вычисление расписания, что и checkLogs() у Бота, только по
         // каждой ноде отдельно (own lastCleanLogsTime, не общий с Ботом) и
         // сама очистка — прямой SSH, без рендера меню (это фон, не клик).
-        $conf    = $this->getPacConf();
-        $changed = false;
-        $now     = time();
+        // $conf — снимок для решений; отметки времени применяем транзакцией в
+        // конце, а не переписыванием всего снимка: в цикле идёт SSH на каждую
+        // ноду, и за это время конфиг успевает измениться.
+        $conf  = $this->getPacConf();
+        $stamp = [];
+        $now   = time();
         foreach ($conf['nodes'] ?? [] as $id => $node) {
             if (empty($node['autocleanlogs']) || empty($node['ip'])) {
                 continue;
@@ -1248,12 +1268,18 @@ public function checkNodeAutoCleanLogs()
             $lastCleanTime       = $node['lastCleanLogsTime'] ?? 0;
             if ($lastCleanTime < $lastScheduledClean) {
                 $this->ssh('for f in /logs/*; do [ -f "$f" ] && > "$f"; done', 'php', true, '/dev/null', $node['ip']);
-                $conf['nodes'][$id]['lastCleanLogsTime'] = $now;
-                $changed = true;
+                $stamp[$id] = $now;
             }
         }
-        if ($changed) {
-            $this->setPacConf($conf);
+        if (!empty($stamp)) {
+            $this->updatePacConf(function ($c) use ($stamp) {
+                foreach ($stamp as $id => $t) {
+                    if (isset($c['nodes'][$id])) {
+                        $c['nodes'][$id]['lastCleanLogsTime'] = $t;
+                    }
+                }
+                return $c;
+            });
         }
     }
 
