@@ -643,6 +643,7 @@ public function getTime(int $seconds)
             ],
         ];
         $text = '';
+        $i    = 0;   // счётчик выведенных единиц: показываем максимум две
         foreach ($items as $k => $v) {
             if (($t = gmdate($k, $seconds) - $v['diff']) > 0) {
                 $text .= " $t{$v['sign']}";
@@ -844,7 +845,10 @@ public function menu($type = false, $arg = false, $return = false)
         ];
         $menu   = [
             'main' => [
-                'text' => implode("\n", $main ?: []),
+                // $main в этой функции нигде не задаётся (наследство), то есть
+                // текст главного меню всегда пустой. Оставляем как есть —
+                // менять поведение тут не задача; ?? только убирает warning.
+                'text' => implode("\n", ($main ?? null) ?: []),
                 'data' => array_merge(
                     $mainButtons
                 )

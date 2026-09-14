@@ -332,7 +332,10 @@ public function deleteAll($type)
 
 public function exportList($type)
     {
-        $domains = $this->getPacConf()[$type];
+        // ?? [] — списка может не быть в pac вообще (ни одного домена не
+        // добавляли); $text = '' — иначе первый .= идёт по неопределённой.
+        $domains = $this->getPacConf()[$type] ?? [];
+        $text    = '';
         if (!empty($domains)) {
             foreach ($domains as $k => $v) {
                 $text .= "$k;$v\n";
@@ -353,7 +356,10 @@ public function listPac($type, $page, $menu, $basename = false)
                 'callback_data' => "/include $type",
             ],
         ];
-        $domains = $this->getPacConf()[$type];
+        // ?? [] — списка может не быть в pac; $text = [] — функция возвращает
+        // его всегда, даже когда ветка с <blockquote> ниже не отработала.
+        $domains = $this->getPacConf()[$type] ?? [];
+        $text    = [];
         if (!empty($domains)) {
             $all     = (int) ceil(count($domains) / $this->limit);
             $page    = min($page, $all - 1);

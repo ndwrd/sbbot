@@ -724,7 +724,7 @@ public function linkVless($i, $s = false)
     {
         $c      = $this->getSingbox();
         $pac    = $this->getPacConf();
-        $domain = $this->getDomain($pac['transport'] != 'Reality');
+        $domain = $this->getDomain(($pac['transport'] ?? null) != 'Reality');
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
         $si     = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
@@ -755,7 +755,7 @@ public function linkVless($i, $s = false)
                 return "clash://install-config/?url=$cl&overwrite=no&name={$c['inbounds'][0]['settings']['clients'][$i]['username']}";
 
             default:
-                switch ($pac['transport']) {
+                switch ($pac['transport'] ?? null) {
                     case 'Reality':
                         $link = "vless://{$c['inbounds'][0]['settings']['clients'][$i]['id']}@$domain:443"
                                     . "?security=reality"
@@ -786,7 +786,7 @@ public function linkVless($i, $s = false)
 public function happSubUrl($uid)
     {
         $pac    = $this->getPacConf();
-        $domain = $this->getDomain($pac['transport'] != 'Reality');
+        $domain = $this->getDomain(($pac['transport'] ?? null) != 'Reality');
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
         return "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
@@ -909,7 +909,7 @@ public function addxrus($users)
                 'description' => $description,
                 'password'    => $password,
             ];
-            if ($p['transport'] == 'Reality') {
+            if (($p['transport'] ?? null) == 'Reality') {
                 $client['flow'] = 'xtls-rprx-vision';
             }
             $c['inbounds'][0]['settings']['clients'][] = $client;
@@ -1240,7 +1240,8 @@ public function templates($type)
             <code>~naive_domain~</code>
             <code>~anytls_domain~</code>
             TEXT;
-        $templates = $pac["{$type}templates"];
+        // ?? [] — именованных шаблонов может не быть вообще (их добавляют руками)
+        $templates = $pac["{$type}templates"] ?? [];
 
         $data[] = [
             [
@@ -1262,7 +1263,7 @@ public function templates($type)
                 'callback_data' => "/templateCopy $type",
             ],
             [
-                'text'          => $this->i18n($pac["default{$type}template"] && !empty($pac["{$type}templates"][base64_decode($pac["default{$type}template"])]) ? 'off' : 'on'),
+                'text'          => $this->i18n(!empty($pac["default{$type}template"]) && !empty($pac["{$type}templates"][base64_decode($pac["default{$type}template"])]) ? 'off' : 'on'),
                 'callback_data' => "/defaultTemplate $type",
             ],
         ];
@@ -1532,7 +1533,8 @@ public function templateUser($type, $i)
         $c         = $this->getSingbox();
         $pac       = $this->getPacConf();
         $text[]    = "Menu -> " . $this->i18n('vless') . " -> {$c['inbounds'][0]['settings']['clients'][$i]['username']}\n";
-        $templates = $pac["{$type}templates"];
+        // ?? [] — именованных шаблонов может не быть вообще (их добавляют руками)
+        $templates = $pac["{$type}templates"] ?? [];
         $data[]    = [
             [
                 'text'          => 'Default',
@@ -1569,10 +1571,21 @@ public function templateUser($type, $i)
 
 public function userXr($i)
     {
-        $xray   = $this->getSingbox();
-        $c      = $xray['inbounds'][0]['settings']['clients'][$i];
+        $xray = $this->getSingbox();
+        $c    = $xray['inbounds'][0]['settings']['clients'][$i] ?? null;
+        if ($c === null) {
+            // Индекс клиента позиционный, а restartSingbox() переиндексирует
+            // список через array_values() — значит кнопка из старого сообщения
+            // после удаления пользователя указывает в пустоту. Раньше $c
+            // становился null, и всё меню молча собиралось из пустых значений
+            // (в логе это ~25 "Trying to access array offset on null" подряд).
+            // Показываем актуальный список вместо мусора — так же, как делает
+            // delxr() после удаления.
+            $this->singbox();
+            return;
+        }
         $pac    = $this->getPacConf();
-        $domain = $this->getDomain($pac['transport'] != 'Reality');
+        $domain = $this->getDomain(($pac['transport'] ?? null) != 'Reality');
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
         $hash   = $this->getHashBot();
 
@@ -1628,9 +1641,12 @@ public function userXr($i)
         $text[] = "";
         $text[] = "<a href='$scheme://{$domain}/pac$hash?t=hp&r=incy&s={$c['id']}#{$c['username']}'>Add Incy (DigneZzZ) routing</a>     <a href='$scheme://{$domain}/pac$hash?t=hp&r=happ&s={$c['id']}#{$c['username']}'>Add Happ (DigneZzZ) routing</a>";
 
-        $st       = $this->getSingboxStats();
-        $download = $this->getBytes($st['users'][$i]['global']['download'] + $st['users'][$i]['session']['download']);
-        $upload   = $this->getBytes($st['users'][$i]['global']['upload'] + $st['users'][$i]['session']['upload']);
+        $st = $this->getSingboxStats();
+        // ?? 0 на каждом уровне: записи для пользователя может не быть вовсе
+        // (ещё не было трафика), а 'session' появляется только после первого
+        // сбора статистики. sub() тут уже считал так же — приводим к одному виду.
+        $download = $this->getBytes(($st['users'][$i]['global']['download'] ?? 0) + ($st['users'][$i]['session']['download'] ?? 0));
+        $upload   = $this->getBytes(($st['users'][$i]['global']['upload']   ?? 0) + ($st['users'][$i]['session']['upload']   ?? 0));
         $data[]   = [
             [
                 'text'          => $this->i18n('reset stats') . ": ↓$download  ↑$upload",
@@ -1667,7 +1683,7 @@ public function userXr($i)
         ];
         $data[] = [
             [
-                'text'          => $c['time'] ? "timer: " . $this->getTime($c['time']) : $this->i18n('timer'),
+                'text'          => !empty($c['time']) ? "timer: " . $this->getTime($c['time']) : $this->i18n('timer'),
                 'callback_data' => "/timerXr $i",
             ],
             [
@@ -1675,13 +1691,15 @@ public function userXr($i)
                 'callback_data' => "/limitXr $i",
             ],
             [
-                'text'          => $this->i18n($c['off'] ? 'off' : 'on'),
+                'text'          => $this->i18n(!empty($c['off']) ? 'off' : 'on'),
                 'callback_data' => "/switchXr $i",
             ],
         ];
-        $singtemplate  = $c['singtemplate'] ? base64_decode($c['singtemplate']) : 'default(' . ($pac['defaultsingtemplate'] && !empty($pac['singtemplates'][base64_decode($pac['defaultsingtemplate'])]) ? base64_decode($pac['defaultsingtemplate']) : 'origin') . ')';
-        $xraytemplate = $c['xraytemplate'] ? base64_decode($c['xraytemplate']) : 'default(' . ($pac['defaultxraytemplate'] && !empty($pac['xraytemplates'][base64_decode($pac['defaultxraytemplate'])]) ? base64_decode($pac['defaultxraytemplate']) : 'origin') . ')';
-        $clashtemplate = $c['clashtemplate'] ? base64_decode($c['clashtemplate']) : 'default(' . ($pac['defaultclashtemplate'] && !empty($pac['clashtemplates'][base64_decode($pac['defaultclashtemplate'])]) ? base64_decode($pac['defaultclashtemplate']) : 'origin') . ')';
+        // Ни у клиента не обязан быть выбран шаблон, ни в pac — дефолтный:
+        // оба ключа появляются только после явного выбора в меню.
+        $singtemplate  = !empty($c['singtemplate'])  ? base64_decode($c['singtemplate'])  : 'default(' . (!empty($pac['defaultsingtemplate'])  && !empty($pac['singtemplates'][base64_decode($pac['defaultsingtemplate'])])   ? base64_decode($pac['defaultsingtemplate'])  : 'origin') . ')';
+        $xraytemplate  = !empty($c['xraytemplate'])  ? base64_decode($c['xraytemplate'])  : 'default(' . (!empty($pac['defaultxraytemplate'])  && !empty($pac['xraytemplates'][base64_decode($pac['defaultxraytemplate'])])   ? base64_decode($pac['defaultxraytemplate'])  : 'origin') . ')';
+        $clashtemplate = !empty($c['clashtemplate']) ? base64_decode($c['clashtemplate']) : 'default(' . (!empty($pac['defaultclashtemplate']) && !empty($pac['clashtemplates'][base64_decode($pac['defaultclashtemplate'])]) ? base64_decode($pac['defaultclashtemplate']) : 'origin') . ')';
         $data[]        = [
             [
                 'text'          => $this->i18n('xray') . ": $xraytemplate",
@@ -1884,7 +1902,8 @@ public function subscription($return = false)
                 if (empty($v['off'])) {
                     $flag = false;
                 }
-                $template = base64_decode($v["{$type}template"]);
+                // ?? '' — у клиента шаблон для этого формата может быть не выбран
+                $template = base64_decode($v["{$type}template"] ?? '');
                 $uid      = $v['id'];
                 $username = $v['username'];
                 $password = $v['password'] ?? '';
@@ -2023,14 +2042,16 @@ public function subscription($return = false)
         $c = json_decode($this->replaceTags(json_encode($c), [
             '~outbound~' => $outbound,
         ]), true);
-        foreach ($c['outbounds'] as $k => $v) {
+        // Функция вызывается и для sing-конфига (outbounds), и для clash-конфига
+        // (proxies) — один из двух ключей отсутствует всегда.
+        foreach ($c['outbounds'] ?? [] as $k => $v) {
             if ($v['tag'] == $outbound) {
                 $index = $k;
                 break;
             }
         }
         if (!isset($index)) {
-            foreach ($c['proxies'] as $k => $v) {
+            foreach ($c['proxies'] ?? [] as $k => $v) {
                 if ($v['name'] == $outbound) {
                     $index = $k;
                     break;
@@ -2045,13 +2066,13 @@ public function subscription($return = false)
                 // ~wspath~ заполнит общий replaceTags() ниже. Reality/xhttp — дормант-
                 // задел (см. buildSingboxConfig()), сами достраивают всё с нуля, раз
                 // шаблон больше не несёт realitySettings/mux по умолчанию.
-                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                if (in_array($pac['transport'] ?? null, ['Reality', 'xhttp'])) {
                     $c['outbounds'][$index]['settings']['vnext'][0]['address']  = '~domain~';
                     $c['outbounds'][$index]['settings']['vnext'][0]['users'][0] = [
                         'id'         => '~uid~',
                         'encryption' => 'none',
                     ];
-                    switch ($pac['transport']) {
+                    switch ($pac['transport'] ?? null) {
                         case 'Reality':
                             $c['outbounds'][$index]['settings']['vnext'][0]['users'][0]["flow"] = "xtls-rprx-vision";
                             $c['outbounds'][$index]['streamSettings']                           = [
@@ -2116,14 +2137,14 @@ public function subscription($return = false)
                 // переключат обратно (см. buildSingboxConfig(), где Reality тоже
                 // отключён, но не удалён); шаблон больше не несёт tls.reality/flow сам
                 // по себе, поэтому эти ветки досоздают их с нуля.
-                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                if (in_array($pac['transport'] ?? null, ['Reality', 'xhttp'])) {
                     foreach ($c['outbounds'] as $k => $v) {
                         if ($v['tag'] == 'vless-out') {
                             $vlessIndex = $k;
                             break;
                         }
                     }
-                    switch ($pac['transport']) {
+                    switch ($pac['transport'] ?? null) {
                         case 'Reality':
                             unset($c['outbounds'][$vlessIndex]["transport"]);
                             $c['outbounds'][$vlessIndex]['flow']               = 'xtls-rprx-vision';
@@ -2166,10 +2187,10 @@ public function subscription($return = false)
             case 'cl':
                 // clash.json тоже уже в финальном WS-виде — как и у 's'/'si', точечная
                 // мутация нужна только для дормант-транспортов Reality/xhttp.
-                if (in_array($pac['transport'], ['Reality', 'xhttp'])) {
+                if (in_array($pac['transport'] ?? null, ['Reality', 'xhttp'])) {
                     $c['proxies'][$index]['server'] = '~domain~';
                     $c['proxies'][$index]['uuid']   = '~uid~';
-                    switch ($pac['transport']) {
+                    switch ($pac['transport'] ?? null) {
                         case 'Reality':
                             unset($c['proxies'][$index]["ws-opts"]);
                             unset($c['proxies'][$index]["skip-cert-verify"]);
@@ -2229,12 +2250,15 @@ public function subscription($return = false)
             '~uid~'          => $uid,
             '~password~'     => $password,
             '~domain~'       => $domain,
-            '~naive_domain~'  => "{$pac['naiveSubdomain']}.{$pac['domain']}",
-            '~anytls_domain~' => "{$pac['anytlsSubdomain']}.{$pac['domain']}",
-            '~short_id~'     => $xr['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0],
+            // Поддомены naive/anytls, домен и reality-параметры появляются в pac
+            // только после настройки соответствующего протокола — до того их
+            // просто нет, а подстановка тегов идёт всегда.
+            '~naive_domain~'  => ($pac['naiveSubdomain'] ?? '') . '.' . ($pac['domain'] ?? ''),
+            '~anytls_domain~' => ($pac['anytlsSubdomain'] ?? '') . '.' . ($pac['domain'] ?? ''),
+            '~short_id~'     => $xr['inbounds'][0]['streamSettings']['realitySettings']['shortIds'][0] ?? '',
             '~username~'     => $username,
-            '~public_key~'   => $pac['reality']['publicKey'],
-            '~server_name~'  => $xr['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0],
+            '~public_key~'   => $pac['reality']['publicKey'] ?? '',
+            '~server_name~'  => $xr['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0] ?? '',
             '~ip~'           => $this->ip,
             '~outbound~'     => $outbound,
         ]), true);
@@ -2393,7 +2417,7 @@ public function getSubscriptionServers()
         $servers     = [[
             'tag'             => $this->countryFlag($mainCountry) . $mainGeoTag,
             'geoTag'          => $mainGeoTag,
-            'domain'          => $pac['domain'] ?: $this->ip,
+            'domain'          => ($pac['domain'] ?? null) ?: $this->ip,
             'hash'            => $this->getHashBot(),
             'naiveSubdomain'  => $pac['naiveSubdomain'] ?? '',
             'anytlsSubdomain' => $pac['anytlsSubdomain'] ?? '',

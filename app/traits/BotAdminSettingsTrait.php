@@ -243,7 +243,7 @@ public function importFile($file = false)
                 $out[] = 'update singbox';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
                 $this->restartSingbox($json['singbox']);
-                $this->setUpstreamDomain($json['pac']['transport'] != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: $json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0]));
+                $this->setUpstreamDomain(($json['pac']['transport'] ?? null) != 'Reality' ? 't' : (($json['pac']['reality']['domain'] ?? null) ?: ($json['singbox']['inbounds'][0]['streamSettings']['realitySettings']['serverNames'][0] ?? '')));
             }
             if (!empty($json['dnstt'])) {
                 $out[] = 'update dnstt certificates';
@@ -516,7 +516,7 @@ public function configMenu()
                 'callback_data' => "/import",
             ],
         ];
-        $backup = array_filter(explode('/', $conf['backup']));
+        $backup = array_filter(explode('/', $conf['backup'] ?? ''));
         if (!empty($backup)) {
             if (!empty(strtotime($backup[0])) && !empty(strtotime($backup[1]))) {
                 $backup = "{$backup[0]} start / {$backup[1]} period";
@@ -530,7 +530,7 @@ public function configMenu()
                 'callback_data' => "/backup",
             ],
             [
-                'text'          => $this->i18n('autoupdate') . ': ' .  $this->i18n($conf['autoupdate'] ? 'on' : 'off'),
+                'text'          => $this->i18n('autoupdate') . ': ' .  $this->i18n(!empty($conf['autoupdate']) ? 'on' : 'off'),
                 'callback_data' => "/autoupdate",
             ],
         ];

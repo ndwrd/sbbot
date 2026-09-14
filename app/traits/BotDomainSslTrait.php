@@ -228,7 +228,7 @@ public function selfsslInstall()
 public function getDomain($cdn = false)
     {
         $c = $this->getPacConf();
-        if ($cdn && $c['linkdomain']) {
+        if ($cdn && !empty($c['linkdomain'])) {
             return $c['linkdomain'];
         }
         return ($c['domain'] ?? null) ?: $this->ip;
@@ -246,13 +246,15 @@ public function cloakNginx()
     {
         $conf     = $this->getPacConf();
         $template = file_get_contents('/config/nginx_default.conf');
-        $template = preg_replace('~server_name domain~', "server_name " . ($conf['domain'] ? " *.{$conf['domain']} {$conf['domain']}" : '_'), $template);
+        // Домена может не быть вообще — до первой настройки SSL/домена бот
+        // работает по IP, и тогда в server_name идёт '_'.
+        $template = preg_replace('~server_name domain~', "server_name " . (!empty($conf['domain']) ? " *.{$conf['domain']} {$conf['domain']}" : '_'), $template);
         $before = $conf;
         $conf   = $this->ensureProtocolSubdomains($conf);
         if ($conf !== $before) {
             $this->setPacConf($conf);
         }
-        if ($conf['domain'] && $conf['letsencrypt']) {
+        if (!empty($conf['domain']) && !empty($conf['letsencrypt'])) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
             foreach (['domain', 'naive', 'anytls', 'hostcheck'] as $tag) {
                 preg_match_all("~#-$tag.+?#-$tag~s", $template, $m);
@@ -277,7 +279,7 @@ public function cloakNginx()
         // restartSingbox() — достаточно один раз перегенерировать конфиг после смены hash.
         $this->restartSingbox($this->getSingbox());
 
-        if ($conf['domain']) {
+        if (!empty($conf['domain'])) {
             $up = file_get_contents('/config/upstream.conf');
             $up = preg_replace('~#naive.+#naive~s', "#naive\n{$conf['naiveSubdomain']}.{$conf['domain']} ng-naive;\n#naive", $up);
             $up = preg_replace('~#anytls.+#anytls~s', "#anytls\n{$conf['anytlsSubdomain']}.{$conf['domain']} ng-anytls;\n#anytls", $up);

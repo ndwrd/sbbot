@@ -128,11 +128,14 @@ public function offWarp()
 public function warp()
     {
         $p      = $this->getPacConf();
-        $c      = file_get_contents('/etc/warp/wgcf-profile.conf');
-        $a      = file_get_contents('/etc/warp/wgcf-account.toml');
+        // Файлы появляются только после регистрации WARP (том warp: в
+        // docker-compose), а меню открывается и до неё — тогда тут было по два
+        // "Failed to open stream" на каждый заход.
+        $c      = @file_get_contents('/etc/warp/wgcf-profile.conf') ?: '';
+        $a      = @file_get_contents('/etc/warp/wgcf-account.toml') ?: '';
         $text[] = "Menu -> " . $this->i18n('warp');
         $text[] = "status: <pre>" . $this->ssh('wgcf trace', 'wp') . '</pre>';
-        $text[] = "key: <code>{$p['warp']}</code>";
+        $text[] = "key: <code>" . ($p['warp'] ?? '') . "</code>";
         $text[] = "<pre>$a</pre>";
         $text[] = "<pre>$c</pre>";
         $data[] = [
