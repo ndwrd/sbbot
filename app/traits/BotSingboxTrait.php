@@ -1497,6 +1497,7 @@ public function userXr($i)
         }
         $text[] = "";
         $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>";
+        $text[] = "";
 
         $si = "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
             'h' => $hash,
