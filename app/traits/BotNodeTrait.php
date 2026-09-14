@@ -855,7 +855,7 @@ public function ensureMainGeoTag()
 public function correctSingOriginTags($tagPrefix)
     {
         $path = '/config/sing.json';
-        $c    = json_decode(file_get_contents($path), true);
+        $c    = $this->readJsonLocked($path);
         if (empty($c['outbounds'])) {
             return;
         }
@@ -885,13 +885,13 @@ public function correctSingOriginTags($tagPrefix)
             }
         }
         unset($o);
-        file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $this->writeJsonLocked($path, $c);
     }
 
 public function correctClashOriginTags($tagPrefix)
     {
         $path = '/config/clash.json';
-        $c    = json_decode(file_get_contents($path), true);
+        $c    = $this->readJsonLocked($path);
         if (empty($c['proxies'])) {
             return;
         }
@@ -927,7 +927,7 @@ public function correctClashOriginTags($tagPrefix)
             }
             unset($g);
         }
-        file_put_contents($path, json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $this->writeJsonLocked($path, $c);
     }
 
 public function nodeBootstrap($ip, $login, $authType, $secret)

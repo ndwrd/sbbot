@@ -23,7 +23,16 @@ function resolveDownloadLink($app)
     if (empty($app['downloadKey'])) {
         return $app['download'];
     }
-    $cache = json_decode((string) @file_get_contents('/config/apps_cache.json'), true) ?: [];
+    $fp = @fopen('/config/apps_cache.json', 'c+');
+    $cache = [];
+    if ($fp) {
+        // LOCK_SH — синхронизируется с writeJsonLocked() в
+        // checkAppDownloadLinks(), чтобы не прочитать файл на середине записи.
+        flock($fp, LOCK_SH);
+        $cache = json_decode(stream_get_contents($fp), true) ?: [];
+        flock($fp, LOCK_UN);
+        fclose($fp);
+    }
     return $cache[$app['downloadKey']] ?? $app['download'];
 }
 

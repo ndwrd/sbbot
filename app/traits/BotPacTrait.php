@@ -9,12 +9,50 @@ public function getPacConf()
         // caller вида "$c = getPacConf(); ...; setPacConf($c)" падает TypeError'ом
         // на всём service.php (см. selfUpdate()). Гарантируем массив на выходе,
         // а не только у отдельных вызовов.
-        return json_decode(file_get_contents($this->pac), true) ?: [];
+        return $this->readJsonLocked($this->pac) ?: [];
     }
 
 public function setPacConf(array $conf)
     {
-        return file_put_contents($this->pac, json_encode($conf, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        return $this->writeJsonLocked($this->pac, $conf);
+    }
+
+public function readJsonLocked($path)
+    {
+        // LOCK_SH синхронизируется с эксклюзивной блокировкой в
+        // writeJsonLocked() — при нескольких PHP-процессах (см.
+        // config/unit.json "processes") не даёт прочитать файл, пока другой
+        // процесс его ещё дописывает, и тем самым не даёт словить "рваное"
+        // чтение и битый JSON.
+        $fp = @fopen($path, 'c+');
+        if (!$fp) {
+            return null;
+        }
+        flock($fp, LOCK_SH);
+        $content = stream_get_contents($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return json_decode($content, true);
+    }
+
+public function writeJsonLocked($path, $data)
+    {
+        // LOCK_EX на всё время записи — при нескольких PHP-процессах две
+        // одновременные записи иначе могут наложиться друг на друга и
+        // испортить файл (а следующее чтение тогда вернёт null/[], и
+        // следующая же запись реально сотрёт весь предыдущий конфиг).
+        // ftruncate() перед fwrite(), а не сразу file_put_contents(), —
+        // чтобы старое содержимое не "просвечивало" за пределами нового,
+        // если оно короче.
+        $fp = fopen($path, 'c+');
+        flock($fp, LOCK_EX);
+        ftruncate($fp, 0);
+        rewind($fp);
+        $result = fwrite($fp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return $result;
     }
 
 public function include($type)

@@ -567,7 +567,7 @@ public function checkAppDownloadLinks()
                 'pattern' => '~^SFW-[\d.]+-x64\.exe$~',
             ],
         ];
-        $cache = @json_decode((string) @file_get_contents($this->appsCache), true) ?: [];
+        $cache = $this->readJsonLocked($this->appsCache) ?: [];
         $context = stream_context_create(['http' => [
             'header'  => "User-Agent: sbbot\r\n",
             'timeout' => 10,
@@ -582,7 +582,7 @@ public function checkAppDownloadLinks()
                 }
             }
         }
-        file_put_contents($this->appsCache, json_encode($cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $this->writeJsonLocked($this->appsCache, $cache);
     }
 
 public function getTime(int $seconds)
