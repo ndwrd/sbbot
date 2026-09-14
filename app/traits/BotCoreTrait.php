@@ -554,10 +554,14 @@ public function checkAppDownloadLinks()
         // /config/apps_cache.json, чтобы страница подписки не дёргала GitHub API на
         // каждый заход пользователя. Если résolve не удался — resolveDownloadLink()
         // в subscription.php просто откатится на статический download из apps.json.
-        if (!empty($this->time_apps_cache) && (time() - $this->time_apps_cache) < 86400) {
+        if (!empty($this->time_apps_cache) && (time() - $this->time_apps_cache) < ($this->time_apps_ttl ?: 86400)) {
             return;
         }
-        $this->time_apps_cache = time();
+        // Метку времени ставим В КОНЦЕ, по факту результата, а не тут: раньше
+        // она выставлялась до запросов, и один недоступный GitHub означал, что
+        // следующая попытка будет только через сутки, а страница подписки всё
+        // это время отдаёт статический fallback из apps.json.
+        $ok      = true;
         $targets = [
             // sing-box for Windows (SFW) — версия зашита в имя ассета, поэтому
             // releases/latest/download/<файл> не работает, приходится смотреть
@@ -585,13 +589,22 @@ public function checkAppDownloadLinks()
             $json    = @file_get_contents($t['api'], false, $context);
             $data    = $json ? json_decode($json, true) : null;
             $release = !empty($t['list']) ? ($data[0] ?? null) : $data;
+            $found   = false;
             foreach ($release['assets'] ?? [] as $asset) {
                 if (preg_match($t['pattern'], $asset['name'] ?? '')) {
                     $cache[$key] = $asset['browser_download_url'];
+                    $found       = true;
                     break;
                 }
             }
+            $ok = $ok && $found;
         }
+        // Успех — следующая проверка через сутки. Неудача — через 10 минут, а
+        // не на каждом проходе cron() (он крутится каждые 10 с, и без этого
+        // интервала намертво отвалившаяся цель выжирала бы лимит GitHub API —
+        // 60 запросов в час без токена).
+        $this->time_apps_cache = time();
+        $this->time_apps_ttl   = $ok ? 86400 : 600;
         $this->writeJsonLocked($this->appsCache, $cache);
     }
 

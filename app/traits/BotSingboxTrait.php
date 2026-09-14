@@ -1687,10 +1687,14 @@ public function sub()
         // валидных. $flag остаётся true, если юзера не нашли или он выключен
         // (симметрично subscription()).
         if ($flag) {
-            // http_response_code(), а не header('500', true, 500) — иначе '500'
+            // 404, а не 500: юзера нет в конфиге или он выключен — это "нет
+            // такого ресурса", а не сбой сервера. С 500 и клиент, и внешний
+            // мониторинг видели аварию там, где её нет, плюс лишний шум в логах.
+            //
+            // http_response_code(), а не header('404', true, 404) — иначе '404'
             // уходит ещё и сырым заголовком без двоеточия, и Unit ругается
-            // "[unit] colon not found in header '500'" на каждый такой ответ.
-            http_response_code(500);
+            // "[unit] colon not found in header" на каждый такой ответ.
+            http_response_code(404);
             exit;
         }
 
@@ -1803,8 +1807,9 @@ public function subscription($return = false)
             }
         }
         if ($flag) {
-            // См. sub(): header('500', ...) отдавал ещё и сырой заголовок '500'.
-            http_response_code(500);
+            // См. sub(): 404 вместо 500, и http_response_code() вместо
+            // header('404', ...), который отдавал бы ещё и сырой заголовок.
+            http_response_code(404);
             exit;
         }
 
@@ -1871,7 +1876,13 @@ public function subscription($return = false)
                     header("Location: hiddify://install-config/?url=$si");
                     exit;
                 case 'c':
-                    header("Location: clash://install-config/?url=$cl&overwrite=no&name=$username");
+                    // rawurlencode($username): имя идёт значением query-параметра,
+                    // и пробел/&/# в нём обрывали бы ссылку на импорт. Страница
+                    // подписки (resolveAppAddLink(), case 'mihomoImport') кодирует
+                    // его же — тут было расхождение двух реализаций одной ссылки.
+                    // Сам $cl кодировать не нужно: это base64 от serialize()
+                    // фиксированного ASCII-массива, символы +/&/# там не возникают.
+                    header("Location: clash://install-config/?url=$cl&overwrite=no&name=" . rawurlencode($username));
                     exit;
                 case 'rh':
                     header("Location: rabbithole://add/$cl");

@@ -191,7 +191,7 @@ function resolveRoutingLink($key, $data)
     <div class="servers">
       <?php foreach ($data['servers'] as $s): ?>
       <div class="server">
-        <span class="flag"><?= $s['flag'] ?></span>
+        <span class="flag"><?= htmlspecialchars($s['flag']) ?></span>
         <span class="tag"><?= htmlspecialchars($s['tag']) ?></span>
         <span class="protos"><?= htmlspecialchars(implode(' · ', $s['protocols']) ?: '—') ?></span>
       </div>
