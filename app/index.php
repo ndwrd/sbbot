@@ -33,8 +33,15 @@ if (!empty($_GET['hash'])) {
 }
 
 switch (true) {
-    // hash_equals() по той же причине, что и выше; ?? '' — без параметра k
-    // иначе undefined key.
+    // ВЕБХУК СЕЙЧАС НЕ ИСПОЛЬЗУЕТСЯ. Бот работает на поллинге: init.php зовёт
+    // polling() (getUpdates в вечном цикле отдельным процессом), а cleanQueue()
+    // перед этим делает deleteWebhook на каждом старте — то есть Telegram сюда
+    // ничего не шлёт и этот case недостижим. Оставлен как есть, чтобы не
+    // расходиться с upstream и не терять запасной путь, если поллинг когда-то
+    // придётся отключить.
+    //
+    // hash_equals() — сравнение секрета должно быть constant-time; ?? '' — без
+    // параметра k иначе undefined key.
     case 'POST' == $_SERVER['REQUEST_METHOD'] && preg_match('~^/tlgrm~', $_SERVER['REQUEST_URI']) && hash_equals($c['key'], (string) ($_GET['k'] ?? '')):
         $bot->input();
         break;

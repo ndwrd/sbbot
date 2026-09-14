@@ -14,24 +14,35 @@ function subscriptionHint($hint, $lang)
     return $hint[$lang] ?? '';
 }
 
+// Кэш версионных GitHub-ссылок — читаем один раз на страницу, а не внутри
+// resolveDownloadLink() на каждое приложение с downloadKey (сейчас их два, но
+// открывать и блокировать один и тот же файл по разу на карточку незачем).
+//
+// Читаем здесь напрямую, а не через $this->readJsonLocked(): этот файл —
+// шаблон, который сознательно не знает про класс Bot и работает с одними
+// только $data и $hash. Иначе его нельзя было бы отрендерить отдельно, а
+// subscription.override.php стал бы завязан на внутренности бота.
+//
+// Режим 'r', а не 'c+': это путь только на чтение, создавать пустой файл при
+// его отсутствии тут не нужно (за создание отвечает checkAppDownloadLinks()).
+$appsCache = [];
+if ($fp = @fopen('/config/apps_cache.json', 'r')) {
+    // LOCK_SH — синхронизируется с writeJsonLocked() в checkAppDownloadLinks(),
+    // чтобы не прочитать файл на середине записи.
+    flock($fp, LOCK_SH);
+    $appsCache = json_decode(stream_get_contents($fp), true) ?: [];
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
 // Для версионных GitHub-ссылок (downloadKey в apps.json) — подменяем на то,
-// что раз в сутки резолвит checkAppDownloadLinks() (см. BotCoreTrait.php) в
-// /config/apps_cache.json. Кэша ещё нет/резолв не удался — остаёмся на
-// статическом 'download' из apps.json (обычно releases/latest страница).
-function resolveDownloadLink($app)
+// что раз в сутки резолвит checkAppDownloadLinks() (см. BotCoreTrait.php).
+// Кэша ещё нет/резолв не удался — остаёмся на статическом 'download' из
+// apps.json (обычно releases/latest страница).
+function resolveDownloadLink($app, $cache)
 {
     if (empty($app['downloadKey'])) {
         return $app['download'];
-    }
-    $fp = @fopen('/config/apps_cache.json', 'c+');
-    $cache = [];
-    if ($fp) {
-        // LOCK_SH — синхронизируется с writeJsonLocked() в
-        // checkAppDownloadLinks(), чтобы не прочитать файл на середине записи.
-        flock($fp, LOCK_SH);
-        $cache = json_decode(stream_get_contents($fp), true) ?: [];
-        flock($fp, LOCK_UN);
-        fclose($fp);
     }
     return $cache[$app['downloadKey']] ?? $app['download'];
 }
@@ -82,7 +93,12 @@ function resolveRoutingLink($key, $data)
      который попадает в общий `location /` (decoy-заглушка) с auth_basic и
      на каждой загрузке страницы всплывает окно ввода логина/пароля. -->
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!-- Шрифты — системные, без обращения к fonts.googleapis.com. Причин две:
+     во-первых, это страница, которая сама по себе говорит "у этого человека
+     есть VPN-подписка", и тянуть с неё ресурс на сторону незачем; во-вторых,
+     открывают её ровно из тех сетей, где googleapis может не резолвиться, а
+     <link rel=stylesheet> блокирует отрисовку — то есть страница висела бы
+     белой до таймаута, чтобы в итоге всё равно показать fallback. -->
 <style>
   :root{
     --bg:#F6F5F2; --surface:#FFFFFF; --surface-2:#EFEDE8; --border:#E1DED6;
@@ -91,9 +107,9 @@ function resolveRoutingLink($key, $data)
     --good:#1E9E5A; --good-soft:#E1F5E9; --bad:#D64545; --bad-soft:#FBE4E4;
     --shadow: 0 1px 2px rgba(20,20,18,0.04), 0 8px 24px -12px rgba(20,20,18,0.12);
     --radius: 14px;
-    --font-display:'Manrope','Segoe UI',sans-serif;
-    --font-body:'IBM Plex Sans','Segoe UI',sans-serif;
-    --font-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --font-display:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --font-body:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -133,7 +149,10 @@ function resolveRoutingLink($key, $data)
   .stat .v.down{color:var(--accent);}
   .servers{display:flex;flex-direction:column;gap:8px;}
   .server{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);}
-  .server .flag{font-size:18px;line-height:1;}
+  /* Явный emoji-стек, чтобы флаг не зависел от основной гарнитуры. На Windows
+     флаги всё равно покажутся буквами кода страны — Segoe UI Emoji их просто не
+     содержит; на iOS/Android/macOS, откуда страницу и открывают, всё нормально. */
+  .server .flag{font-size:18px;line-height:1;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
   .server .tag{font-family:var(--font-mono);font-weight:500;font-size:13px;}
   .server .protos{margin-left:auto;font-size:12px;color:var(--text-muted);text-align:right;}
   .tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;}
@@ -209,7 +228,7 @@ function resolveRoutingLink($key, $data)
     </div>
     <?php $first = true; foreach ($apps as $platform => $list): ?>
     <div class="app-platform<?= $first ? ' active' : '' ?>" data-platform-panel="<?= $platform ?>">
-      <?php foreach ($list as $app): $addLink = !empty($app['add']) ? resolveAppAddLink($app['add'], $data) : null; $downloadLink = resolveDownloadLink($app); $routingLink = !empty($app['routing']) ? resolveRoutingLink($app['routing'], $data) : null; ?>
+      <?php foreach ($list as $app): $addLink = !empty($app['add']) ? resolveAppAddLink($app['add'], $data) : null; $downloadLink = resolveDownloadLink($app, $appsCache); $routingLink = !empty($app['routing']) ? resolveRoutingLink($app['routing'], $data) : null; ?>
       <div class="app">
         <img class="icon" src="/webapp<?= $hash ?>/icons/<?= rawurlencode($app['icon']) ?>.png" alt="">
         <div>
