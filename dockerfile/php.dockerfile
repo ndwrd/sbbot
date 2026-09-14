@@ -1,19 +1,19 @@
 ARG image
 FROM $image
-RUN apk add --no-cache --update php81 \
-    php81-mbstring \
-    php81-session \
-    php81-phar \
-    php81-zip \
-    php81-curl \
-    php81-opcache \
-    php81-openssl \
-    php81-iconv \
-    php81-intl \
-    php81-pecl-ssh2 \
-    php81-pecl-yaml \
+RUN apk add --no-cache --update php84 \
+    php84-mbstring \
+    php84-session \
+    php84-phar \
+    php84-zip \
+    php84-curl \
+    php84-opcache \
+    php84-openssl \
+    php84-iconv \
+    php84-intl \
+    php84-pecl-ssh2 \
+    php84-pecl-yaml \
     unit \
-    unit-php81 \
+    unit-php84 \
     xxd \
     certbot \
     libqrencode \

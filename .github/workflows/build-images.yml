@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'dockerfile/**'
+      - '.env'                     # тут лежит базовый образ (IMAGE), см. шаг "build args"
       - '.github/workflows/build-images.yml'
   workflow_dispatch:
     inputs:
@@ -23,25 +24,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # base_image: true — образу нужен ARG image, он берётся из IMAGE в .env.
+        # Раньше версия была продублирована здесь строкой alpine:3.18.2 и разъехалась
+        # бы с .env при первом же обновлении: php.dockerfile просил бы php84, а
+        # сборка шла на 3.18, где такого пакета нет, и CI падал бы.
+        # tg собирается от ubuntu и ARG image не принимает.
         include:
           - name: ng
             dockerfile: dockerfile/nginx.dockerfile
-            image_arg: alpine:3.18.2
+            base_image: true
           - name: php
             dockerfile: dockerfile/php.dockerfile
-            image_arg: alpine:3.18.2
+            base_image: true
           - name: tg
             dockerfile: dockerfile/telegram.dockerfile
-            image_arg: ''
+            base_image: false
           - name: wg
             dockerfile: dockerfile/wireguard.dockerfile
-            image_arg: alpine:3.18.2
+            base_image: true
           - name: dnstt
             dockerfile: dockerfile/dnstt.dockerfile
-            image_arg: alpine:3.18.2
+            base_image: true
           - name: sbx
             dockerfile: dockerfile/singbox.dockerfile
-            image_arg: alpine:3.18.2
+            base_image: true
     steps:
       - uses: actions/checkout@v4
 
@@ -56,15 +62,29 @@ jobs:
       - name: repository (lowercase, GHCR requires it)
         id: repo
         shell: bash
-        run: echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        run: |
+          # value — owner/repo для тега образа (ghcr.io/owner/repo/имя)
+          # name  — только repo, из него складывается ИМЯ ПАКЕТА: "repo/имя".
+          #         GitHub видит пакет именно так, а не просто как "имя" —
+          #         это нужно шагу очистки старых версий ниже.
+          echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "name=$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: build args
         id: args
         shell: bash
         run: |
+          # Базовый образ — единственным источником из .env, той же строкой, что
+          # использует docker compose локально и на сервере.
+          IMAGE=$(grep -m1 '^IMAGE=' .env | cut -d= -f2-)
+          if [ -z "$IMAGE" ]; then
+            echo "IMAGE не найден в .env" >&2
+            exit 1
+          fi
+          echo "базовый образ: $IMAGE"
           args=""
-          if [ -n "${{ matrix.image_arg }}" ]; then
-            args="image=${{ matrix.image_arg }}"
+          if [ "${{ matrix.base_image }}" = "true" ]; then
+            args="image=$IMAGE"
           fi
           if [ "${{ matrix.name }}" = "sbx" ] && [ -n "${{ github.event.inputs.sing_box_version }}" ]; then
             args="$args
@@ -86,3 +106,23 @@ jobs:
           tags: |
             ghcr.io/${{ steps.repo.outputs.value }}/${{ matrix.name }}:latest
             ghcr.io/${{ steps.repo.outputs.value }}/${{ matrix.name }}:${{ github.sha }}
+
+      # Каждая сборка добавляет версию с тегом :<sha>, и они копятся без конца.
+      # Оставляем 10 последних, остальное удаляем.
+      #
+      # Шаг идёт ПОСЛЕ публикации и помечен continue-on-error: если прав не
+      # хватит (GITHUB_TOKEN умеет удалять версии не во всех конфигурациях —
+      # для пакетов, принадлежащих пользователю, а не организации, может
+      # понадобиться PAT с delete:packages), сборка всё равно считается
+      # успешной. Образ важнее уборки.
+      - name: prune old package versions
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: ${{ steps.repo.outputs.name }}/${{ matrix.name }}
+          package-type: container
+          min-versions-to-keep: 10
+          # :latest всегда среди свежих, так что под удаление он не попадёт,
+          # но перестраховываемся явно — без него откатиться будет не на что.
+          ignore-versions: '^latest$'

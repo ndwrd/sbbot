@@ -22,7 +22,7 @@ RUN apk add --no-cache git ca-certificates \
     && /out/sing-box version
 
 # runtime stage: как у xray-контейнера — sshd для управления из PHP
-FROM alpine:3.20
+FROM alpine:3.22
 ARG SING_BOX_VERSION=v1.14.0
 # grpcurl — готовый gRPC-клиент (как curl, только для gRPC), нужен только чтобы
 # спросить experimental.v2ray_api.StatsService у самого sing-box (тег with_v2ray_api).
