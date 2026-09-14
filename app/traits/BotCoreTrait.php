@@ -566,6 +566,15 @@ public function checkAppDownloadLinks()
                 'api'     => 'https://api.github.com/repos/SagerNet/sing-box/releases/latest',
                 'pattern' => '~^SFW-[\d.]+-x64\.exe$~',
             ],
+            // Android-сборка Prizrak Box пока есть только в pre-release
+            // тегах (v1.0.21-beta*/-alpha*) — releases/latest её не увидит
+            // (это только non-prerelease), поэтому 'list' => true смотрит
+            // полный список релизов и берёт самый свежий, prerelease или нет.
+            'prizrakBoxAndroid' => [
+                'api'     => 'https://api.github.com/repos/legiz-ru/Prizrak-Box/releases',
+                'list'    => true,
+                'pattern' => '~^prizrak-box-android-arm64-v8a\.apk$~',
+            ],
         ];
         $cache = $this->readJsonLocked($this->appsCache) ?: [];
         $context = stream_context_create(['http' => [
@@ -573,9 +582,10 @@ public function checkAppDownloadLinks()
             'timeout' => 10,
         ]]);
         foreach ($targets as $key => $t) {
-            $json = @file_get_contents($t['api'], false, $context);
-            $data = $json ? json_decode($json, true) : null;
-            foreach ($data['assets'] ?? [] as $asset) {
+            $json    = @file_get_contents($t['api'], false, $context);
+            $data    = $json ? json_decode($json, true) : null;
+            $release = !empty($t['list']) ? ($data[0] ?? null) : $data;
+            foreach ($release['assets'] ?? [] as $asset) {
                 if (preg_match($t['pattern'], $asset['name'] ?? '')) {
                     $cache[$key] = $asset['browser_download_url'];
                     break;

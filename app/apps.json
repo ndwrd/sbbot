@@ -30,6 +30,13 @@
             "add": "singboxImport"
         },
         {
+            "name": "Prizrak Box",
+            "icon": "prizrakbox",
+            "download": "https://github.com/legiz-ru/Prizrak-Box/releases",
+            "downloadKey": "prizrakBoxAndroid",
+            "add": "mihomoImport"
+        },
+        {
             "name": "RabbitHole",
             "icon": "rabbithole",
             "download": "https://play.google.com/store/apps/details?id=com.rabbithole.RabbitHole&pcampaignid=web_share",
@@ -56,6 +63,12 @@
             "name": "Koala Clash",
             "icon": "mihomo",
             "download": "https://github.com/coolcoala/koala-clash/releases",
+            "add": "mihomoImport"
+        },
+        {
+            "name": "Prizrak Box",
+            "icon": "prizrakbox",
+            "download": "https://github.com/legiz-ru/Prizrak-Box/releases",
             "add": "mihomoImport"
         },
         {
