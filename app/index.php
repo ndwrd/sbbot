@@ -13,7 +13,8 @@ if (file_exists(__DIR__ . '/override.php')) {
 }
 $bot  = new Bot($c['key'], $i);
 $hash = $bot->getHashBot();
-$webapp = false;
+$webapp      = false;
+$webappAdmin = false;
 if (!empty($_GET['hash'])) {
     $t = $_GET;
     unset($t['hash']);
@@ -30,6 +31,20 @@ if (!empty($_GET['hash'])) {
     // hash_equals(), а не ==: обычное сравнение строк выходит на первом
     // несовпавшем байте, и по времени ответа подпись можно подбирать побайтно.
     $webapp = hash_equals(hash_hmac('sha256', $s, $sk), (string) $_GET['hash']);
+    // Подпись initData доказывает только "этот пользователь Telegram открыл
+    // WebApp ЭТОГО бота" — не то, что он админ. Сейчас все web_app-кнопки живут
+    // в админских меню (templates(), userXr()), так что практической дырой это
+    // не было, но /webapp{hash}/save пишет в конфиг, а {hash} известен каждому
+    // подписчику (он же в его ссылке /pac{hash}). Одна кнопка web_app в
+    // пользовательском меню — и роут стал бы открыт всем. Проверяем явно.
+    //
+    // $_GET['user'] входит в подписываемый набор параметров, так что подделать
+    // его отдельно нельзя. in_array без strict — id в config.php мог быть
+    // сохранён строкой.
+    $u = json_decode($_GET['user'] ?? '', true);
+    $webappAdmin = $webapp
+        && !empty($u['id'])
+        && in_array($u['id'], (array) ($c['admin'] ?? []));
 }
 
 switch (true) {
@@ -46,7 +61,7 @@ switch (true) {
         $bot->input();
         break;
 
-    case preg_match('~^' . preg_quote("/webapp$hash/save") . '~', $_SERVER['REQUEST_URI']) && $webapp && !empty($_POST['json']):
+    case preg_match('~^' . preg_quote("/webapp$hash/save") . '~', $_SERVER['REQUEST_URI']) && $webappAdmin && !empty($_POST['json']):
         echo json_encode($bot->saveTemplate($_POST['name'], $_POST['type'], $_POST['json']));
         break;
 

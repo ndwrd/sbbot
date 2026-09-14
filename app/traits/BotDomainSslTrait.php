@@ -139,7 +139,18 @@ public function setSSL($name)
                 // firewall хоста напрямую.
                 touch('/certs/.want_port80');
                 usleep(500000);
-                exec("certbot certonly --force-renew --preferred-chain 'ISRG Root X1' -n --agree-tos --email mail@{$conf['domain']} -d {$conf['domain']} -d {$conf['naiveSubdomain']}.{$conf['domain']} -d {$conf['anytlsSubdomain']}.{$conf['domain']} --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1", $out, $code);
+                // Домен вводит админ вручную (регуляркой проверяется только
+                // авто-домен вида N-N-N-N.nip.io), а подставлялся он в команду
+                // без кавычек — в четырёх местах сразу. escapeshellarg на
+                // каждое значение.
+                $cmd = 'certbot certonly --force-renew --preferred-chain '
+                    . escapeshellarg('ISRG Root X1')
+                    . ' -n --agree-tos --email ' . escapeshellarg("mail@{$conf['domain']}")
+                    . ' -d ' . escapeshellarg($conf['domain'])
+                    . ' -d ' . escapeshellarg("{$conf['naiveSubdomain']}.{$conf['domain']}")
+                    . ' -d ' . escapeshellarg("{$conf['anytlsSubdomain']}.{$conf['domain']}")
+                    . ' --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1';
+                exec($cmd, $out, $code);
                 @unlink('/certs/.want_port80');
                 if ($code > 0) {
                     $this->send($this->input['chat'], "ERROR\n" . implode("\n", $out));

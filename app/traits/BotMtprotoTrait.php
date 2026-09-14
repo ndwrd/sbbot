@@ -78,7 +78,11 @@ public function linkMtproto()
         $s  = file_get_contents('/config/mtprotosecret');
         $p  = $this->getPorts()['tg']['port'];
         $d  = trim(file_get_contents('/config/mtprotodomain') ?: 'yandex.ru');
-        $d  = exec("echo $d | tr -d '\\n' | xxd -ps -c 200");
+        // bin2hex() вместо exec("echo $d | tr -d '\n' | xxd -ps -c 200"):
+        // результат тот же самый, но без вызова шелла — а там $d подставлялся
+        // без кавычек, хотя приходит из админского ввода (importFile() пишет в
+        // /config/mtprotodomain значение из загруженного бэкапа).
+        $d  = bin2hex($d);
         $ip = $this->getDomain();
         return "https://t.me/proxy?server=$ip&port=$p&secret=ee$s$d";
     }

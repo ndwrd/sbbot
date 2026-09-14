@@ -4,9 +4,19 @@ trait BotTelegramTrait
 {
 public function sendQr($name, $code, $title = false)
     {
-        $qr      = preg_replace(['~\s+~', '~\(~', '~\)~'], ['_'], $name);
+        // Белый список символов, а не замена пробелов и скобок: $name — это в
+        // том числе label ноды (см. qrMtproto()), то есть админский ввод, и он
+        // подставлялся в имя файла, которое дальше уходило в exec() вообще без
+        // кавычек. Слэш в label'е уводил запись в чужой каталог, точка с
+        // запятой дописывала команду.
+        $qr      = preg_replace('~[^\w.-]+~u', '_', $name);
         $qr_file = dirname(__DIR__) . "/qr/$qr.png";
-        exec("qrencode -t png -o $qr_file '$code'");
+        // escapeshellarg на обоих аргументах. Особенно на $code: это
+        // vless-ссылка, а linkVless() подставляет в неё username как есть
+        // (#{$username} во фрагменте) — одна апострофа в имени пользователя
+        // закрывала '$code' и превращала остаток имени в команду. Контейнер
+        // php работает от root, так что цена ошибки тут максимальная.
+        exec('qrencode -t png -o ' . escapeshellarg($qr_file) . ' ' . escapeshellarg($code));
         $r = $this->sendPhoto(
             $this->input['chat'],
             curl_file_create($qr_file),

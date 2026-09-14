@@ -355,19 +355,24 @@ public function singboxStatsUser()
             // секунды, за которые админ вполне мог добавить юзера или поменять
             // настройку через меню. Запись всего снимка целиком такую правку
             // молча откатывала.
+            // Ключ — id клиента, а не его индекс: restartSingbox() прогоняет
+            // список через array_values(), так что удаление пользователя
+            // сдвигает все индексы после него, и флаг по индексу уехал бы на
+            // чужого клиента. id (uuid) при этом стабилен.
             $flags = [];
-            foreach ($clients as $i => $client) {
-                if (array_key_exists('limitNotified', $client)) {
-                    $flags[$i] = $client['limitNotified'];
+            foreach ($clients as $client) {
+                if (array_key_exists('limitNotified', $client) && !empty($client['id'])) {
+                    $flags[$client['id']] = $client['limitNotified'];
                 }
             }
             $this->updatePacConf(function ($conf) use ($flags) {
-                foreach ($flags as $i => $v) {
-                    // Клиента могли удалить, пока мы считали статистику —
-                    // тогда флаг просто некуда класть, создавать запись заново
-                    // нельзя.
-                    if (isset($conf['singboxClients'][$i])) {
-                        $conf['singboxClients'][$i]['limitNotified'] = $v;
+                foreach ($conf['singboxClients'] ?? [] as $i => $client) {
+                    $id = $client['id'] ?? null;
+                    // Клиента могли удалить, пока мы считали статистику — тогда
+                    // его id тут просто не встретится, и создавать запись
+                    // заново не нужно.
+                    if ($id !== null && array_key_exists($id, $flags)) {
+                        $conf['singboxClients'][$i]['limitNotified'] = $flags[$id];
                     }
                 }
                 return $conf;
@@ -845,6 +850,23 @@ public function delxr($i)
             if ($i == $k) {
                 unset($r['inbounds'][0]['settings']['clients'][$k]);
                 unset($st['users'][$k]);
+                // Клиенты и статистика связаны только позицией в массиве
+                // ($st['users'][$i] читают sub()/userXr()/statsMenu()), а
+                // restartSingbox() ниже прогоняет список клиентов через
+                // array_values() — то есть после удаления все, кто был правее,
+                // сдвигаются на единицу влево. Ключи $st['users'] так сами не
+                // сдвигались, и накопленный трафик ($p['users'][$k]['global'],
+                // см. BotCoreTrait) уезжал на соседнего пользователя: один
+                // показывал чужой расход, следующий — нули.
+                //
+                // Сдвигаем ключи вручную, а не array_values(): массив разрежен
+                // (у пользователя без трафика записи ещё нет), и array_values()
+                // схлопнул бы дыры, перепутав всё окончательно.
+                $users = [];
+                foreach ($st['users'] ?? [] as $u => $v) {
+                    $users[$u > $k ? $u - 1 : $u] = $v;
+                }
+                $st['users'] = $users;
                 $this->setSingboxStats($st);
                 $this->restartSingbox($r);
                 break;
@@ -1091,20 +1113,38 @@ public function addTemplate($n, $type)
 
 public function saveTemplate($name, $type, $json)
     {
-        if (json_decode($json, true) === false) {
+        // Проверка была `json_decode($json, true) === false`, и она не работала:
+        // на битом JSON json_decode() возвращает null, а false — только на
+        // строке "false". То есть отсеивался ровно один валидный вход, а любой
+        // сломанный JSON проходил насквозь: для 'origin' в /config/{type}.json
+        // писалось json_encode(null), файл затирался строкой "null", и при этом
+        // редактор показывал "success". Одна опечатка в JSON-редакторе убивала
+        // origin-шаблон sing-box или mihomo.
+        $decoded = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
             return [
                 'status'  => false,
                 'message' => 'wrong format',
             ];
         }
+        // $type приходит из POST и подставляется прямо в путь — тот же белый
+        // список, что и в index.php (см. "/templates xray|sing|clash"). Без него
+        // это запись произвольного .json в контейнере, например /app/apps.json,
+        // откуда страница подписки берёт ссылки на скачивание приложений.
+        if (!in_array($type, ['xray', 'sing', 'clash'], true)) {
+            return [
+                'status'  => false,
+                'message' => 'wrong type',
+            ];
+        }
         $pac = $this->getPacConf();
         switch ($name) {
             case 'origin':
-                file_put_contents("/config/$type.json", json_encode(json_decode($json, true), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                file_put_contents("/config/$type.json", json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 break;
 
             default:
-                $pac["{$type}templates"][$name] = json_decode($json, true);
+                $pac["{$type}templates"][$name] = $decoded;
                 break;
         }
         $this->setPacConf($pac);
@@ -2903,6 +2943,11 @@ public function cleanEmptyKeys(array $arr)
 public function createSrs(string $name, array $rules)
     {
         $rules = $this->cleanEmptyKeys($rules);
+        // $name берётся из поля createruleset[].name в шаблоне роутинга, а его
+        // админ правит руками в JSON-редакторе — то есть это произвольная
+        // строка, которая дальше уходит и в имя файла, и в exec(), и в
+        // HTTP-заголовок. Сводим к безопасному набору символов один раз здесь.
+        $name  = preg_replace('~[^\w.-]+~u', '_', $name) ?: 'ruleset';
         header("Content-Disposition: attachment; filename=$name.srs");
         header('Content-Type: application/binary');
         $f = "/tmp/$name" . time() . rand(1, 100);
@@ -2928,7 +2973,9 @@ public function createSrs(string $name, array $rules)
             'version' => 5,
             'rules'   => $rules ?: [],
         ]));
-        exec("sing-box rule-set compile $f");
+        // Кавычки на всякий случай и здесь: $name выше уже нормализован, но
+        // пусть путь не зависит от этого через одну лишнюю строку.
+        exec('sing-box rule-set compile ' . escapeshellarg($f));
         echo file_get_contents("$f.srs");
         unlink($f);
         unlink("$f.srs");

@@ -1528,7 +1528,8 @@ public function nodeLinkMtproto($id)
         }
         $s  = $node['mtprotosecret'];
         $d  = trim($node['mtprotodomain'] ?? 'yandex.ru');
-        $d  = exec("echo $d | tr -d '\\n' | xxd -ps -c 200");
+        // bin2hex() вместо вызова шелла — см. linkMtproto() в BotMtprotoTrait.
+        $d  = bin2hex($d);
         return "https://t.me/proxy?server={$node['ip']}&port=443&secret=ee$s$d";
     }
 }
