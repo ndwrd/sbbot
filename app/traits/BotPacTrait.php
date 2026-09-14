@@ -44,11 +44,29 @@ public function writeJsonLocked($path, $data)
         // ftruncate() перед fwrite(), а не сразу file_put_contents(), —
         // чтобы старое содержимое не "просвечивало" за пределами нового,
         // если оно короче.
-        $fp = fopen($path, 'c+');
+        //
+        // Кодируем ДО открытия файла: json_encode() умеет вернуть false
+        // (невалидный UTF-8 в чьём-нибудь username, слишком глубокая
+        // вложенность), а раньше ftruncate($fp, 0) к этому моменту уже
+        // отрабатывал — и в файл писалась пустая строка. То есть одно битое
+        // поле стирало весь конфиг целиком, ровно тот сценарий, от которого
+        // тут и защищаемся.
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            error_log("writeJsonLocked: json_encode failed for $path: " . json_last_error_msg());
+            return false;
+        }
+        // Без проверки fopen() неудачное открытие даёт flock(false, LOCK_EX) —
+        // а это на PHP 8 TypeError, то есть фатал вместо обычного отказа записи.
+        $fp = @fopen($path, 'c+');
+        if (!$fp) {
+            error_log("writeJsonLocked: cannot open $path for writing");
+            return false;
+        }
         flock($fp, LOCK_EX);
         ftruncate($fp, 0);
         rewind($fp);
-        $result = fwrite($fp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $result = fwrite($fp, $json);
         fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);

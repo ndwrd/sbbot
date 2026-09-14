@@ -304,8 +304,26 @@ public function domainsCert()
 
 public function nginxGetTypeCert()
     {
-        $conf = $this->ssh('cat /etc/nginx/nginx.conf', 'ng');
-        preg_match("/#~([^\s]+)/", $conf, $m);
-        return $m[1];
+        // Читаем маркер локально, а не через ssh 'cat' в контейнер ng: это
+        // физически тот же файл — docker-compose монтирует ./config/nginx.conf
+        // в ng как /etc/nginx/nginx.conf, а ./config/ в php как /config/, и
+        // cloakNginx() пишет его именно отсюда (file_put_contents
+        // '/config/nginx.conf'). Источник байт-в-байт тот же, SSH тут был
+        // лишним всегда.
+        //
+        // Почему это важно, а не косметика: результат идёт в
+        // `$scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https'` в
+        // семи местах, включая userXr()/linkVless() (крутятся внутри
+        // однопоточного polling() — то есть каждый SSH-хендшейк тормозил весь
+        // бот целиком) и sub()/subscription()/clashRules()/createRuleSet() (по
+        // 2-3 вызова на каждый запрос подписки каждого клиента). Один вызов =
+        // fsockopen-проба до 5 с + ssh2_connect + auth по ключу + exec +
+        // чтение.
+        //
+        // Плюс убирается тихий отказ: при любом сбое SSH (ng перезапускается,
+        // ключ не прочитался) функция возвращала null, $scheme становился
+        // 'http', и ВСЕ ссылки в выданной подписке молча уезжали на http://.
+        preg_match("/#~([^\s]+)/", @file_get_contents('/config/nginx.conf') ?: '', $m);
+        return $m[1] ?? null;
     }
 }

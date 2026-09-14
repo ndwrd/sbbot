@@ -1687,7 +1687,10 @@ public function sub()
         // валидных. $flag остаётся true, если юзера не нашли или он выключен
         // (симметрично subscription()).
         if ($flag) {
-            header('500', true, 500);
+            // http_response_code(), а не header('500', true, 500) — иначе '500'
+            // уходит ещё и сырым заголовком без двоеточия, и Unit ругается
+            // "[unit] colon not found in header '500'" на каждый такой ответ.
+            http_response_code(500);
             exit;
         }
 
@@ -1800,7 +1803,8 @@ public function subscription($return = false)
             }
         }
         if ($flag) {
-            header('500', true, 500);
+            // См. sub(): header('500', ...) отдавал ещё и сырой заголовок '500'.
+            http_response_code(500);
             exit;
         }
 

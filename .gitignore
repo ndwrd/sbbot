@@ -1,4 +1,8 @@
 /app/config.php
+# Генерится один раз в start_php.sh (декой-заглушка nginx). Игнор нужен ещё и
+# затем, чтобы `git clean -fd` в update/update.sh его не сносил при каждом
+# обновлении: без -x clean не трогает игнорируемые файлы.
+/app/webapp/.htpasswd
 /certs/*
 !/certs/.gitkeep
 /logs/*

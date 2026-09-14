@@ -842,10 +842,12 @@ public function ensureMainGeoTag()
         // коррекция начала реально что-то менять) навсегда блокировал
         // перезапуск — clash.json у части инсталляций так и остался с
         // "Vless"/"HY2" вместо "{флаг}{тег}|Vless" на главном сервере, хотя
-        // sing.json скорректировался нормально. Зовём безусловно каждый раз —
-        // цена лишнего чтения/записи двух небольших json на нечастых путях
-        // (singbox()/subscription()) ничтожна рядом с риском тихо
-        // рассинхронизированных тегов.
+        // sing.json скорректировался нормально. Зовём безусловно каждый раз,
+        // но сами correct*OriginTags() пишут файл только при реальном
+        // изменении: путь сюда лежит через getSubscriptionServers(), то есть
+        // это КАЖДЫЙ запрос подписки, а не редкий вызов из меню, и
+        // безусловный LOCK_EX + перезапись sing.json/clash.json на каждом
+        // таком запросе сериализовала их между собой.
         $flag = $this->countryFlag(preg_replace('~\d+$~', '', $pac['geoTag']));
         $this->correctSingOriginTags($flag . $pac['geoTag']);
         $this->correctClashOriginTags($flag . $pac['geoTag']);
@@ -859,6 +861,7 @@ public function correctSingOriginTags($tagPrefix)
         if (empty($c['outbounds'])) {
             return;
         }
+        $before    = $c;
         $protocols = [
             'vless'     => 'Vless',
             'hysteria2' => 'Hy2',
@@ -885,7 +888,17 @@ public function correctSingOriginTags($tagPrefix)
             }
         }
         unset($o);
-        $this->writeJsonLocked($path, $c);
+        // На диск идём только если коррекция реально что-то поменяла. Саму
+        // коррекцию это не гейтит (см. ensureMainGeoTag() — прогоняем её
+        // по-прежнему каждый раз), просто no-op больше не доходит до файла:
+        // ensureMainGeoTag() висит на getSubscriptionServers(), то есть
+        // вызывается на КАЖДЫЙ запрос подписки каждым клиентом, а
+        // writeJsonLocked() — это LOCK_EX + перезапись файла целиком, из-за
+        // чего параллельные запросы подписки выстраивались в очередь друг за
+        // другом (и несколько PHP-процессов в unit.json ничего не давали).
+        if ($c !== $before) {
+            $this->writeJsonLocked($path, $c);
+        }
     }
 
 public function correctClashOriginTags($tagPrefix)
@@ -895,6 +908,7 @@ public function correctClashOriginTags($tagPrefix)
         if (empty($c['proxies'])) {
             return;
         }
+        $before = $c;
         // mihomo не поддерживает naive — тем же составом, что и в текущих
         // proxies шаблона.
         $protocols = [
@@ -927,7 +941,10 @@ public function correctClashOriginTags($tagPrefix)
             }
             unset($g);
         }
-        $this->writeJsonLocked($path, $c);
+        // Пишем только при реальном изменении — см. correctSingOriginTags().
+        if ($c !== $before) {
+            $this->writeJsonLocked($path, $c);
+        }
     }
 
 public function nodeBootstrap($ip, $login, $authType, $secret)

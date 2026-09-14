@@ -13,20 +13,29 @@ if (file_exists(__DIR__ . '/override.php')) {
 }
 $bot  = new Bot($c['key'], $i);
 $hash = $bot->getHashBot();
+$webapp = false;
 if (!empty($_GET['hash'])) {
     $t = $_GET;
     unset($t['hash']);
     ksort($t);
+    // $s = [] обязателен: если в запросе нет ничего, кроме hash, массив так и
+    // не создастся, и implode() ниже получит null — на PHP 8 это уже не
+    // warning, а TypeError, то есть 500 вместо тихого отказа авторизации.
+    $s = [];
     foreach ($t as $k => $v) {
         $s[] = "$k=$v";
     }
     $s      = implode("\n", $s);
     $sk     = hash_hmac('sha256', $c['key'], "WebAppData", true);
-    $webapp = hash_hmac('sha256', $s, $sk) == $_GET['hash'];
+    // hash_equals(), а не ==: обычное сравнение строк выходит на первом
+    // несовпавшем байте, и по времени ответа подпись можно подбирать побайтно.
+    $webapp = hash_equals(hash_hmac('sha256', $s, $sk), (string) $_GET['hash']);
 }
 
 switch (true) {
-    case 'POST' == $_SERVER['REQUEST_METHOD'] && preg_match('~^/tlgrm~', $_SERVER['REQUEST_URI']) && $_GET['k'] == $c['key']:
+    // hash_equals() по той же причине, что и выше; ?? '' — без параметра k
+    // иначе undefined key.
+    case 'POST' == $_SERVER['REQUEST_METHOD'] && preg_match('~^/tlgrm~', $_SERVER['REQUEST_URI']) && hash_equals($c['key'], (string) ($_GET['k'] ?? '')):
         $bot->input();
         break;
 
@@ -39,7 +48,26 @@ switch (true) {
         exit;
 
     case preg_match('~^' . preg_quote("/pac$hash") . '~', $_SERVER['REQUEST_URI']):
-        if (!empty($t = unserialize(base64_decode(explode('/', $_SERVER['REQUEST_URI'])[2])))) {
+        // [2] ?? '' — на /pac{hash} без третьего сегмента (например
+        // /pac{hash}?t=te&ty=sing из меню шаблонов) индекса просто нет.
+        //
+        // allowed_classes: false — сюда всегда приходит обычный массив
+        // ['h'=>..,'t'=>..,'s'=>..], который сам бот и сериализовал (см. $link()
+        // в sub()). Голый unserialize() на строке из URL позволял бы собрать
+        // объект произвольного класса и дотянуться до его __wakeup/__destruct.
+        // Путь закрыт секретным хэшем, но одна строка дешевле, чем надеяться,
+        // что хэш никогда не утечёт.
+        //
+        // is_array() — с allowed_classes:false объект превращается в
+        // __PHP_Incomplete_Class, который !empty() пропускает, а array_merge()
+        // уже роняет TypeError'ом.
+        //
+        // @ — на любой мусор в URL (а его шлют постоянно) unserialize() пишет
+        // E_WARNING "Error at offset 0"; невалидный ввод тут штатный случай, а
+        // не ошибка, и false он и так вернёт.
+        $seg = explode('/', $_SERVER['REQUEST_URI'])[2] ?? '';
+        $t   = $seg === '' ? null : @unserialize(base64_decode($seg), ['allowed_classes' => false]);
+        if (!empty($t) && is_array($t)) {
             $_GET = array_merge($_GET, $t);
         }
         $type = $_GET['t'] ?? 'pac';
@@ -52,16 +80,25 @@ switch (true) {
                 exit;
 
             case 'te':
+                // Белый список: $_GET['ty'] подставляется прямо в путь
+                // /config/{ty}.json, то есть без проверки это чтение
+                // произвольного .json с диска контейнера. Значения ровно те три,
+                // что шлёт сам бот (см. "/templates xray|sing|clash" в
+                // singboxTemplates()); всё остальное — не наш запрос.
+                $ty = in_array($_GET['ty'] ?? '', ['xray', 'sing', 'clash'], true) ? $_GET['ty'] : null;
+                if ($ty === null) {
+                    break;
+                }
                 if (!empty($_GET['te'])) {
-                    $t = $bot->getPacConf()["{$_GET['ty']}templates"][$_GET['te']] ?? null;
+                    $t = $bot->getPacConf()["{$ty}templates"][$_GET['te']] ?? null;
                 } else {
-                    $t = json_decode(file_get_contents("/config/{$_GET['ty']}.json"), true);
+                    $t = json_decode(file_get_contents("/config/$ty.json"), true);
                 }
                 if ($t) {
                     header('Content-Type: text/html');
                     $t = json_encode($t, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                     $name = ($_GET['te'] ?? null) ?: 'origin';
-                    $type = $_GET['ty'];
+                    $type = $ty;
                     echo <<<HTML
                         <!DOCTYPE HTML>
                         <html lang="en" style="height:100%">
@@ -120,5 +157,9 @@ switch (true) {
         break;
 
     default:
-        header('500', true, 500);
+        // http_response_code(), а не header('500', true, 500): второй аргумент
+        // статус действительно ставил, но сама строка '500' при этом уходила
+        // ещё и как сырой заголовок — без двоеточия, из-за чего Unit писал в
+        // лог "[unit] colon not found in header '500'" на каждый такой ответ.
+        http_response_code(500);
 }
