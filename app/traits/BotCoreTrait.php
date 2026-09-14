@@ -448,19 +448,22 @@ public function action()
     }
 
 public function collectSession() {
+        // Статистики может не быть вообще: файл пуст до первого сбора, а
+        // collectSession() зовётся при каждом restartSingbox(), то есть и на
+        // самом первом старте.
         $p = $this->getSingboxStats();
         $p['global'] = [
-            'download' => $p['global']['download'] + $p['session']['download'],
-            'upload'   => $p['global']['upload'] + $p['session']['upload'],
+            'download' => ($p['global']['download'] ?? 0) + ($p['session']['download'] ?? 0),
+            'upload'   => ($p['global']['upload']   ?? 0) + ($p['session']['upload']   ?? 0),
         ];
         $p['session'] = [
             'download' => 0,
             'upload'   => 0,
         ];
-        foreach ($p['users'] as $k => $v) {
-            $p['users'][$k]['global']['download']  += $v['session']['download'];
+        foreach ($p['users'] ?? [] as $k => $v) {
+            $p['users'][$k]['global']['download']  = ($v['global']['download'] ?? 0) + ($v['session']['download'] ?? 0);
             $p['users'][$k]['session']['download']  = 0;
-            $p['users'][$k]['global']['upload']    += $v['session']['upload'];
+            $p['users'][$k]['global']['upload']    = ($v['global']['upload']   ?? 0) + ($v['session']['upload']   ?? 0);
             $p['users'][$k]['session']['upload']    = 0;
         }
         foreach ($p['inbounds'] ?? [] as $k => $v) {
@@ -1074,6 +1077,12 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
             // сервиса правильно, как и было задумано.
             $cmd = 'cd ~/sbbot && docker compose exec -T ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
         }
+        // Инициализируем ДО try: внутри $data присваивается только после
+        // успешного подключения, а функция всегда возвращает его в конце. Любой
+        // бросок раньше (хост недоступен, ключ не подошёл) оставлял переменную
+        // необъявленной — то есть на каждой неудачной попытке достучаться до
+        // ноды в лог падал ещё и warning.
+        $data = '';
         try {
             // ssh2_connect() не берёт таймаут и может зависнуть надолго, если
             // порт фильтруется, а не сразу отвечает отказом — соседей по

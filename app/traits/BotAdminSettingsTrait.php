@@ -167,8 +167,8 @@ public function export()
                 'private' => file_get_contents('/config/dnstt/server.key'),
                 'public'  => file_get_contents('/config/dnstt/server.pub'),
             ] : false,
-            'mtproto'       => file_get_contents('/config/mtprotosecret'),
-            'mtprotodomain' => file_get_contents('/config/mtprotodomain'),
+            'mtproto'       => @file_get_contents('/config/mtprotosecret') ?: '',
+            'mtprotodomain' => @file_get_contents('/config/mtprotodomain') ?: '',
             'mtprotoadtag'  => file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '',
             'singbox'       => $this->getSingbox(),
         ];
@@ -547,17 +547,25 @@ public function configMenu()
         $file = dirname(__DIR__) . '/config.php';
         opcache_invalidate($file);
         require $file;
-        $data[] = [
+        // Админов может не быть: список заводится в auth() при первом /start.
+        // Кнопка "удалить" тогда просто не рисуется — раньше на этом месте было
+        // не предупреждение, а падение: array_slice(null, 1) бросает TypeError,
+        // и всё меню конфигурации не открывалось.
+        $admins = array_values((array) ($c['admin'] ?? []));
+        $row    = [
             [
                 'text'          => "{$this->i18n('add')} {$this->i18n('admin')}",
                 'callback_data' => "/addadmin",
             ],
-            [
-                'text'          => $this->i18n('delete') . " {$c['admin'][0]}",
-                'callback_data' => "/deladmin {$c['admin'][0]}",
-            ],
         ];
-        foreach (array_slice($c['admin'], 1) as $v) {
+        if (isset($admins[0])) {
+            $row[] = [
+                'text'          => $this->i18n('delete') . " {$admins[0]}",
+                'callback_data' => "/deladmin {$admins[0]}",
+            ];
+        }
+        $data[] = $row;
+        foreach (array_slice($admins, 1) as $v) {
             $data[] = [
                 [
                     'text'          => $this->i18n('delete') . " $v",
@@ -827,8 +835,10 @@ public function delLog($i)
 public function selfUpdate()
     {
         $ip                         = getenv('IP');
-        $rm                         = explode(':', trim(file_get_contents('/update/reload_message')));
-        $m                          = file_get_contents('/update/message');
+        // Файлов нет, пока обновление ни разу не запускалось (их создаёт
+        // update.sh) — на свежей установке это два warning'а на каждый старт.
+        $rm                         = explode(':', trim(@file_get_contents('/update/reload_message') ?: ''));
+        $m                          = @file_get_contents('/update/message') ?: '';
         $this->input['chat']        = $rm[0];
         $this->input['message_id']  = $rm[1] ?? false;
         $this->input['callback_id'] = $rm[1] ?? false;

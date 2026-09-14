@@ -33,7 +33,11 @@ $names = [
     'timerXr/limitXr/switchXr', 'getSingboxTotalTraffic', 'saveTemplate валидный',
     'importFile(бэкап)', 'addxrus + delxr', 'deleteAll(includelist)',
     'getHostStats/getSingboxSysStats',
+    // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
+    // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
+    'index.php запрос подписки', 'index.php мусорный URL',
 ];
+$ENTRY_FROM = count($names) - 2;
 
 // ================= режим драйвера =================
 // Два профиля конфига: 'full' — обжитый сервер, 'fresh' — только что
@@ -85,17 +89,37 @@ set_error_handler(function ($no, $str, $file, $line) use (&$WARN) {
 });
 
 // ---------- песочница ----------
+// Профиль 'fresh' обязан быть ЧЕСТНО пустым. Первый заход на боевой сервер
+// показал, чего стоит слишком щедрая фикстура: стенд создавал config.php с
+// ключом 'debug', mtproto-секреты и файл статистики — то есть проверял более
+// обжитую установку, чем бывает сразу после init.sh. В итоге `if ($c['debug'])`
+// давал по warning'у НА КАЖДЫЙ HTTP-запрос в бою и ни одного на стенде.
+// Всё, что создаётся по ходу работы бота, в 'fresh' не создаём.
+$virgin = $PROFILE === 'fresh';
+
 foreach (['', '/config', '/config/dnstt', '/logs', '/certs', '/ssh', '/update', '/qr'] as $d) @mkdir($TMP . $d, 0777, true);
+foreach (glob("$TMP/config/*") as $f) if (is_file($f)) @unlink($f);   // не тащим хвосты прошлого прогона
 foreach (glob("$REPO/config/*.json") as $f) copy($f, "$TMP/config/" . basename($f));
-file_put_contents("$TMP/config/mtprotosecret", str_repeat('a', 32));
-file_put_contents("$TMP/config/mtprotodomain", 'yandex.ru');
+if (!$virgin) {
+    file_put_contents("$TMP/config/mtprotosecret", str_repeat('a', 32));
+    file_put_contents("$TMP/config/mtprotodomain", 'yandex.ru');
+    file_put_contents("$TMP/update/reload_message", '1:1');
+    file_put_contents("$TMP/update/message", '');
+} else {
+    foreach (['mtprotosecret', 'mtprotodomain', 'mtprotoadtag', 'singbox.stats'] as $f) @unlink("$TMP/config/$f");
+    foreach (['reload_message', 'message'] as $f) @unlink("$TMP/update/$f");
+}
 file_put_contents("$TMP/certs/cert_public", '');
 file_put_contents("$TMP/version", '1.0');
 foreach (['nginx.conf', 'nginx_default.conf', 'upstream.conf', 'include.conf'] as $f) {
     if (file_exists("$REPO/config/$f")) copy("$REPO/config/$f", "$TMP/config/$f");
 }
-file_put_contents("$TMP/config/dnstt/server.pub", str_repeat('b', 32));
-file_put_contents("$TMP/config/dnstt/server.key", str_repeat('c', 32));
+if (!$virgin) {
+    file_put_contents("$TMP/config/dnstt/server.pub", str_repeat('b', 32));
+    file_put_contents("$TMP/config/dnstt/server.key", str_repeat('c', 32));
+} else {
+    foreach (['server.pub', 'server.key'] as $f) @unlink("$TMP/config/dnstt/$f");
+}
 file_put_contents("$TMP/config/location.conf", '');
 file_put_contents("$TMP/config/override.conf", '');
 
@@ -121,8 +145,10 @@ if ($PROFILE === 'fresh') {
     ];
 }
 file_put_contents("$TMP/config/pac.json", json_encode($pac, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-file_put_contents("$TMP/config/singbox.stats", $PROFILE === 'fresh' ? '{}'
-    : json_encode(['users' => [0 => ['global' => ['download' => 100, 'upload' => 50]]]]));
+// В fresh файла нет ВООБЩЕ (его создаёт первый setSingboxStats()), а не '{}'.
+if (!$virgin) {
+    file_put_contents("$TMP/config/singbox.stats", json_encode(['users' => [0 => ['global' => ['download' => 100, 'upload' => 50]]]]));
+}
 
 // ---------- код с подменой абсолютных путей ----------
 $map = [
@@ -159,13 +185,37 @@ if (!class_exists('CURLFile'))       { class CURLFile       { public function __
 @mkdir("$TMP/app/qr", 0777, true);
 foreach (glob("$REPO/app/*.php") as $f) copy($f, "$TMP/app/" . basename($f));
 foreach (glob("$REPO/app/*.json") as $f) copy($f, "$TMP/app/" . basename($f));
-file_put_contents("$TMP/app/config.php", "<?php\n\n\$c = ['key' => '123456:TESTTOKEN', 'admin' => [1], 'debug' => false];\n");
+// config.php в профиле fresh — ровно то, что пишет scripts/init.sh: ОДИН ключ
+// key, без admin и без debug. Отсутствие debug давало по warning'у на каждый
+// HTTP-запрос в бою, а стенд его не видел, потому что фикстура была полнее.
+file_put_contents("$TMP/app/config.php", $virgin
+    ? "<?php\n\n\$c = ['key' => '123456:TESTTOKEN'];\n"
+    : "<?php\n\n\$c = ['key' => '123456:TESTTOKEN', 'admin' => [1], 'debug' => false];\n");
+// Трейты кладём с подменёнными путями, а bot.php — КАК ЕСТЬ: его require_once
+// сам подтянет их из $TMP/app/traits/. Раньше эти строки вырезались, а трейты
+// грузились вручную — из-за чего index.php нельзя было прогнать вообще
+// (он грузит bot.php сам, и получалось повторное объявление class Bot).
 foreach (glob("$REPO/app/traits/*.php") as $f) {
     file_put_contents("$TMP/app/traits/" . basename($f), strtr(file_get_contents($f), $map));
-    require "$TMP/app/traits/" . basename($f);
 }
-$botsrc = preg_replace('~require_once[^;]+;~', '', strtr(file_get_contents("$REPO/app/bot.php"), $map));
-file_put_contents("$TMP/app/bot.php", $botsrc);
+file_put_contents("$TMP/app/bot.php", strtr(file_get_contents("$REPO/app/bot.php"), $map));
+
+// Точки входа прогоняются ДО загрузки bot.php: index.php грузит его сам.
+// Это единственный способ проверить сам роутер и его шапку — а именно оттуда
+// и шёл весь шум в /logs/php_error.
+if (($argv[1] ?? '') !== '' && (int) $argv[1] >= $ENTRY_FROM) {
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['SERVER_NAME']    = '31-57-241-154.nip.io';
+    $_SERVER['REQUEST_URI']    = (int) $argv[1] === $ENTRY_FROM
+        ? '/pac53924739/' . base64_encode(serialize(['h' => '53924739', 't' => 'si', 's' => $uid]))
+        : '/' . bin2hex(random_bytes(6));
+    $_GET = $_POST = [];
+    ob_start();
+    require "$TMP/app/index.php";
+    ob_end_clean();
+    return;
+}
+
 require "$TMP/app/bot.php";
 require "$REPO/app/i18n.php";
 

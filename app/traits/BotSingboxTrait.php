@@ -972,7 +972,8 @@ public function renXrUs($name, $i)
 
 public function getSingboxStats()
     {
-        return json_decode(file_get_contents('/config/singbox.stats'), true) ?: [];
+        // Файл создаётся только первым setSingboxStats() — до него его нет.
+        return json_decode(@file_get_contents('/config/singbox.stats') ?: '', true) ?: [];
     }
 
 public function setSingboxStats($x)

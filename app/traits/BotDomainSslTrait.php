@@ -78,10 +78,16 @@ public function sslip()
         require dirname(__DIR__) . '/config.php';
         $p  = $this->getPacConf();
         $ip = getenv('IP');
-        $r  = $this->send($c['admin'][0], "start $ip");
+        // Админа ещё нет на самом первом старте: он записывается в config.php
+        // только при первом /start в auth(). Сообщать о прогрессе тогда некому,
+        // но выдача nip.io+SSL ниже должна произойти в любом случае — так что
+        // просто не спотыкаемся об отсутствующий ключ (раньше это давало шесть
+        // warning'ов на каждый запуск service.php).
+        $admin = $c['admin'][0] ?? null;
+        $r  = $this->send($admin, "start $ip");
 
-        $this->input['chat']        = $c['admin'][0];
-        $this->input['message_id']  = $r['result']['message_id'];
+        $this->input['chat']        = $admin;
+        $this->input['message_id']  = $r['result']['message_id'] ?? null;
         $this->input['callback_id'] = false;
         if (empty($p)) {
             $this->addDomain(str_replace('.', '-', $this->ip) . '.nip.io', 1);

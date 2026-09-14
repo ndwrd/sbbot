@@ -90,8 +90,10 @@ public function addWarpPlus($key)
 public function warpStatus()
     {
         $st = $this->ssh('curl -m 1 -x socks5://wp:1080 https://cloudflare.com/cdn-cgi/trace', 'sbx');
+        // Ответа может не быть вовсе (контейнер wp не поднят, нет сети) — тогда
+        // preg_match не заполнит $m, и это штатное "выключено", а не ошибка.
         preg_match('~warp=(\w+)~', $st, $m);
-        return trim($m[1]) ?: 'off';
+        return trim($m[1] ?? '') ?: 'off';
     }
 
 public function offWarp()

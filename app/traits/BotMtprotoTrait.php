@@ -63,8 +63,10 @@ public function setTelegramAdtag($adtag)
 
 public function restartTG()
     {
-        $secret     = file_get_contents('/config/mtprotosecret');
-        $fakedomain = file_get_contents('/config/mtprotodomain') ?: 'yandex.ru';
+        // Файлы появляются только после настройки MTProto (secretSet()), а
+        // restartTG() зовётся при каждом старте service.php.
+        $secret     = @file_get_contents('/config/mtprotosecret') ?: '';
+        $fakedomain = @file_get_contents('/config/mtprotodomain') ?: 'yandex.ru';
         $adtag      = trim(file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '');
         $this->ssh('pkill mtproto-proxy', 'tg');
         if (preg_match('~^\w{32}$~', $secret)) {
@@ -75,9 +77,9 @@ public function restartTG()
 
 public function linkMtproto()
     {
-        $s  = file_get_contents('/config/mtprotosecret');
+        $s  = @file_get_contents('/config/mtprotosecret') ?: '';
         $p  = $this->getPorts()['tg']['port'];
-        $d  = trim(file_get_contents('/config/mtprotodomain') ?: 'yandex.ru');
+        $d  = trim(@file_get_contents('/config/mtprotodomain') ?: 'yandex.ru');
         // bin2hex() вместо exec("echo $d | tr -d '\n' | xxd -ps -c 200"):
         // результат тот же самый, но без вызова шелла — а там $d подставлялся
         // без кавычек, хотя приходит из админского ввода (importFile() пишет в
@@ -89,7 +91,7 @@ public function linkMtproto()
 
 public function mtproto()
     {
-        $d      = file_get_contents('/config/mtprotodomain') ?: 'yandex.ru';
+        $d      = @file_get_contents('/config/mtprotodomain') ?: 'yandex.ru';
         $st     = $this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off';
         $text[] = "Menu -> MTProto";
         $text[] = "status: $st";

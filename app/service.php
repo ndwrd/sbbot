@@ -6,7 +6,7 @@ require __DIR__ . '/bot.php';
 require __DIR__ . '/config.php';
 require __DIR__ . '/i18n.php';
 
-if ($c['debug']) {
+if (!empty($c['debug'])) {
     require __DIR__ . '/debug.php';
 }
 
@@ -23,5 +23,5 @@ $bot->cloakNginx();
 $bot->cleanDocker();
 $bot->dnsttStart();
 $c = $bot->getPacConf();
-$bot->setUpstreamDomain($c['transport'] != 'Reality' ? 't' : $c['reality']['domain']);
+$bot->setUpstreamDomain(($c['transport'] ?? null) != 'Reality' ? 't' : ($c['reality']['domain'] ?? ''));
 $bot->singboxUpdateRules();
