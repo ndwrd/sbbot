@@ -125,10 +125,40 @@ public function pinBackup($file = false)
         $this->pinAdmin($conf['pinbackup']);
     }
 
+public function originConfigFiles()
+    {
+        // Конфиги, которые правит админ, но которые лежат файлами, а не записями
+        // в pac.json — то есть единственное, что не переносилось бэкапом.
+        //
+        //   xray/sing/clash — origin-шаблоны клиентских конфигов (кнопка Origin
+        //     в меню шаблонов, saveTemplate('origin', ...)). Именованные
+        //     шаблоны хранятся в pac["{type}templates"] и ездили и раньше,
+        //     а origin — нет, и после восстановления на чистый сервер он
+        //     приезжал из репозитория в исходном виде.
+        //   sing-server — серверный конфиг. Его log/dns и дописанные руками
+        //     outbounds/route читаются как база при каждом restartSingbox()
+        //     (см. buildSingboxConfig()), то есть это тоже правки админа, а не
+        //     производные данные; производную часть restartSingbox() всё равно
+        //     пересоберёт поверх.
+        //
+        // Список заодно работает белым списком при восстановлении: файл бэкапа
+        // загружает пользователь, и без него произвольный ключ в JSON означал бы
+        // запись произвольного /config/<что угодно>.json.
+        return ['xray', 'sing', 'clash', 'sing-server'];
+    }
+
 public function export()
     {
+        $origin = [];
+        foreach ($this->originConfigFiles() as $t) {
+            $j = json_decode(@file_get_contents("/config/$t.json") ?: '', true);
+            if (is_array($j)) {
+                $origin[$t] = $j;
+            }
+        }
         $conf = [
-            'pac' => $this->getPacConf(),
+            'pac'    => $this->getPacConf(),
+            'origin' => $origin ?: false,
             'ssl' => file_exists('/certs/cert_private') && preg_match('~BEGIN PRIVATE KEY~', file_get_contents('/certs/cert_private')) ? [
                 'private' => file_get_contents('/certs/cert_private'),
                 'public'  => file_get_contents('/certs/cert_public'),
@@ -192,6 +222,22 @@ public function importFile($file = false)
                 file_put_contents('/config/mtprotodomain', ($json['mtprotodomain'] ?? null) ?: '');
                 file_put_contents('/config/mtprotoadtag', trim($json['mtprotoadtag'] ?? ''));
                 $this->restartTG();
+            }
+            // Строго ДО блока 'singbox': restartSingbox() ниже читает
+            // /config/sing-server.json как базу для сборки серверного конфига,
+            // и к этому моменту там уже должен лежать наш файл, а не исходный
+            // из репозитория. Ключи берём из originConfigFiles(), а не из
+            // самого $json — файл бэкапа загружает пользователь, и без белого
+            // списка произвольный ключ означал бы запись произвольного
+            // /config/<что угодно>.json.
+            if (!empty($json['origin']) && is_array($json['origin'])) {
+                $out[] = 'update origin templates';
+                $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
+                foreach ($this->originConfigFiles() as $t) {
+                    if (!empty($json['origin'][$t]) && is_array($json['origin'][$t])) {
+                        file_put_contents("/config/$t.json", json_encode($json['origin'][$t], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                    }
+                }
             }
             if (!empty($json['singbox'])) {
                 $out[] = 'update singbox';

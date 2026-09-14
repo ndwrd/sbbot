@@ -1099,9 +1099,23 @@ public function addTemplate($n, $type)
             $this->send($this->input['chat'], 'empty name');
             return;
         }
+        // 'origin' — не обычное имя: saveTemplate() на нём уходит в ветку записи
+        // файла /config/{type}.json. Шаблон с таким именем создался бы в pac, в
+        // списке бы отображался, но правка из редактора молча перезаписывала бы
+        // origin, а сам шаблон оставался прежним.
+        if ($this->input['caption'] === 'origin') {
+            $this->send($this->input['chat'], 'name "origin" is reserved');
+            return;
+        }
         $r    = $this->request('getFile', ['file_id' => $this->input['file_id']]);
-        $json = json_decode(file_get_contents($this->file . $r['result']['file_path']), true);
-        if ($json === false) {
+        $body = @file_get_contents($this->file . $r['result']['file_path']);
+        $json = json_decode($body ?: '', true);
+        // Была проверка `$json === false`, а она не срабатывает: json_decode()
+        // на битом JSON возвращает null (false — только на строке "false"). Файл
+        // со сломанным JSON проходил насквозь, и в pac сохранялся null вместо
+        // шаблона — причём бот рапортовал, что шаблон добавлен. Тот же баг был в
+        // saveTemplate(), тут он просто во втором месте.
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($json)) {
             $this->send($this->input['chat'], 'wrong format');
             return;
         }
@@ -1163,8 +1177,15 @@ public function delTemplate($type, $name)
 
 public function copyTemplate($name, $type)
     {
+        $name = trim($name);
+        // См. addTemplate(): 'origin' зарезервировано, saveTemplate() на этом
+        // имени пишет в файл /config/{type}.json, а не в запись шаблона.
+        if ($name === '' || $name === 'origin') {
+            $this->send($this->input['chat'], $name === '' ? 'empty name' : 'name "origin" is reserved');
+            return;
+        }
         $pac  = $this->getPacConf();
-        $pac["{$type}templates"][$name] = json_decode(file_get_contents("/config/$type.json"), true);
+        $pac["{$type}templates"][$name] = json_decode(@file_get_contents("/config/$type.json") ?: '', true) ?: [];
         $this->setPacConf($pac);
         $this->templates($type);
     }
