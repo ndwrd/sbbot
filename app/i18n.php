@@ -537,6 +537,18 @@ $i = [
         'en' => 'not configured',
         'ru' => 'не настроено',
     ],
+    'rebind node'  => [
+        'en' => 'Rebind',
+        'ru' => 'Перепривязать',
+    ],
+    'rebind node hint' => [
+        'en' => "Needed after restoring the bot from a backup on another server: the node still trusts the old server's SSH key. Enter the node's root password or key once and the bot will add its current key to the node. Node settings are kept.",
+        'ru' => 'Нужно после восстановления бота из бэкапа на другом сервере: нода доверяет SSH-ключу старого сервера. Введите пароль root или ключ ноды один раз — бот добавит на неё свой текущий ключ. Настройки ноды не меняются.',
+    ],
+    'node rebind no access' => [
+        'en' => 'key added, but the node still does not accept the connection',
+        'ru' => 'ключ добавлен, но нода по-прежнему не принимает подключение',
+    ],
     'node request expired' => [
         'en' => "ERROR: node request expired, start over with 'Add node'",
         'ru' => 'ERROR: заявка на ноду устарела, начните заново кнопкой "Добавить ноду"',

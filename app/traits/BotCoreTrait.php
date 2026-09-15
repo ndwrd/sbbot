@@ -104,6 +104,15 @@ public function action()
             case preg_match('~^/nodeAuthKey (\w+)$~', $this->input['callback'], $m):
                 $this->nodeAuthKey($m[1]);
                 break;
+            case preg_match('~^/nodeRebind (\w+)$~', $this->input['callback'], $m):
+                $this->nodeRebind($m[1]);
+                break;
+            case preg_match('~^/nodeRebindPassword (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAuthPassword($m[1], 'rebindNodePassword');
+                break;
+            case preg_match('~^/nodeRebindKey (\w+)$~', $this->input['callback'], $m):
+                $this->nodeAuthKey($m[1], 'rebindNodeKey');
+                break;
             case preg_match('~^/nodeMtproto (\w+)$~', $this->input['callback'], $m):
                 $this->nodeMtprotoMenu($m[1]);
                 break;

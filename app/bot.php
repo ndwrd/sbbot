@@ -61,7 +61,7 @@ class Bot
         $this->ip       = getenv('IP');
         $this->i18n     = $i18n;
         $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
-        $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
+        $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 10;
         $this->update   = '/update/json';
         $this->ports = [
             'tg'    => '443',

@@ -173,6 +173,18 @@ public function nodeMenu($id)
                 ],
             ],
         ];
+        if (!$online) {
+            // Нода есть в конфиге, но не отвечает. Частая причина —
+            // восстановление бота из бэкапа на другом сервере: /ssh/key в
+            // бэкап не входит, а нода доверяет ключу старого сервера. Кнопка
+            // ставит на ноду текущий ключ, не трогая её запись в конфиге.
+            array_splice($data, count($data) - 2, 0, [[
+                [
+                    'text'          => $this->i18n('rebind node'),
+                    'callback_data' => "/nodeRebind $id",
+                ],
+            ]]);
+        }
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
     }
 
@@ -606,7 +618,9 @@ public function addNodeIp($ip, $label)
         );
     }
 
-public function nodeAuthPassword($tmpId)
+// $target — tmpId заявки при добавлении ноды или id ноды при перепривязке,
+// $callback — кто получит введённый секрет.
+public function nodeAuthPassword($target, $callback = 'addNodePassword')
     {
         $r = $this->send(
             $this->input['chat'],
@@ -616,12 +630,12 @@ public function nodeAuthPassword($tmpId)
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message' => $this->input['message_id'],
-            'callback'      => 'addNodePassword',
-            'args'          => [$tmpId],
+            'callback'      => $callback,
+            'args'          => [$target],
         ];
     }
 
-public function nodeAuthKey($tmpId)
+public function nodeAuthKey($target, $callback = 'addNodeKey')
     {
         $r = $this->send(
             $this->input['chat'],
@@ -631,8 +645,8 @@ public function nodeAuthKey($tmpId)
         );
         $_SESSION['reply'][$r['result']['message_id']] = [
             'start_message' => $this->input['message_id'],
-            'callback'      => 'addNodeKey',
-            'args'          => [$tmpId],
+            'callback'      => $callback,
+            'args'          => [$target],
         ];
     }
 
@@ -643,15 +657,18 @@ public function addNodePassword($password, $tmpId)
 
 public function addNodeKey($text, $tmpId)
     {
+        $this->finishAddNode($tmpId, 'key', $this->nodeKeyFromInput($text));
+    }
+
+public function nodeKeyFromInput($text)
+    {
         // Некоторые генераторы ключей отдают их как текст для копипаста, а не
         // файл — поддерживаем оба варианта одним обработчиком.
         if (!empty($this->input['file_id'])) {
-            $r   = $this->request('getFile', ['file_id' => $this->input['file_id']]);
-            $key = file_get_contents($this->file . $r['result']['file_path']);
-        } else {
-            $key = $text;
+            $r = $this->request('getFile', ['file_id' => $this->input['file_id']]);
+            return file_get_contents($this->file . $r['result']['file_path']);
         }
-        $this->finishAddNode($tmpId, 'key', $key);
+        return $text;
     }
 
 public function finishAddNode($tmpId, $authType, $secret)
@@ -713,6 +730,77 @@ public function finishAddNode($tmpId, $authType, $secret)
             'lastPing'  => time(),
         ];
         $this->setPacConf($conf);
+        $this->nodeMenu($id);
+    }
+
+// Перепривязка: нода уже установлена и записана в конфиг, но не принимает
+// ключ бота (после восстановления из бэкапа на другом сервере ключ новый).
+// Тот же nodeBootstrap(), что при добавлении, но без init.sh и без новой
+// записи — label, geoTag, outbounds и прочее остаются как были.
+public function nodeRebind($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            $this->nodeMenu($id);
+            return;
+        }
+        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('rebind node');
+        $text[] = "IP: {$node['ip']}";
+        $text[] = '';
+        $text[] = $this->i18n('rebind node hint');
+        $text[] = '';
+        $text[] = $this->i18n('choose auth method');
+        $data   = [
+            [
+                [
+                    'text'          => $this->i18n('password'),
+                    'callback_data' => "/nodeRebindPassword $id",
+                ],
+                [
+                    'text'          => $this->i18n('ssh key'),
+                    'callback_data' => "/nodeRebindKey $id",
+                ],
+            ],
+            [
+                [
+                    'text'          => $this->i18n('back'),
+                    'callback_data' => "/nodeMenu $id",
+                ],
+            ],
+        ];
+        $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+public function rebindNodePassword($password, $id)
+    {
+        $this->finishRebindNode($id, 'password', trim($password));
+    }
+
+public function rebindNodeKey($text, $id)
+    {
+        $this->finishRebindNode($id, 'key', $this->nodeKeyFromInput($text));
+    }
+
+public function finishRebindNode($id, $authType, $secret)
+    {
+        $node = $this->getNode($id);
+        if (empty($node['ip'])) {
+            // Ноду успели удалить, пока вводили пароль.
+            $r = $this->nodesMenu();
+            $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
+            return;
+        }
+        $result = $this->nodeBootstrap($node['ip'], ($node['login'] ?? null) ?: 'root', $authType, $secret);
+        if (empty($result['ok'])) {
+            $this->send($this->input['chat'], "ERROR\n{$result['error']}");
+            return;
+        }
+        // Ключ записан, но ssh() ходит своим путём (root, /ssh/key) — проверяем
+        // именно его, а не верим nodeBootstrap() на слово.
+        if (!$this->nodeIsOnline($node['ip'])) {
+            $this->send($this->input['chat'], "{$node['label']}: " . $this->i18n('node rebind no access'));
+        }
+        // Карточка сама покажет 🟢 — это и есть подтверждение.
         $this->nodeMenu($id);
     }
 

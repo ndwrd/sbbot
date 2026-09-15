@@ -33,7 +33,8 @@ $names = [
     'timerXr/limitXr/switchXr', 'getSingboxTotalTraffic', 'saveTemplate валидный',
     'importFile(бэкап)', 'addxrus + delxr', 'deleteAll(includelist)',
     'getHostStats/getSingboxSysStats', 'users() экран Users', 'menu() главное меню',
-    'cron checkMenuStatus',
+    'cron checkMenuStatus', 'nodeMenu офлайн + nodeRebind', 'перепривязка: пароль/ошибка/нет ноды',
+    'importFile(бэкап vpnbot)',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -135,6 +136,9 @@ $pac = [
         ['id' => 'aaaa1111-0000-4000-8000-aaaabbbbcccc', 'username' => 'second', 'password' => 'pw2'],
     ],
     'includelist' => ['example.com' => true], 'blocklist' => ['ads.example' => true],
+    // Адрес из TEST-NET-3: ssh() на стенде заглушен, так что нода выглядит
+    // недоступной — ровно состояние после восстановления из бэкапа.
+    'nodes' => ['n1a2b3c4' => ['label' => 'Helsinki', 'ip' => '203.0.113.10', 'login' => 'root', 'geoTag' => 'FI']],
 ];
 // Профиль 'fresh' — только что поставленный бот: один пользователь, никаких
 // списков, шаблонов, нод, домена и статистики. Самое частое состояние ключей
@@ -315,5 +319,30 @@ $s = [
     fn() => $b->users(),
     fn() => $b->menu(),
     fn() => [$b->checkMenuStatus(), $b->menu()],
+    fn() => [$b->nodeMenu('n1a2b3c4'), $b->nodeRebind('n1a2b3c4')],
+    // Локально нет ssh2 — nodeBootstrap() вернёт ошибку, это ветка ERROR.
+    fn() => [$b->nodeAuthPassword('n1a2b3c4', 'rebindNodePassword'), $b->nodeAuthKey('n1a2b3c4', 'rebindNodeKey'),
+             $b->rebindNodePassword(' secret ', 'n1a2b3c4'), $b->rebindNodeKey('not a key', 'n1a2b3c4'),
+             $b->finishRebindNode('gone0000', 'password', 'x'), $b->nodeRebind('gone0000')],
+    // Бэкап в формате vpnbot: разделы, которых у sbbot нет, uuid-дубль
+    // существующего пользователя, клиент без email, свой домен (не nip.io).
+    fn() => (function () use ($b, $TMP, $uid) {
+        file_put_contents("$TMP/vpnbot.json", json_encode([
+            'wg' => ['server' => [], 'clients' => []], 'wg1' => [], 'ad' => [], 'hwid' => [], 'hy' => [],
+            'oc' => '', 'ocu' => '', 'ss' => [], 'sl' => [], 'xraystats' => ['users' => []],
+            'pac' => [
+                'domain' => 'vpn.example.com', 'hashbot' => '11112222', 'language' => 'fa', 'limitpage' => 7,
+                'transport' => 'Reality', 'amnezia' => 1, 'includelist' => ['old.example' => true],
+                'dnsttDomain' => 't.example.com', 'dnsttPassword' => 'pw',
+            ],
+            'xray' => ['inbounds' => [['settings' => ['clients' => [
+                ['id' => $uid, 'email' => 'dup', 'flow' => 'xtls-rprx-vision'],
+                ['id' => '11111111-2222-4333-8444-555555555555', 'email' => 'mama', 'time' => time() + 86400, 'off' => '11111111-2222-4333-8444-555555555555'],
+                ['id' => '99999999-2222-4333-8444-555555555555'],
+            ]]]]],
+            'mtproto' => str_repeat('d', 32), 'mtprotodomain' => 'ya.ru', 'ssl' => false, 'dnstt' => false,
+        ]));
+        $b->importFile("$TMP/vpnbot.json");
+    })(),
 ];
 ($s[(int) $argv[1]])();

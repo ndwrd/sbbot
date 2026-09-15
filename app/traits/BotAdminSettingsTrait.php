@@ -191,6 +191,93 @@ public function import()
         ];
     }
 
+// Бэкап vpnbot (mercurykd/vpnbot) узнаётся по разделу 'xray' — у sbbot на его
+// месте 'singbox'.
+public function isVpnbotBackup(array $json)
+    {
+        return !empty($json['xray']) && empty($json['singbox']);
+    }
+
+// Переводит бэкап vpnbot в формат бэкапа sbbot, дальше его восстанавливает
+// обычный importFile(). Из pac берётся белый список ключей поверх ТЕКУЩЕГО
+// pac: Reality-ключи, поддомены naive/anytls, ноды и шаблоны у sbbot свои, и
+// затирать их нельзя. Разделы, которым в sbbot нет места (wg, ad, hwid, hy,
+// oc, ss, xraystats, шаблоны), в результат не попадают вовсе.
+public function convertVpnbotBackup(array $json)
+    {
+        $pac  = $this->getPacConf();
+        $from = is_array($json['pac'] ?? null) ? $json['pac'] : [];
+        $keys = [
+            'domain', 'letsencrypt', 'hashbot', 'limitpage', 'autoupdate', 'backup',
+            'reset_monthly', 'autocleanlogs', 'warp', 'warpoff',
+            'includelist', 'blocklist', 'warplist', 'subnetlist', 'processlist', 'packagelist', 'rulessetlist',
+            // Ключи dnstt без домена и пароля бесполезны — хранятся тут же, в pac.
+            'dnsttDomain', 'dnsttPassword',
+        ];
+        foreach ($keys as $k) {
+            if (array_key_exists($k, $from)) {
+                $pac[$k] = $from[$k];
+            }
+        }
+        // Языков у vpnbot больше, чем переведено здесь: с незнакомым меню
+        // осталось бы на сырых ключах i18n.
+        $langs = array_merge(...array_map('array_keys', array_values($this->i18n)));
+        if (!empty($from['language']) && in_array($from['language'], $langs, true)) {
+            $pac['language'] = $from['language'];
+        }
+        // Без этого флага кнопка DNSTT в главном меню не появится.
+        if (!empty($pac['dnsttDomain'])) {
+            $pac['dnsttUsed'] = true;
+        }
+
+        $sing    = $this->getSingbox();
+        $clients = $sing['inbounds'][0]['settings']['clients'];
+        $ids     = array_column($clients, 'id');
+        $names   = array_column($clients, 'username');
+        foreach ($json['xray']['inbounds'][0]['settings']['clients'] ?? [] as $v) {
+            // Такой uuid уже есть — повторный импорт того же бэкапа не плодит дубли.
+            if (empty($v['id']) || in_array($v['id'], $ids, true)) {
+                continue;
+            }
+            do {
+                $username = bin2hex(random_bytes(4));
+            } while (in_array($username, $names, true));
+            $client = [
+                'id'          => $v['id'],
+                'username'    => $username,
+                'description' => trim((string) ($v['email'] ?? '')) ?: $username,
+                // Тот же формат, что `openssl rand -base64 16` в addxrus().
+                'password'    => base64_encode(random_bytes(16)),
+            ];
+            if (!empty($v['time'])) {
+                $client['time'] = (int) $v['time'];
+            }
+            // vpnbot пишет в off сам uuid; здесь проверяется только !empty().
+            if (!empty($v['off'])) {
+                $client['off'] = $v['off'];
+            }
+            // flow из vpnbot не берём: он следует за транспортом, а транспорт
+            // остаётся здешний — так же, как в addxrus().
+            if (($pac['transport'] ?? null) == 'Reality') {
+                $client['flow'] = 'xtls-rprx-vision';
+            }
+            $clients[] = $client;
+            $ids[]     = $v['id'];
+            $names[]   = $username;
+        }
+        $sing['inbounds'][0]['settings']['clients'] = $clients;
+
+        return [
+            'pac'           => $pac,
+            'singbox'       => $sing,
+            'ssl'           => $json['ssl'] ?? false,
+            'dnstt'         => $json['dnstt'] ?? false,
+            'mtproto'       => $json['mtproto'] ?? '',
+            'mtprotodomain' => $json['mtprotodomain'] ?? '',
+            'mtprotoadtag'  => $json['mtprotoadtag'] ?? '',
+        ];
+    }
+
 public function importFile($file = false)
     {
         if (!empty($file)) {
@@ -202,6 +289,12 @@ public function importFile($file = false)
         if (empty($json) || !is_array($json)) {
             $this->answer($this->input['callback_id'], 'error', true);
         } else {
+            $fromVpnbot = $this->isVpnbotBackup($json);
+            if ($fromVpnbot) {
+                $out[] = 'convert vpnbot backup';
+                $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
+                $json = $this->convertVpnbotBackup($json);
+            }
             if (!empty($json['ssl'])) {
                 $out[] = 'update certificates';
                 $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
@@ -263,10 +356,22 @@ public function importFile($file = false)
 
             $this->cloakNginx();
 
+            // Сертификат vpnbot выпущен без поддоменов naive/anytls (у vpnbot их
+            // нет). nip.io перевыпущен выше сам, а DNS своего домена держит админ.
+            $conf = $this->getPacConf();
+            if ($fromVpnbot && !$domainMigrated && !empty($conf['domain']) && !preg_match('~\.nip\.io$~', $conf['domain'])) {
+                $hosts = array_filter([
+                    $conf['domain'],
+                    !empty($conf['naiveSubdomain'])  ? "{$conf['naiveSubdomain']}.{$conf['domain']}"  : null,
+                    !empty($conf['anytlsSubdomain']) ? "{$conf['anytlsSubdomain']}.{$conf['domain']}" : null,
+                ]);
+                $this->send($this->input['chat'], "Перенос из vpnbot: сертификат из бэкапа покрывает только {$conf['domain']}. Направьте DNS A-записи на IP этого сервера для: " . implode(', ', $hosts) . " — и перевыпустите сертификат кнопкой «Letsencrypt SSL».");
+            }
+
             $out[] = "end import";
             $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $out));
             $this->language = ($this->getPacConf()['language'] ?? null) ?: 'en';
-            $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 5;
+            $this->limit    = ($this->getPacConf()['limitpage'] ?? null) ?: 10;
             if (empty($file)) {
                 sleep(3);
                 $this->menu();
@@ -502,7 +607,7 @@ public function configMenu()
                 'callback_data' => "/logs",
             ],
             [
-                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 5),
+                'text'          => "{$this->i18n('page')}: " . (($conf['limitpage'] ?? null) ?: 10),
                 'callback_data' => "/enterPage",
             ],
         ];

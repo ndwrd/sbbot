@@ -150,6 +150,36 @@ foreach ([
     'exportListEmpty' => fn() => $b->exportList('warplist'),
     'menuConfig'   => fn() => $b->menu('config'),
     'warp'         => fn() => $b->warp(),
+    // Нода кладётся в конфиг прямо здесь, а не в фикстуру: иначе поменялись бы
+    // снимки подписок и экспорта выше. Поэтому эти два сценария — последние.
+    // ssh() заглушен, значит нода «недоступна», как после восстановления.
+    'nodeMenuOffline' => fn() => [$b->setNode('n1a2b3c4', ['label' => 'Helsinki', 'ip' => '203.0.113.10', 'login' => 'root', 'geoTag' => 'FI']), $b->nodeMenu('n1a2b3c4')],
+    'nodeRebind'   => fn() => $b->nodeRebind('n1a2b3c4'),
+    // Только конвертация, без записи: username/password случайные, в снимок
+    // идёт их длина.
+    'vpnbotConvert' => fn() => (function () use ($b, $uid) {
+        $r = $b->convertVpnbotBackup([
+            'wg' => [], 'ad' => [], 'hwid' => [],
+            'pac' => ['domain' => 'vpn.example.com', 'hashbot' => '11112222', 'language' => 'fa', 'limitpage' => 7,
+                      'transport' => 'Reality', 'amnezia' => 1, 'includelist' => ['old.example' => true],
+                      'reality' => ['privateKey' => 'vpnbot-key'], 'dnsttDomain' => 't.example.com'],
+            'xray' => ['inbounds' => [['settings' => ['clients' => [
+                ['id' => $uid, 'email' => 'dup'],
+                ['id' => '11111111-2222-4333-8444-555555555555', 'email' => 'mama', 'time' => 1900000000, 'off' => 'x', 'flow' => 'xtls-rprx-vision', 'hwid_limit' => 3],
+                ['id' => '99999999-2222-4333-8444-555555555555'],
+            ]]]]],
+            'mtproto' => 'm', 'ssl' => ['private' => 'p', 'public' => 'c'],
+        ]);
+        foreach ($r['singbox']['inbounds'][0]['settings']['clients'] as &$c) {
+            $c['username'] = strlen($c['username']);
+            $c['password'] = strlen($c['password']);
+            if (isset($c['description']) && preg_match('~^[0-9a-f]{8}$~', $c['description'])) {
+                $c['description'] = 'USERNAME';
+            }
+        }
+        unset($r['pac']['singboxClients']);
+        return $r;
+    })(),
 ] as $name => $fn) {
     $R[$name] = $grab($fn);
 }
