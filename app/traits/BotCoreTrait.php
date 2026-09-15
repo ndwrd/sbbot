@@ -507,6 +507,7 @@ public function cron()
             // cron() работал бы по конфигу десятиминутной давности.
             $this->resetPacCache();
             $this->checkMenuStatus();
+            $this->checkNodesStatus();
             $this->shutdownClientXr();
             $this->checkVersion();
             $this->checkBackup();

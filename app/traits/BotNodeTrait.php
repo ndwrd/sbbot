@@ -24,6 +24,47 @@ public function nodeIsOnline($ip)
         return trim((string) $this->ssh('echo ok', null, true, '/dev/null', $ip)) === 'ok';
     }
 
+// Статусы нод для экрана «Ноды». Раньше список делал SSH-подключение на каждую
+// ноду, а до недоступной ждал до 5 с (fsockopen-проба в ssh()) — и всё это в
+// однопоточном polling(). Теперь их опрашивает cron(), а экран читает готовое.
+//
+// Отдельный таймер, а не каждый проход cron(): проверка недоступной ноды стоит
+// до 5 с, и проход удлинялся бы на столько за каждую такую ноду.
+public function checkNodesStatus()
+    {
+        if (!empty($this->time_nodes_status) && time() - $this->time_nodes_status < 30) {
+            return;
+        }
+        $this->time_nodes_status = time();
+        $status = [];
+        foreach ($this->getNodes() as $id => $node) {
+            if (empty($node['off']) && !empty($node['ip'])) {
+                $status[$id] = ['online' => $this->nodeIsOnline($node['ip']), 'time' => time()];
+            }
+        }
+        // Кэш заменяется целиком — удалённые и выключенные ноды из него уходят.
+        // Но опрос длится секунды, и карточка ноды могла за это время записать
+        // более свежий живой результат — его не затираем.
+        $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($status) {
+            foreach ($status as $id => $v) {
+                if (($c[$id]['time'] ?? 0) > $v['time']) {
+                    $status[$id] = $c[$id];
+                }
+            }
+            return $status;
+        });
+    }
+
+// Живой результат из карточки ноды — чтобы список сразу показывал то же самое
+// (например, 🟢 сразу после перепривязки), не дожидаясь следующего опроса.
+public function nodeStatusRemember($id, $online)
+    {
+        $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($id, $online) {
+            $c[$id] = ['online' => (bool) $online, 'time' => time()];
+            return $c;
+        });
+    }
+
 public function nodeTagPrefix($node)
     {
         if (empty($node['geoTag'])) {
@@ -40,8 +81,23 @@ public function nodesMenu()
             $text[] = $this->i18n('no nodes yet');
         }
         $data = [];
+        // Статус — из кэша (checkNodesStatus() в cron, nodeStatusRemember() из
+        // карточки). Нет записи (нода только что добавлена) или она старше двух
+        // минут (cron не работает) — проверяем вживую, как раньше.
+        $cache = $this->readJsonLocked('/config/nodes_status.json') ?: [];
         foreach ($nodes as $id => $node) {
-            $dot = !empty($node['off']) ? '⚪' : ($this->nodeIsOnline($node['ip']) ? '🟢' : '🔴');
+            if (!empty($node['off'])) {
+                $dot = '⚪';
+            } else {
+                $st = $cache[$id] ?? null;
+                if (!is_array($st) || time() - ($st['time'] ?? 0) > 120) {
+                    $online = $this->nodeIsOnline($node['ip']);
+                    $this->nodeStatusRemember($id, $online);
+                } else {
+                    $online = !empty($st['online']);
+                }
+                $dot = $online ? '🟢' : '🔴';
+            }
             $label = $node['label'] . (!empty($node['geoTag']) ? " | {$this->nodeTagPrefix($node)}" : '');
             $data[] = [
                 [
@@ -86,6 +142,7 @@ public function nodeMenu($id)
         }
         $off    = !empty($node['off']);
         $online = $this->nodeIsOnline($node['ip']);
+        $this->nodeStatusRemember($id, $online);
         $dot    = $off ? '⚪' : ($online ? '🟢' : '🔴');
         $status = $off ? $this->i18n('node off') : ($online ? $this->i18n('node online') : $this->i18n('node offline'));
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";

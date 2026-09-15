@@ -35,6 +35,7 @@ $names = [
     'getHostStats/getSingboxSysStats', 'users() экран Users', 'menu() главное меню',
     'cron checkMenuStatus', 'nodeMenu офлайн + nodeRebind', 'перепривязка: пароль/ошибка/нет ноды',
     'importFile(бэкап vpnbot)', 'applyUsers + writeSingboxRuntime',
+    'статусы нод: cron / кэш / устаревший кэш',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -348,5 +349,15 @@ $s = [
     // через rename (дважды — второй раз поверх существующего файла).
     fn() => [$b->applyUsers(json_encode(['singboxClients' => $b->getPacConf()['singboxClients'] ?? []])),
              $b->writeSingboxRuntime($b->buildSingboxConfig($b->getPacConf())), $b->defaultOutboundsOff()],
+    // Опрос из cron, повторный вызов в пределах 30 с (таймер), список по
+    // свежему кэшу, карточка, список по устаревшему кэшу (живая проверка).
+    fn() => (function () use ($b, $TMP) {
+        $b->checkNodesStatus();
+        $b->checkNodesStatus();
+        $b->menu('nodes');
+        $b->nodeMenu('n1a2b3c4');
+        file_put_contents("$TMP/config/nodes_status.json", json_encode(['n1a2b3c4' => ['online' => true, 'time' => 1]]));
+        $b->menu('nodes');
+    })(),
 ];
 ($s[(int) $argv[1]])();

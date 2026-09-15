@@ -49,6 +49,7 @@ class Bot
     public $appsCache;
     public $admin;
     public $ports;
+    public $time_nodes_status;
 
     public function __construct($key, $i18n)
     {

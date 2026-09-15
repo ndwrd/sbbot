@@ -66,10 +66,26 @@ public function updatePacConf(callable $fn)
         // возвращает изменённый — либо null, если писать не нужно. Внутри $fn
         // ничего медленного делать нельзя: на это время конфиг не могут
         // прочитать все остальные, включая запросы подписки.
-        $fp = @fopen($this->pac, 'c+');
+        [$result, $conf] = $this->updateJsonLocked($this->pac, $fn);
+        // $conf прочитан под блокировкой, то есть заведомо свежее кэша — кладём
+        // его даже когда $fn ничего не вернул и записи не было. null — файл не
+        // открылся, кэш тогда не трогаем.
+        if ($conf !== null) {
+            $this->pacCache = $conf;
+        }
+        return $result;
+    }
+
+// Атомарный read-modify-write любого JSON-файла — механика updatePacConf(), но
+// без кэша pac. Возвращает [результат fwrite() или false, итоговый массив]:
+// записанный, а если записи не было — прочитанный под блокировкой; null, если
+// файл не открылся.
+public function updateJsonLocked($path, callable $fn)
+    {
+        $fp = @fopen($path, 'c+');
         if (!$fp) {
-            error_log("updatePacConf: cannot open {$this->pac}");
-            return false;
+            error_log("updateJsonLocked: cannot open $path");
+            return [false, null];
         }
         flock($fp, LOCK_EX);
         $conf   = json_decode(stream_get_contents($fp), true) ?: [];
@@ -78,7 +94,7 @@ public function updatePacConf(callable $fn)
         if (is_array($new)) {
             $json = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($json === false) {
-                error_log('updatePacConf: json_encode failed: ' . json_last_error_msg());
+                error_log("updateJsonLocked: json_encode failed for $path: " . json_last_error_msg());
             } else {
                 ftruncate($fp, 0);
                 rewind($fp);
@@ -88,10 +104,7 @@ public function updatePacConf(callable $fn)
         }
         flock($fp, LOCK_UN);
         fclose($fp);
-        // $conf прочитан под блокировкой, то есть заведомо свежее кэша — кладём
-        // его даже когда $fn ничего не вернул и записи не было.
-        $this->pacCache = is_array($new) && $result !== false ? $new : $conf;
-        return $result;
+        return [$result, is_array($new) && $result !== false ? $new : $conf];
     }
 
 public function readJsonLocked($path)
