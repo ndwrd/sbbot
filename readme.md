@@ -1,7 +1,7 @@
 SBBOT
 
 
-forked from mercurykd/vpnbot
+**forked from mercurykd/vpnbot**
 
 ## Установка
 
@@ -13,7 +13,7 @@ wget -O- https://raw.githubusercontent.com/ndwrd/sbbot/main/scripts/init.sh | sh
 
 `YOUR_TELEGRAM_BOT_KEY` — токен бота от [@BotFather](https://t.me/BotFather).
 Скрипт ставит Docker, клонирует репозиторий в `~/sbbot` и поднимает контейнеры.
-После запуска напишите боту `/start` — первый написавший станет админом.
+После запуска напишите боту `/start`.
 
 Переезд с vpnbot — см. раздел в [user_guide.md](user_guide.md#переезд-с-vpnbot).
 
