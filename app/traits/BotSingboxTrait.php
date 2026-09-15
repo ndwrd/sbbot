@@ -43,17 +43,51 @@ public function restartSingbox($c, $norestart = false)
         $sing = $this->buildSingboxConfig($pac);
         if (empty($norestart)) {
             $this->collectSession();
-            file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            // SIGHUP = sing-box's own graceful reload (validates the new config, then
-            // swaps instances with a shutdown grace period for existing connections)
-            // instead of a hard kill; falls back to a cold start if nothing is running yet.
+            $this->writeSingboxRuntime($sing);
+            // SIGHUP в sing-box 1.14 (cmd/sing-box/cmd_run.go): сначала check()
+            // нового конфига — битый не применяется, старый экземпляр продолжает
+            // работать. Если конфиг в порядке — старый экземпляр закрывается
+            // ВМЕСТЕ со всеми соединениями, и поднимается новый. То есть это не
+            // бесшовная подмена: при каждом изменении у клиентов на мгновение
+            // рвутся соединения. Выигрыш перед kill — проверка конфига и отсутствие
+            // перезапуска процесса. "|| sing-box run" — холодный старт, если
+            // процесса ещё нет.
             // $wait=false makes ssh() nohup-wrap the whole command — confirmed the hard
             // way that a bare `&` here does NOT survive the ssh channel closing (same
             // class of bug as `docker exec ... &` needing `exec -d` to actually detach).
-            $this->ssh('pkill -HUP sing-box || sing-box run -c /sing.json', 'sbx', false);
+            $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
         } else {
-            file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            $this->writeSingboxRuntime($sing);
         }
+    }
+
+// Рабочий конфиг sing-box. Пишется во временный файл и подменяется rename'ом:
+// по SIGHUP sing-box читает конфиг ДВАЖДЫ (check(), затем заново для запуска),
+// и попади второе чтение на недописанный файл — sing-box завершается целиком,
+// а поднять его некому (контейнер sbx живёт на tail -f). Писателей несколько
+// (polling, cron, Unit), так что окно реальное.
+//
+// Лежит в отдельном каталоге, который sbx монтирует ЦЕЛИКОМ: mount одного файла
+// держится за inode, и после rename контейнер продолжал бы видеть старый файл.
+// /config/sing-server.json больше не перезаписывается — это база (log/dns и
+// ручные правки админа), из которой buildSingboxConfig() собирает этот файл.
+public function writeSingboxRuntime(array $sing)
+    {
+        $dir  = '/config/sing-box';
+        $json = json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            error_log('writeSingboxRuntime: json_encode failed: ' . json_last_error_msg());
+            return false;
+        }
+        @mkdir($dir, 0755, true);
+        // pid в имени — у одновременных писателей не общий временный файл.
+        $tmp = "$dir/config.json." . getmypid() . '.tmp';
+        if (file_put_contents($tmp, $json) === false || !rename($tmp, "$dir/config.json")) {
+            error_log("writeSingboxRuntime: cannot write $dir/config.json");
+            @unlink($tmp);
+            return false;
+        }
+        return true;
     }
 
 public function buildSingboxConfig($pac)
@@ -2471,6 +2505,16 @@ public function outboundProtocols()
             'naive'     => 'Naive',
             'anytls'    => 'AnyTLS',
         ];
+    }
+
+// Выключенные протоколы у свежей установки Бота и у только что добавленной
+// ноды: по умолчанию включены только Vless и Hysteria2. Записывается явно в
+// момент первичной настройки (sslip(), finishAddNode()), а не выводится из
+// отсутствия ключа — иначе у работающих установок, где переключатели никто не
+// трогал, Naive и AnyTLS пропали бы при обновлении.
+public function defaultOutboundsOff()
+    {
+        return ['naive' => true, 'anytls' => true];
     }
 
 public function outboundsOffFor($nodeId = null)

@@ -20,6 +20,7 @@
 /config/mtprotodomain
 /config/deny
 /config/singbox.stats
+/config/sing-box/
 /config/apps_cache.json
 /todo.todo
 /app/zapretlists/*

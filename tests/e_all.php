@@ -34,7 +34,7 @@ $names = [
     'importFile(бэкап)', 'addxrus + delxr', 'deleteAll(includelist)',
     'getHostStats/getSingboxSysStats', 'users() экран Users', 'menu() главное меню',
     'cron checkMenuStatus', 'nodeMenu офлайн + nodeRebind', 'перепривязка: пароль/ошибка/нет ноды',
-    'importFile(бэкап vpnbot)',
+    'importFile(бэкап vpnbot)', 'applyUsers + writeSingboxRuntime',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -344,5 +344,9 @@ $s = [
         ]));
         $b->importFile("$TMP/vpnbot.json");
     })(),
+    // Нода получает пользователей: рабочий конфиг sing-box пишется в каталог
+    // через rename (дважды — второй раз поверх существующего файла).
+    fn() => [$b->applyUsers(json_encode(['singboxClients' => $b->getPacConf()['singboxClients'] ?? []])),
+             $b->writeSingboxRuntime($b->buildSingboxConfig($b->getPacConf())), $b->defaultOutboundsOff()],
 ];
 ($s[(int) $argv[1]])();

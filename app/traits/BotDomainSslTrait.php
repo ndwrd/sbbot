@@ -90,6 +90,11 @@ public function sslip()
         $this->input['message_id']  = $r['result']['message_id'] ?? null;
         $this->input['callback_id'] = false;
         if (empty($p)) {
+            // Самый первый запуск — единственное место, где можно отличить новую
+            // установку от старой, где переключатели протоколов просто не
+            // трогали. updatePacConf(), а не setPacConf(): polling в контейнере
+            // php может писать pac.json в это же время.
+            $this->updatePacConf(fn ($c) => $c + ['outboundsOff' => $this->defaultOutboundsOff()]);
             $this->addDomain(str_replace('.', '-', $this->ip) . '.nip.io', 1);
             $this->setSSL('letsencrypt');
             // nginx -s reload (внутри cloakNginx(), вызванного из setSSL()) не всегда

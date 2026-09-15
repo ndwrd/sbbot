@@ -7,6 +7,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=path
 ExecStartPre=/bin/sh -c "touch ./override.env ./docker-compose.override.yml ./config/location.conf ./config/override.conf ./config/deny ./config/pac.json"
+ExecStartPre=/bin/sh -c "mkdir -p ./config/sing-box && [ -f ./config/sing-box/config.json ] || cp ./config/sing-server.json ./config/sing-box/config.json"
 ExecStart=/bin/sh -c "IP=$(curl https://ipinfo.io/ip) VER=$(git describe --tags) docker compose --env-file ./.env --env-file ./override.env up -d --force-recreate"
 ExecStartPost=/bin/sh -c "bash ./update/update.sh &"
 ExecStop=/bin/sh -c "docker compose down --remove-orphans"

@@ -195,7 +195,14 @@ public function nodeStopSingbox($ip)
 
 public function nodeStartSingbox($ip)
     {
-        $this->ssh('pkill sing-box || sing-box run -c /sing.json', 'sbx', false, '/logs/singbox', $ip);
+        // -HUP, а не простой pkill: если sing-box на ноде уже работает (ноду
+        // выключали, пока она была недоступна, и остановка до неё не дошла),
+        // pkill без сигнала убивал его, а "||" не давал запуститься новому —
+        // нода оставалась без sing-box. Второй путь — нода, ещё не обновлённая
+        // до конфига в каталоге /sing-box: run по новому пути сразу падает, и
+        // срабатывает старый. Переменных тут нет намеренно: ssh() оборачивает
+        // команду в двойные кавычки, и $var раскрыла бы внешняя оболочка.
+        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json || sing-box run -c /sing.json', 'sbx', false, '/logs/singbox', $ip);
     }
 
 public function nodeToggleOff($id)
@@ -698,10 +705,11 @@ public function finishAddNode($tmpId, $authType, $secret)
         $id   = bin2hex(random_bytes(4));
         $conf = $this->getPacConf();
         $conf['nodes'][$id] = [
-            'label'  => $pending['label'],
-            'ip'     => $pending['ip'],
-            'login'  => $login,
-            'geoTag' => $geoTag,
+            'label'        => $pending['label'],
+            'ip'           => $pending['ip'],
+            'login'        => $login,
+            'geoTag'       => $geoTag,
+            'outboundsOff' => $this->defaultOutboundsOff(),
         ];
         $this->setPacConf($conf);
 
@@ -1485,8 +1493,8 @@ public function applyUsers($json)
         $pac['singboxRoutingRules'] = $built['rules'];
         $this->setPacConf($pac);
         $sing = $this->buildSingboxConfig($pac);
-        file_put_contents('/config/sing-server.json', json_encode($sing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing.json', 'sbx', false);
+        $this->writeSingboxRuntime($sing);
+        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
         return 'ok';
     }
 

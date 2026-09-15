@@ -235,7 +235,9 @@ services:
             - ./config/.profile:/root/.ashrc:ro
             - ./ssh:/ssh
             - ./config/sshd_config:/etc/ssh/sshd_config
-            - ./config/sing-server.json:/sing.json
+            # Каталог, а не файл: бот подменяет конфиг rename'ом, а mount
+            # отдельного файла держится за inode и замену бы не увидел.
+            - ./config/sing-box/:/sing-box/
             - ./scripts/start_singbox.sh:/start_singbox.sh
             - ./certs/:/certs/
             - ./logs:/logs
