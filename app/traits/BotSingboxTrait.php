@@ -2078,8 +2078,13 @@ public function subscription($return = false)
         // запрос на первый вызов) — не зовём её вообще, если нод ещё нет,
         // чтобы не тащить лишнюю сетевую зависимость в подписку однонодовых
         // (сейчас — почти всех) установок.
-        $servers     = (!empty($this->getNodes()) && !in_array($pac['transport'] ?? null, ['Reality', 'xhttp'], true)) ? $this->getSubscriptionServers() : [];
-        $multiServer = count($servers) > 1;
+        // Плейсхолдер "~{тег}:outbounds~" разворачивается и тогда, когда кроме
+        // Бота в подписке никого нет (нод нет, нода выключена или не
+        // синхронизирована): раньше клиент получал его буквально — outbound с
+        // таким тегом не существует, и конфиг отвергался целиком.
+        $hasGeoPlaceholder = str_contains(json_encode($c, JSON_UNESCAPED_UNICODE), ':outbounds~');
+        $servers     = ((!empty($this->getNodes()) || $hasGeoPlaceholder) && !in_array($pac['transport'] ?? null, ['Reality', 'xhttp'], true)) ? $this->getSubscriptionServers() : [];
+        $multiServer = count($servers) > 1 || ($hasGeoPlaceholder && !empty($servers));
         // pac['outbound']/"Outbound name" убраны — sing-box и xray больше не
         // полагаются на этот алиас, у обоих в шаблоне фиксированный литерал
         // "Proxy" (см. buildSingMultiOutbounds(); для xray — просто тег
@@ -2736,9 +2741,9 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
                 $autoIdx = $k;
             }
         }
-        if ($proxyIdx === null || $autoIdx === null) {
-            return $c;
-        }
+        // Без Proxy/⚡️Auto в шаблоне ноды просто не добавляются в общие группы —
+        // но плейсхолдеры в своих группах админа всё равно разворачиваются
+        // ниже. Раньше тут был return, и они уходили клиенту буквально.
         // Нода, явно упомянутая где-то в шаблоне плейсхолдером
         // "~{тег}:outbounds~" (в любой другой группе — своей кастомной,
         // например), в дефолтные Proxy/⚡️Auto не попадает — ровно как
@@ -2746,7 +2751,13 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
         // заполняют группу по умолчанию. Сама она всё равно клонируется и
         // регистрируется в $byGeo — иначе той кастомной группе нечего будет
         // подставить.
-        preg_match_all('/~(.+?):outbounds~/u', json_encode($c), $mClaimed);
+        // Два условия, без которых упомянутая нода всё равно попадала в общие
+        // группы. JSON_UNESCAPED_UNICODE: по умолчанию json_encode() пишет эмодзи
+        // флага escape-последовательностями, и найденный тег не совпадал с тегом
+        // ноды. [^~"]+ вместо .+?: иначе совпадение начиналось с первой тильды
+        // в JSON (например, ~domain~ у прокси, стоящих до групп) и тянулось до
+        // ":outbounds~" через половину конфига.
+        preg_match_all('/~([^~"]+):outbounds~/u', json_encode($c, JSON_UNESCAPED_UNICODE), $mClaimed);
         $claimed = array_unique($mClaimed[1] ?? []);
 
         $newTags      = [];
@@ -2793,7 +2804,7 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
                 }
             }
         }
-        if (!empty($newTags)) {
+        if (!empty($newTags) && $proxyIdx !== null && $autoIdx !== null) {
             $c['outbounds'][$proxyIdx]['outbounds'] = array_merge($c['outbounds'][$proxyIdx]['outbounds'], $newTags);
             $c['outbounds'][$autoIdx]['outbounds']  = array_merge($c['outbounds'][$autoIdx]['outbounds'], $newTags);
         }
@@ -2801,7 +2812,8 @@ public function buildSingMultiOutbounds($c, $rawOutbounds, $servers, $outbound, 
         // Ручные группы админа (любой другой outbound с type:selector/urltest
         // в шаблоне) могут ссылаться на конкретный сервер плейсхолдером
         // "~{флаг}{код}:outbounds~" — он разворачивается тут же.
-        return $this->expandGeoPlaceholders($c, $byGeo);
+        $groups = $this->geoPlaceholderGroups($c, 'sing');
+        return $this->fillEmptyGeoGroups($this->expandGeoPlaceholders($c, $byGeo), 'sing', $groups, $this->mainGeoTags($servers, $byGeo));
     }
 
 public function expandGeoPlaceholders($c, $byGeo)
@@ -2870,12 +2882,17 @@ public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $
                 break;
             }
         }
-        if ($proxyIdx === null) {
-            return $c;
-        }
+        // Без группы Proxy ноды в общую группу не добавляются, но плейсхолдеры
+        // в группах админа всё равно разворачиваются — см. sing-box выше.
         // Та же логика "упомянут где-то явно — не попадает в дефолт", что и
         // в buildSingMultiOutbounds() — см. коммент там.
-        preg_match_all('/~(.+?):outbounds~/u', json_encode($c), $mClaimed);
+        // Два условия, без которых упомянутая нода всё равно попадала в общие
+        // группы. JSON_UNESCAPED_UNICODE: по умолчанию json_encode() пишет эмодзи
+        // флага escape-последовательностями, и найденный тег не совпадал с тегом
+        // ноды. [^~"]+ вместо .+?: иначе совпадение начиналось с первой тильды
+        // в JSON (например, ~domain~ у прокси, стоящих до групп) и тянулось до
+        // ":outbounds~" через половину конфига.
+        preg_match_all('/~([^~"]+):outbounds~/u', json_encode($c, JSON_UNESCAPED_UNICODE), $mClaimed);
         $claimed = array_unique($mClaimed[1] ?? []);
 
         $newNames   = [];
@@ -2920,11 +2937,77 @@ public function buildClashMultiOutbounds($c, $rawProxies, $servers, $outbound, $
                 }
             }
         }
-        if (!empty($newNames)) {
+        if (!empty($newNames) && $proxyIdx !== null) {
             $c['proxy-groups'][$proxyIdx]['proxies'] = array_merge($c['proxy-groups'][$proxyIdx]['proxies'], $newNames);
         }
-        $c['proxies'] = array_merge($c['proxies'], $newProxies);
-        return $this->expandGeoPlaceholders($c, $byGeo);
+        $c['proxies'] = array_merge($c['proxies'] ?? [], $newProxies);
+        $groups = $this->geoPlaceholderGroups($c, 'clash');
+        return $this->fillEmptyGeoGroups($this->expandGeoPlaceholders($c, $byGeo), 'clash', $groups, $this->mainGeoTags($servers, $byGeo));
+    }
+
+// Имена групп, в списке участников которых есть плейсхолдер "~{тег}:outbounds~".
+// Считается ДО разворачивания — после него уже не отличить свою группу от любой.
+public function geoPlaceholderGroups($c, $type)
+    {
+        [$listKey, $nameKey, $itemsKey] = $type === 'clash' ? ['proxy-groups', 'name', 'proxies'] : ['outbounds', 'tag', 'outbounds'];
+        $names = [];
+        foreach ($c[$listKey] ?? [] as $g) {
+            foreach ((array) ($g[$itemsKey] ?? []) as $item) {
+                if (is_string($item) && preg_match('/^~.+:outbounds~$/u', $item)) {
+                    $names[] = $g[$nameKey] ?? null;
+                    break;
+                }
+            }
+        }
+        return array_values(array_filter($names, 'is_string'));
+    }
+
+// Теги протоколов Бота, зарегистрированные сборщиком для плейсхолдеров.
+public function mainGeoTags($servers, $byGeo)
+    {
+        foreach ($servers as $s) {
+            if (!empty($s['isMain'])) {
+                return $byGeo[$s['tag']] ?? [];
+            }
+        }
+        return [];
+    }
+
+// Группа с плейсхолдерами после разворачивания может остаться пустой — все её
+// серверы недоступны (нода выключена, не синхронизирована, удалена). Пустую
+// группу отвергают оба клиента: sing-box — "missing tags", mihomo — "`use` or
+// `proxies` missing", то есть ломался бы весь конфиг. В такую группу кладём
+// протоколы Бота: трафик временно идёт через Бота, пока нода не вернётся.
+public function fillEmptyGeoGroups($c, $type, $groups, $mainTags)
+    {
+        [$listKey, $nameKey, $itemsKey] = $type === 'clash' ? ['proxy-groups', 'name', 'proxies'] : ['outbounds', 'tag', 'outbounds'];
+        // Подставляем только то, что в конфиге реально есть: теги протоколов
+        // Бота сборщик выводит как "{тег}|{протокол}", а шаблон, который никто
+        // не переименовывал (correct*OriginTags()), может называть их иначе —
+        // ссылка на несуществующий outbound/прокси сломала бы конфиг так же,
+        // как пустая группа.
+        $existing = $type === 'clash'
+            ? array_column($c['proxies'] ?? [], 'name')
+            : array_column($c['outbounds'] ?? [], 'tag');
+        $mainTags = array_values(array_filter($mainTags, fn ($t) => in_array($t, $existing, true)));
+        // У Бота могут быть выключены все протоколы — тогда хотя бы direct,
+        // чтобы конфиг оставался рабочим.
+        $fallback = $mainTags ?: [$type === 'clash' ? 'DIRECT' : 'direct'];
+        foreach ($c[$listKey] ?? [] as $k => $g) {
+            if (!in_array($g[$nameKey] ?? null, $groups, true)) {
+                continue;
+            }
+            // У mihomo-группы с провайдерами (use) пустой список proxies — норма.
+            if (empty($g[$itemsKey]) && ($type !== 'clash' || empty($g['use']))) {
+                $c[$listKey][$k][$itemsKey] = $fallback;
+            }
+            // selector sing-box с default на выпавший сервер: "default outbound
+            // not found" — без default выбирается первый из списка.
+            if ($type !== 'clash' && isset($g['default']) && !in_array($g['default'], $c[$listKey][$k][$itemsKey], true)) {
+                unset($c[$listKey][$k]['default']);
+            }
+        }
+        return $c;
     }
 
 public function buildXrayMultiOutbounds($c, $rawOutbounds, $servers, $uid)

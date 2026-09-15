@@ -39,7 +39,15 @@ public function checkNodesStatus()
         $status = [];
         foreach ($this->getNodes() as $id => $node) {
             if (empty($node['off']) && !empty($node['ip'])) {
-                $status[$id] = ['online' => $this->nodeIsOnline($node['ip']), 'time' => time()];
+                $online      = $this->nodeIsOnline($node['ip']);
+                $status[$id] = ['online' => $online, 'time' => time()];
+                // Пуш пользователей не прошёл (нода не ответила, когда меняли
+                // список или стартовал бот) — без повтора нода молча выпадала из
+                // подписок до ручного «Sync users». Повторяем только для
+                // ответивших нод и не во время установки.
+                if ($online && empty($node['usersSynced']) && empty($node['provisioning'])) {
+                    $this->nodeSyncUsersSilent($id);
+                }
             }
         }
         // Кэш заменяется целиком — удалённые и выключенные ноды из него уходят.
@@ -1482,14 +1490,29 @@ public function nodeSyncAllUsers()
         // сразу гасим usersSynced у всех нод (пока не подтверждён пуш,
         // subscription() не должен предлагать клиенту фоллбэк на них), потом
         // пытаемся пушить. Без чата/меню — это фон, а не ответ на нажатие кнопки.
-        $conf = $this->getPacConf();
-        foreach ($conf['nodes'] ?? [] as $id => $node) {
-            $conf['nodes'][$id]['usersSynced'] = false;
-        }
-        $this->setPacConf($conf);
-        foreach (array_keys($conf['nodes'] ?? []) as $id) {
+        $this->updatePacConf(function ($c) {
+            foreach ($c['nodes'] ?? [] as $id => $node) {
+                $c['nodes'][$id]['usersSynced'] = false;
+            }
+            return $c;
+        });
+        foreach (array_keys($this->getNodes()) as $id) {
             $this->nodeSyncUsersSilent($id);
         }
+    }
+
+// То, что уходит на ноду при синхронизации, — из этого нода строит свой
+// серверный конфиг. Отдельной функцией, чтобы сравнивать отправленное с
+// актуальным (см. nodeSyncUsersSilent()).
+public function nodeUsersPayload($pac)
+    {
+        return [
+            'singboxClients' => $pac['singboxClients'] ?? [],
+            'transport'      => $pac['transport'] ?? 'Websocket',
+            'reality'        => $pac['reality'] ?? [],
+            'blocklist'      => $pac['blocklist'] ?? [],
+            'warplist'       => $pac['warplist'] ?? [],
+        ];
     }
 
 public function nodeSyncUsersSilent($id)
@@ -1503,19 +1526,22 @@ public function nodeSyncUsersSilent($id)
         if (empty($node)) {
             return false;
         }
-        $pac     = $this->getPacConf();
-        $payload = json_encode([
-            'singboxClients' => $pac['singboxClients'] ?? [],
-            'transport'      => $pac['transport'] ?? 'Websocket',
-            'reality'        => $pac['reality'] ?? [],
-            'blocklist'      => $pac['blocklist'] ?? [],
-            'warplist'       => $pac['warplist'] ?? [],
-        ]);
-        $ok = $this->nodeConsole($node['ip'], 'applyUsers', $payload) === 'ok';
+        $sent = $this->nodeUsersPayload($this->getPacConf());
+        $ok   = $this->nodeConsole($node['ip'], 'applyUsers', json_encode($sent)) === 'ok';
         if ($ok) {
-            $conf = $this->getPacConf();
-            $conf['nodes'][$id]['usersSynced'] = true;
-            $this->setPacConf($conf);
+            // Под блокировкой и только если список не поменялся, пока шёл пуш
+            // (секунды SSH). Иначе, например, повтор из cron со старым списком
+            // мог бы отметить ноду синхронизированной поверх более свежего
+            // изменения — и она числилась бы синхронизированной со старыми
+            // пользователями. Поменялся — отметит тот, кто его поменял, или
+            // следующий повтор из cron.
+            $this->updatePacConf(function ($c) use ($id, $sent) {
+                if (!isset($c['nodes'][$id]) || $this->nodeUsersPayload($c) !== $sent) {
+                    return null;
+                }
+                $c['nodes'][$id]['usersSynced'] = true;
+                return $c;
+            });
         }
         return $ok;
     }

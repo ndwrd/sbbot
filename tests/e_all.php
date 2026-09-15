@@ -37,6 +37,7 @@ $names = [
     'importFile(бэкап vpnbot)', 'applyUsers + writeSingboxRuntime',
     'статусы нод: cron / кэш / устаревший кэш',
     'callbackCheck (нажатие кнопки)', 'addxrus: первый пользователь',
+    'подписка: плейсхолдеры нод (недоступна/нет нод)',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -374,6 +375,24 @@ $s = [
         $p['singboxClients'] = [];
         $b->setPacConf($p);
         $b->addxrus('Первый');
+    })(),
+    // Группы с плейсхолдерами нод в обоих шаблонах. В full нода FI есть, но не
+    // синхронизирована (в подписку не попадает), в fresh нод нет вообще —
+    // оба случая раньше отдавали клиенту буквальный плейсхолдер.
+    fn() => (function () use ($b, $TMP, $uid) {
+        $s = json_decode(file_get_contents("$TMP/config/sing.json"), true) ?: [];
+        $s['outbounds'][] = ['type' => 'urltest', 'tag' => 'GeoRU', 'outbounds' => ['~🇷🇺RU:outbounds~']];
+        $s['outbounds'][] = ['type' => 'selector', 'tag' => 'GeoFI', 'outbounds' => ['~🇫🇮FI:outbounds~'], 'default' => '🇫🇮FI|Vless'];
+        file_put_contents("$TMP/config/sing.json", json_encode($s, JSON_UNESCAPED_UNICODE));
+        $k = json_decode(file_get_contents("$TMP/config/clash.json"), true) ?: [];
+        $k['proxy-groups'][] = ['name' => 'GeoRU', 'type' => 'url-test', 'proxies' => ['~🇷🇺RU:outbounds~']];
+        file_put_contents("$TMP/config/clash.json", json_encode($k, JSON_UNESCAPED_UNICODE));
+        foreach (['si', 'cl'] as $t) {
+            $_GET = ['t' => $t, 's' => $uid];
+            ob_start();
+            $b->subscription(true);
+            ob_end_clean();
+        }
     })(),
 ];
 ($s[(int) $argv[1]])();

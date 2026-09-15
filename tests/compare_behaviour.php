@@ -155,6 +155,39 @@ foreach ([
     // ssh() заглушен, значит нода «недоступна», как после восстановления.
     'nodeMenuOffline' => fn() => [$b->setNode('n1a2b3c4', ['label' => 'Helsinki', 'ip' => '203.0.113.10', 'login' => 'root', 'geoTag' => 'FI']), $b->nodeMenu('n1a2b3c4')],
     'nodeRebind'   => fn() => $b->nodeRebind('n1a2b3c4'),
+    // Исключение упомянутой плейсхолдером ноды из общих групп. Протоколы с
+    // "~domain~" стоят ДО групп нарочно: так был устроен баг, когда поиск
+    // упомянутых нод цеплялся за первую тильду в JSON и нода RU попадала в Proxy.
+    'geoExclusion' => fn() => (function () use ($b, $uid) {
+        $servers = [
+            ['tag' => '🇩🇪DE', 'geoTag' => 'DE', 'domain' => 'de.example.com', 'hash' => 'h', 'naiveSubdomain' => 'n', 'anytlsSubdomain' => 'a', 'outboundsOff' => [], 'isMain' => true],
+            ['tag' => '🇷🇺RU', 'geoTag' => 'RU', 'domain' => 'ru.example.com', 'hash' => 'h', 'naiveSubdomain' => 'n', 'anytlsSubdomain' => 'a', 'outboundsOff' => [], 'isMain' => false],
+            ['tag' => '🇫🇮FI', 'geoTag' => 'FI', 'domain' => 'fi.example.com', 'hash' => 'h', 'naiveSubdomain' => 'n', 'anytlsSubdomain' => 'a', 'outboundsOff' => [], 'isMain' => false],
+        ];
+        $clash = [
+            'proxies' => [
+                ['name' => '🇩🇪DE|Vless', 'type' => 'vless', 'server' => '~domain~'],
+                ['name' => '🇩🇪DE|Hy2', 'type' => 'hysteria2', 'server' => '~domain~'],
+            ],
+            'proxy-groups' => [
+                ['name' => 'Proxy', 'type' => 'fallback', 'proxies' => ['🇩🇪DE|Vless', '🇩🇪DE|Hy2']],
+                ['name' => 'YT', 'type' => 'url-test', 'proxies' => ['~🇷🇺RU:outbounds~']],
+            ],
+        ];
+        $sing = ['outbounds' => [
+            ['tag' => '🇩🇪DE|Vless', 'type' => 'vless', 'server' => '~domain~'],
+            ['tag' => '🇩🇪DE|Hy2', 'type' => 'hysteria2', 'server' => '~domain~'],
+            ['tag' => 'Proxy', 'type' => 'selector', 'outbounds' => ['🇩🇪DE|Vless', '🇩🇪DE|Hy2']],
+            ['tag' => '⚡️Auto', 'type' => 'urltest', 'outbounds' => ['🇩🇪DE|Vless', '🇩🇪DE|Hy2']],
+            ['tag' => 'YT', 'type' => 'urltest', 'outbounds' => ['~🇷🇺RU:outbounds~']],
+            ['tag' => 'Gone', 'type' => 'selector', 'outbounds' => ['~🇺🇸US:outbounds~'], 'default' => '🇺🇸US|Vless'],
+        ]];
+        $groups = fn ($list, $key, $items) => array_column(array_map(fn ($g) => [$g[$key], $g[$items] ?? null, $g['default'] ?? null], array_filter($list, fn ($g) => isset($g[$items]))), null);
+        return [
+            'clash' => $groups($b->buildClashMultiOutbounds($clash, $clash['proxies'], $servers, 'proxy', $uid, 'pw')['proxy-groups'], 'name', 'proxies'),
+            'sing'  => $groups($b->buildSingMultiOutbounds($sing, $sing['outbounds'], $servers, 'proxy', $uid, 'u', 'pw')['outbounds'], 'tag', 'outbounds'),
+        ];
+    })(),
     // Только конвертация, без записи: username/password случайные, в снимок
     // идёт их длина.
     'vpnbotConvert' => fn() => (function () use ($b, $uid) {
