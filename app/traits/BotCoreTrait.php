@@ -56,7 +56,10 @@ public function auth()
 public function callbackCheck()
     {
         if (empty($this->callback) && !empty($this->input['callback_id'])) {
-            $this->answer($this->input['callback_id'], $GLOBALS['debug'] ? $this->input['callback'] : false);
+            // $debug объявляется в init.php/index.php, только если в config.php
+            // есть ключ debug, а init.sh его не пишет — на обычной установке
+            // переменной нет вовсе, и без empty() был warning на каждое нажатие.
+            $this->answer($this->input['callback_id'], !empty($GLOBALS['debug']) ? $this->input['callback'] : false);
         }
     }
 

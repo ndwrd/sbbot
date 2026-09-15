@@ -915,6 +915,9 @@ public function addxrus($users)
         $p     = $this->getPacConf();
         $users = array_map(fn ($e) => trim($e), explode(',', $users));
         $users = array_map(fn ($e) => explode(':', $e), $users);
+        // Заполняются только в цикле по существующим пользователям — у первого
+        // пользователя на свежей установке их иначе просто не было.
+        $uuids = $usernames = [];
         foreach ($c['inbounds'][0]['settings']['clients'] as $k => $v) {
             $uuids[]     = $v['id'];
             $usernames[] = $v['username'];

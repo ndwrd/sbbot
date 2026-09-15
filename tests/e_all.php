@@ -36,6 +36,7 @@ $names = [
     'cron checkMenuStatus', 'nodeMenu офлайн + nodeRebind', 'перепривязка: пароль/ошибка/нет ноды',
     'importFile(бэкап vpnbot)', 'applyUsers + writeSingboxRuntime',
     'статусы нод: cron / кэш / устаревший кэш',
+    'callbackCheck (нажатие кнопки)', 'addxrus: первый пользователь',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -258,7 +259,10 @@ class TestBot extends Bot
     public function geoCountryCode($ip) { return 'DE'; }
 }
 
-$GLOBALS['debug'] = false;
+// $GLOBALS['debug'] НЕ объявляем: init.php/index.php заводят $debug, только
+// если в config.php есть ключ debug, а init.sh его не пишет. Раньше здесь
+// стояло `$GLOBALS['debug'] = false` — и warning на каждое нажатие кнопки в
+// бою стенд не видел, пока его не показал /logs/php_error.
 $b = new TestBot('123456:TESTTOKEN', $i);
 $b->pac       = "$TMP/config/pac.json";
 $b->appsCache = "$TMP/config/apps_cache.json";
@@ -358,6 +362,18 @@ $s = [
         $b->nodeMenu('n1a2b3c4');
         file_put_contents("$TMP/config/nodes_status.json", json_encode(['n1a2b3c4' => ['online' => true, 'time' => 1]]));
         $b->menu('nodes');
+    })(),
+    fn() => (function () use ($b) {
+        $b->input['callback_id'] = 'cb1';
+        $b->input['callback']    = '/menu';
+        $b->callbackCheck();
+    })(),
+    // Пользователей ещё нет — ровно свежая установка перед первым добавлением.
+    fn() => (function () use ($b) {
+        $p = $b->getPacConf();
+        $p['singboxClients'] = [];
+        $b->setPacConf($p);
+        $b->addxrus('Первый');
     })(),
 ];
 ($s[(int) $argv[1]])();
