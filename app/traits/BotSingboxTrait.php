@@ -872,7 +872,7 @@ public function delxr($i)
                 break;
             }
         }
-        $this->singbox();
+        $this->users();
     }
 
 public function addxrus($users)
@@ -892,7 +892,7 @@ public function addxrus($users)
             $password    = $user[3] ?? '';
             if ($description === '') {
                 $this->send($this->input['chat'], 'description is required');
-                return $this->singbox();
+                return $this->users();
             }
             // username — 8-символьный hex (буквы+цифры), тот же принцип анти-фингерпринта,
             // что и у naiveSubdomain/anytlsSubdomain: он же naive-username, он же имя конфига.
@@ -901,7 +901,7 @@ public function addxrus($users)
             $password = $password ?: trim($this->ssh('openssl rand -base64 16', 'sbx'));
             if (in_array($uuid, $uuids ?: []) || in_array($username, $usernames ?: [])) {
                 $this->send($this->input['chat'], "user {$username} already exists");
-                return $this->singbox();
+                return $this->users();
             }
             $client = [
                 'id'          => $uuid,
@@ -918,7 +918,7 @@ public function addxrus($users)
         if (count($users) == 1) {
             $this->userXr(count($c['inbounds'][0]['settings']['clients']) - 1);
         } else {
-            $this->singbox();
+            $this->users();
         }
     }
 
@@ -1059,7 +1059,7 @@ public function listXr($i)
         $c = $this->getPacConf();
         $c['xtlslist'] = $i;
         $this->setPacConf($c);
-        $this->singbox();
+        $this->users();
     }
 
 public function templateAdd($type)
@@ -1303,7 +1303,7 @@ public function templates($type)
         );
     }
 
-public function singbox($page = 0)
+public function singbox()
     {
         $c      = $this->getSingbox();
         $p      = $this->getPacConf();
@@ -1336,7 +1336,6 @@ public function singbox($page = 0)
             }
             $text[] = '</blockquote>';
         }
-        $st = $this->getSingboxStats();
         $data[] = [
             [
                 'text'          => $this->i18n('outbounds'),
@@ -1359,10 +1358,26 @@ public function singbox($page = 0)
         ];
         $data[] = [
             [
-                'text'          => '─────────────',
-                'callback_data' => "/singbox $page",
+                'text'          => $this->i18n('back'),
+                'callback_data' => "/menu",
             ],
         ];
+        $this->update(
+            $this->input['chat'],
+            $this->input['message_id'],
+            implode("\n", $text ?: ['...']),
+            $data ?: false,
+        );
+    }
+
+// Список пользователей — раньше жил в нижней половине singbox(), вынесен в
+// отдельный пункт главного меню.
+public function users($page = 0)
+    {
+        $c      = $this->getSingbox();
+        $st     = $this->getSingboxStats();
+        $text[] = "Menu -> " . $this->i18n('users');
+        $data   = [];
         $on = $off = 0;
         foreach ($c['inbounds'][0]['settings']['clients'] as $k => $v) {
             if (!empty($v['off'])) {
@@ -1395,15 +1410,15 @@ public function singbox($page = 0)
             $data[] = [
                 [
                     'text'          => '<<',
-                    'callback_data' => "/singbox " . ($page - 1 >= 0 ? $page - 1 : $all - 1),
+                    'callback_data' => "/users " . ($page - 1 >= 0 ? $page - 1 : $all - 1),
                 ],
                 [
                     'text'          => $page + 1,
-                    'callback_data' => "/singbox $page",
+                    'callback_data' => "/users $page",
                 ],
                 [
                     'text'          => '>>',
-                    'callback_data' => "/singbox " . ($page < $all - 1 ? $page + 1 : 0),
+                    'callback_data' => "/users " . ($page < $all - 1 ? $page + 1 : 0),
                 ],
             ];
         }
@@ -1421,7 +1436,6 @@ public function singbox($page = 0)
                 'callback_data' => "/listXr 1",
             ],
         ];
-
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
@@ -1582,7 +1596,7 @@ public function userXr($i)
             // (в логе это ~25 "Trying to access array offset on null" подряд).
             // Показываем актуальный список вместо мусора — так же, как делает
             // delxr() после удаления.
-            $this->singbox();
+            $this->users();
             return;
         }
         $pac    = $this->getPacConf();
@@ -1746,7 +1760,7 @@ public function userXr($i)
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
-                'callback_data' => "/singbox",
+                'callback_data' => "/users",
             ],
         ];
         $this->update(

@@ -61,6 +61,10 @@ if (!function_exists('yaml_parse_file')) { function yaml_parse_file($f, ...$a) {
 if (!function_exists('opcache_invalidate')) { function opcache_invalidate($f, $x = false) { return true; } }
 if (!class_exists('CURLStringFile')) { class CURLStringFile { public function __construct(public $data = '', public $postname = '', public $mime = '') {} } }
 if (!class_exists('CURLFile')) { class CURLFile { public function __construct(public $name = '', public $mime = '', public $postname = '') {} } }
+if (!function_exists('mb_strlen'))   { function mb_strlen($s, $e = null) { return preg_match_all('/./us', (string) $s); } }
+if (!function_exists('mb_str_pad'))  { function mb_str_pad($s, $l, $p = ' ', $t = STR_PAD_RIGHT, $e = null) { return str_pad($s, $l + strlen($s) - mb_strlen($s), $p, $t); } }
+if (!function_exists('openssl_x509_read'))  { function openssl_x509_read($c) { return $c; } }
+if (!function_exists('openssl_x509_parse')) { function openssl_x509_parse($c, $s = true) { return ['validTo_time_t' => 1900000000, 'extensions' => ['subjectAltName' => 'DNS:31-57-241-154.nip.io']]; } }
 
 @mkdir("$TMP/app/traits", 0777, true);
 @mkdir("$TMP/app/qr", 0777, true);
@@ -135,6 +139,8 @@ foreach ([
     'userXr0'      => fn() => $b->userXr(0),
     'userXr99'     => fn() => $b->userXr(99),
     'singbox'      => fn() => $b->singbox(),
+    'users'        => fn() => $b->users(),
+    'menuMain'     => fn() => $b->menu(),
     'listXr'       => fn() => $b->listXr(0),
     'templatesSing'=> fn() => $b->templates('sing'),
     'xtlsproxy'    => fn() => $b->xtlsproxy(),

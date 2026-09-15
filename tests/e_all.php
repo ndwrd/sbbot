@@ -21,7 +21,7 @@ $uid  = 'ed5f12c0-6f0a-46ad-9a4b-10eb08e3cb6b';
 $names = [
     'sub() страница подписки', 'subscription t=si', 'subscription t=s xray',
     'subscription t=cl mihomo', 'subscription t=hp happ', 'userXr(0) меню юзера',
-    'singbox() главное меню', 'listXr(0) список юзеров', 'statsMenu()',
+    'singbox() экран Sing-box', 'listXr(0) список юзеров', 'statsMenu()',
     'templates(sing)', 'templates(clash)', 'linkVless варианты',
     'xtlsproxy/xtlsblock', 'xtlsapp/xtlsprocess', 'xtlssubnet/xtlsrulesset',
     'exportList(есть данные)', 'exportList(пусто)', 'export() бэкап',
@@ -32,7 +32,8 @@ $names = [
     'configMenu()', 'xtlswarp/backXtlsList', 'userXr(1) второй юзер',
     'timerXr/limitXr/switchXr', 'getSingboxTotalTraffic', 'saveTemplate валидный',
     'importFile(бэкап)', 'addxrus + delxr', 'deleteAll(includelist)',
-    'getHostStats/getSingboxSysStats',
+    'getHostStats/getSingboxSysStats', 'users() экран Users', 'menu() главное меню',
+    'cron checkMenuStatus',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -174,6 +175,11 @@ if (!function_exists('yaml_parse_file')) { function yaml_parse_file($f, ...$a) {
 if (!function_exists('yaml_parse'))      { function yaml_parse($s, ...$a) { return []; } }
 if (!class_exists('CURLStringFile')) { class CURLStringFile { public function __construct(public $data = '', public $postname = '', public $mime = '') {} } }
 if (!class_exists('CURLFile'))       { class CURLFile       { public function __construct(public $name = '', public $mime = '', public $postname = '') {} } }
+if (!function_exists('mb_strlen'))   { function mb_strlen($s, $e = null) { return preg_match_all('/./us', (string) $s); } }
+if (!function_exists('mb_str_pad'))  { function mb_str_pad($s, $l, $p = ' ', $t = STR_PAD_RIGHT, $e = null) { return str_pad($s, $l + strlen($s) - mb_strlen($s), $p, $t); } }
+// Главное меню разбирает сертификат (expireCert()/domainsCert()).
+if (!function_exists('openssl_x509_read'))  { function openssl_x509_read($c) { return $c; } }
+if (!function_exists('openssl_x509_parse')) { function openssl_x509_parse($c, $s = true) { return ['validTo_time_t' => time() + 86400 * 60, 'extensions' => ['subjectAltName' => 'DNS:31-57-241-154.nip.io']]; } }
 
 // Пишем подменённые исходники во временные файлы и require'им, а не eval'им:
 // в сообщениях об ошибках тогда видно настоящее имя файла и номер строки
@@ -306,5 +312,8 @@ $s = [
     fn() => [$b->addxrus('newuser'), $b->delxr(1)],
     fn() => $b->deleteAll('includelist'),
     fn() => [$b->getHostStats(), $b->getSingboxSysStats()],
+    fn() => $b->users(),
+    fn() => $b->menu(),
+    fn() => [$b->checkMenuStatus(), $b->menu()],
 ];
 ($s[(int) $argv[1]])();

@@ -351,8 +351,13 @@ public function action()
             case preg_match('~^/warpPlus$~', $this->input['callback'], $m):
                 $this->warpPlus();
                 break;
-            case preg_match('~^/singbox(?: (\d+))?$~', $this->input['callback'], $m):
-                $this->singbox(($m[1] ?? null) ?: 0);
+            case preg_match('~^/singbox$~', $this->input['callback'], $m):
+                $this->singbox();
+                break;
+            // "/singbox N" — листание списка пользователей в сообщениях,
+            // отправленных до того, как экран разделился на Users и Sing-box.
+            case preg_match('~^/(?:users|singbox)(?: (\d+))?$~', $this->input['callback'], $m):
+                $this->users(($m[1] ?? null) ?: 0);
                 break;
             case preg_match('~^/outboundsMenu$~', $this->input['callback'], $m):
                 $this->outboundsMenu();
@@ -492,6 +497,7 @@ public function cron()
             // увидеть всё, что записал polling() (другой процесс) — иначе
             // cron() работал бы по конфигу десятиминутной давности.
             $this->resetPacCache();
+            $this->checkMenuStatus();
             $this->shutdownClientXr();
             $this->checkVersion();
             $this->checkBackup();
@@ -732,6 +738,44 @@ public function alignColumns(array $columns): string
         return implode("\n", $result);
     }
 
+// Статусы сервисов для главного меню. Каждый — отдельное SSH-подключение в
+// контейнер (а warp — ещё и HTTPS-запрос через сам WARP), то есть 4-5
+// рукопожатий подряд на каждое открытие меню внутри однопоточного polling():
+// отсюда была заметная пауза при возврате в него. Поэтому статусы собирает
+// cron() в начале каждого прохода, а меню читает готовый файл.
+public function collectMenuStatus()
+    {
+        return [
+            'time'    => time(),
+            'singbox' => (bool) $this->ssh('pgrep sing-box', 'sbx'),
+            'mtproto' => (bool) $this->ssh('pgrep mtproto-proxy', 'tg'),
+            'warp'    => $this->warpStatus() == 'on',
+            'dnstt'   => !empty($this->getPacConf()['dnsttUsed']) && (bool) $this->ssh('pgrep dnstt-server', 'dnstt'),
+        ];
+    }
+
+public function checkMenuStatus()
+    {
+        // Через временный файл и rename: меню читает из другого процесса и не
+        // должно увидеть наполовину записанный JSON.
+        $tmp = '/config/menu_status.json.tmp';
+        if (file_put_contents($tmp, json_encode($this->collectMenuStatus())) !== false) {
+            rename($tmp, '/config/menu_status.json');
+        }
+    }
+
+public function menuStatus()
+    {
+        $st = json_decode(@file_get_contents('/config/menu_status.json') ?: '', true);
+        // Проход cron() длится дольше своих 10 с (SSH к нодам, grpcurl), так
+        // что порог с запасом. Свежий файл сам по себе значит, что cron жив.
+        if (is_array($st) && time() - ($st['time'] ?? 0) <= 120) {
+            return $st + ['cron' => true];
+        }
+        // cron не работает или только стартует — проверяем вживую, как раньше.
+        return $this->collectMenuStatus() + ['cron' => (bool) $this->ssh('pgrep -f cron.php', 'service')];
+    }
+
 public function menu($type = false, $arg = false, $return = false)
     {
         $conf   = $this->getPacConf();
@@ -748,7 +792,8 @@ public function menu($type = false, $arg = false, $return = false)
                     $backup = "{$conf['backup']} - wrong format";
                 }
             }
-            $cron   = $this->dontshowcron ? '' : $this->i18n($this->ssh('pgrep -f cron.php', 'service') ? 'on' : 'off') . ' cron';
+            $st     = $this->menuStatus();
+            $cron   = $this->dontshowcron ? '' : $this->i18n($st['cron'] ? 'on' : 'off') . ' cron';
             $main[] = 'v' . getenv('VER') . " $branch" . ($update ? ' (have updates)' : '');
 
             if (!empty($conf['domain'])) {
@@ -777,9 +822,9 @@ public function menu($type = false, $arg = false, $return = false)
             $ports  = $this->getPorts();
 
             $statusCol1 = [
-                $this->i18n($this->ssh('pgrep sing-box', 'sbx') ? 'on' : 'off') . ' ' . $this->i18n('vless'),
-                $this->i18n($this->ssh('pgrep mtproto-proxy', 'tg') ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
-                $this->i18n($this->warpStatus() == 'on' ? 'on' : 'off') . ' ' . $this->i18n('warp'),
+                $this->i18n($st['singbox'] ? 'on' : 'off') . ' ' . $this->i18n('vless'),
+                $this->i18n($st['mtproto'] ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
+                $this->i18n($st['warp'] ? 'on' : 'off') . ' ' . $this->i18n('warp'),
             ];
             $statusCol2 = [
                 $this->i18n('on') . ' 443',
@@ -792,7 +837,7 @@ public function menu($type = false, $arg = false, $return = false)
             // 53 (сменить нельзя, в отличие от tg), поэтому без ветки
             // "port unavailable" — есть/нет только по on/off сервиса.
             if (!empty($conf['dnsttUsed'])) {
-                $statusCol1[] = $this->i18n($this->ssh('pgrep dnstt-server', 'dnstt') ? 'on' : 'off') . ' dnstt';
+                $statusCol1[] = $this->i18n($st['dnstt'] ? 'on' : 'off') . ' dnstt';
                 $statusCol2[] = $this->i18n($ports['dnstt']['enable'] ? 'on' : 'off') . ' 53';
             }
 
@@ -815,25 +860,30 @@ public function menu($type = false, $arg = false, $return = false)
         $mainButtons = [
             [
                 [
+                    'text'          => $this->i18n('users'),
+                    'callback_data' => "/users",
+                ],
+                [
                     'text'          => $this->i18n('vless'),
                     'callback_data' => "/singbox",
                 ],
-                [
-                    'text'          => $this->i18n('mtproto'),
-                    'callback_data' => "/mtproto",
-                ],
+            ],
+        ];
+        $protocols = [
+            [
+                'text'          => $this->i18n('mtproto'),
+                'callback_data' => "/mtproto",
             ],
         ];
         // Кнопка появляется насовсем после первой настройки dnstt — см.
         // setdnsttDomain()/setdnsttPassword(); до этого в меню её нет.
         if (!empty($conf['dnsttUsed'])) {
-            $mainButtons[] = [
-                [
-                    'text'          => 'DNSTT',
-                    'callback_data' => "/dnstt",
-                ],
+            $protocols[] = [
+                'text'          => 'DNSTT',
+                'callback_data' => "/dnstt",
             ];
         }
+        $mainButtons[] = $protocols;
         $mainButtons[] = [
             [
                 'text'          => $this->i18n('nodes'),
@@ -848,9 +898,8 @@ public function menu($type = false, $arg = false, $return = false)
         ];
         $menu   = [
             'main' => [
-                // $main в этой функции нигде не задаётся (наследство), то есть
-                // текст главного меню всегда пустой. Оставляем как есть —
-                // менять поведение тут не задача; ?? только убирает warning.
+                // $main собирается только без $type — для подменю (config,
+                // nodes, ...) его нет, а этот массив строится всегда.
                 'text' => implode("\n", ($main ?? null) ?: []),
                 'data' => array_merge(
                     $mainButtons
@@ -866,11 +915,10 @@ public function menu($type = false, $arg = false, $return = false)
         $data = $menu[$type ?: 'main' ]['data'];
 
         if (empty($type) && $update) {
-            $b = exec('git -C / rev-parse --abbrev-ref HEAD');
             array_unshift($data, [
                 [
                     'text'    => 'Changelog',
-                    'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version"],
+                    'web_app' => ['url' => "https://raw.githubusercontent.com/ndwrd/sbbot/$branch/version"],
                 ],
                 [
                     'text'          => $this->i18n('update bot'),
