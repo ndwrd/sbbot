@@ -537,6 +537,14 @@ $i = [
         'en' => 'not configured',
         'ru' => 'не настроено',
     ],
+    'domain already used' => [
+        'en' => 'ERROR: this domain is already used by the Bot or another node. A node needs its own name — a subdomain works: ru.example.com',
+        'ru' => 'ERROR: этот домен уже занят Ботом или другой нодой. Ноде нужно своё имя — подойдёт поддомен: ru.example.com',
+    ],
+    'node ip exists' => [
+        'en' => 'ERROR: a node with this IP already exists: %label%',
+        'ru' => 'ERROR: нода с этим IP уже заведена: %label%',
+    ],
     'rebind node'  => [
         'en' => 'Rebind',
         'ru' => 'Перепривязать',

@@ -434,10 +434,27 @@ public function nodeSetDomain($domain, $id)
         if (empty($node)) {
             return;
         }
+        // idn_to_ascii(): домен Бота хранится в punycode (addDomain()), и без
+        // приведения кириллический ввод не совпал бы со своим же punycode.
+        $domain = idn_to_ascii(trim($domain)) ?: trim($domain);
+        // Домен ноды не может совпадать с доменом Бота или другой ноды: имя
+        // резолвится в один IP, поэтому либо нода не получит трафик (клиенты
+        // придут на Бота), либо на ней не выпустится сертификат — проверка
+        // Let's Encrypt уйдёт не на тот сервер. Рабочая схема — Бот на домене,
+        // ноды на поддоменах (ru.example.com).
+        $taken = array_filter(array_merge(
+            [$this->getPacConf()['domain'] ?? null],
+            array_map(fn ($n) => $n['domain'] ?? null, array_diff_key($this->getNodes(), [$id => 1]))
+        ));
+        if (in_array(strtolower($domain), array_map('strtolower', $taken), true)) {
+            $this->send($this->input['chat'], $this->i18n('domain already used'));
+            $this->nodeDomains($id);
+            return;
+        }
         // addDomain() на ноде сам пытается прислать DNS-уведомление, но там
         // нет чата (console.php — не telegram-контекст) — шлём его сами, от
         // main, у которого чат есть.
-        $this->nodeConsole($node['ip'], 'addDomain', trim($domain), '1');
+        $this->nodeConsole($node['ip'], 'addDomain', $domain, '1');
         $this->nodeCacheDomain($id);
         $node = $this->getNode($id);
         if (!empty($node['domain']) && !preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $node['domain'])) {
@@ -662,12 +679,25 @@ public function addNodeLabel($label)
 
 public function addNodeIp($ip, $label)
     {
+        $ip = trim($ip);
+        // Одна и та же нода, заведённая дважды, ломает синхронизацию: две
+        // записи пушат пользователей на один сервер, обе считают себя его
+        // хозяином, а в подписке он появляется двумя серверами с разными
+        // гео-тегами.
+        foreach ($this->getNodes() as $exists) {
+            if (($exists['ip'] ?? null) === $ip) {
+                $this->send($this->input['chat'], str_replace('%label%', $exists['label'] ?? '', $this->i18n('node ip exists')));
+                $r = $this->nodesMenu();
+                $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
+                return;
+            }
+        }
         // Данные ноды на этом шаге ещё не подтверждены (доступ не проверен) —
         // держим их во временной записи, а не в conf['nodes'], пока bootstrap
         // по одному из двух способов ниже не пройдёт успешно.
         $tmpId = bin2hex(random_bytes(4));
         $conf  = $this->getPacConf();
-        $conf['nodesPending'][$tmpId] = ['label' => $label, 'ip' => trim($ip)];
+        $conf['nodesPending'][$tmpId] = ['label' => $label, 'ip' => $ip];
         $this->setPacConf($conf);
 
         $data = [

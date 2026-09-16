@@ -2333,6 +2333,7 @@ public function subscription($return = false)
                     }
                     $c['route']['rules'] = array_values($c['route']['rules']);
                 }
+                $c = $this->validateClientConfig('sing', $c);
                 if (empty($c['route'])) {
                     unset($c['route']);
                 }
@@ -2345,6 +2346,7 @@ public function subscription($return = false)
                         unset($c['rules']);
                     }
                 }
+                $c = $this->validateClientConfig('clash', $c);
                 break;
         }
         if (!empty($return)) {
@@ -2379,19 +2381,21 @@ public function addClashRuleSet($c)
                             'behavior' => $behavior,
                             'format'   => $m[1],
                         ];
-                        switch ($type) {
-                            case 'reject':
-                            case 'REJECT':
-                                array_unshift($c['rules'], [
-                                    'RULE-SET', $url, strtoupper($type)
-                                ]);
-                                break;
-
-                            default:
-                                array_splice($c['rules'], count($c['rules']) - 1, 0, [[
-                                    'RULE-SET', $url, strtoupper($type)
-                                ]]);
-                                break;
+                        // Регистр имени политики НЕ меняем: mihomo ищет её точным
+                        // совпадением (config/config.go: proxies[target]) и, не найдя,
+                        // отвергает конфиг целиком. strtoupper() превращал группу
+                        // "🎥YouTube" в "🎥YOUTUBE" — такой группы нет. К верхнему
+                        // приводим только встроенные политики mihomo, чтобы введённое
+                        // строчными "reject" продолжало работать как раньше.
+                        $builtin = ['direct', 'reject', 'reject-drop', 'pass', 'pass-rule', 'compatible'];
+                        $lower   = strtolower($type);
+                        $action  = in_array($lower, $builtin, true) ? strtoupper($type) : $type;
+                        if ($lower === 'reject' || $lower === 'reject-drop') {
+                            // Блокировки — в начало списка, иначе их перехватит
+                            // правило, стоящее выше.
+                            array_unshift($c['rules'], ['RULE-SET', $url, $action]);
+                        } else {
+                            array_splice($c['rules'], count($c['rules']) - 1, 0, [['RULE-SET', $url, $action]]);
                         }
                     }
                 }
@@ -2458,6 +2462,92 @@ public function clashRules($c, $uid, $domain)
             }
         }
         $c['rules'] = $tmp;
+        return $c;
+    }
+
+// Последняя проверка перед выдачей клиенту: ссылка на несуществующую политику
+// стоит не одного правила, а всего конфига — sing-box и mihomo отвергают такой
+// файл целиком (mihomo: "proxy [X] not found"). Ссылки появляются от опечатки в
+// имени группы в шаблоне, от несовпадения регистра (mihomo сверяет имена точно)
+// и от ruleset'а, указывающего на группу, которой в шаблоне нет. Выкидываем
+// такие ссылки, чтобы пропало одно правило, а не вся подписка.
+public function validateClientConfig($type, $c)
+    {
+        if ($type === 'clash') {
+            $known = array_merge(
+                array_column($c['proxies'] ?? [], 'name'),
+                array_column($c['proxy-groups'] ?? [], 'name'),
+                // Встроенные политики mihomo (config/config.go).
+                ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'PASS-RULE', 'COMPATIBLE', 'GLOBAL']
+            );
+            $fallback = [];
+            foreach ($c['proxies'] ?? [] as $p) {
+                if (isset($this->outboundProtocols()[$p['type'] ?? ''])) {
+                    $fallback[] = $p['name'];
+                }
+            }
+            $fallback = $fallback ?: ['DIRECT'];
+            foreach ($c['proxy-groups'] ?? [] as $k => $g) {
+                if (!isset($g['proxies']) || !is_array($g['proxies'])) {
+                    continue;
+                }
+                $members = array_values(array_intersect($g['proxies'], $known));
+                if (empty($members) && empty($g['use'])) {
+                    $members = $fallback;
+                }
+                $c['proxy-groups'][$k]['proxies'] = $members;
+            }
+            // К этому месту clashRules() уже свела правила к строкам вида
+            // "RULE-SET, имя, политика" — политика всегда последняя.
+            foreach ($c['rules'] ?? [] as $k => $rule) {
+                $parts  = array_map('trim', explode(',', (string) $rule));
+                $target = end($parts);
+                $drop   = !in_array($target, $known, true);
+                if (!$drop && ($parts[0] ?? '') === 'RULE-SET') {
+                    $drop = !isset($c['rule-providers'][$parts[1] ?? '']);
+                }
+                if ($drop) {
+                    unset($c['rules'][$k]);
+                }
+            }
+            if (isset($c['rules'])) {
+                $c['rules'] = array_values($c['rules']);
+            }
+            return $c;
+        }
+
+        $tags     = array_column($c['outbounds'] ?? [], 'tag');
+        $fallback = [];
+        foreach ($c['outbounds'] ?? [] as $o) {
+            if (isset($this->outboundProtocols()[$o['type'] ?? ''])) {
+                $fallback[] = $o['tag'];
+            }
+        }
+        $fallback = $fallback ?: (in_array('direct', $tags, true) ? ['direct'] : []);
+        foreach ($c['outbounds'] ?? [] as $k => $o) {
+            if (!isset($o['outbounds']) || !is_array($o['outbounds'])) {
+                continue;
+            }
+            $members = array_values(array_intersect($o['outbounds'], $tags));
+            if (empty($members) && !empty($fallback)) {
+                $members = $fallback;
+            }
+            $c['outbounds'][$k]['outbounds'] = $members;
+            if (isset($o['default']) && !in_array($o['default'], $members, true)) {
+                $c['outbounds'][$k]['default'] = $members[0] ?? '';
+            }
+        }
+        foreach ($c['route']['rules'] ?? [] as $k => $r) {
+            if (isset($r['outbound']) && !in_array($r['outbound'], $tags, true)) {
+                unset($c['route']['rules'][$k]);
+            }
+        }
+        if (isset($c['route']['rules'])) {
+            $c['route']['rules'] = array_values($c['route']['rules']);
+        }
+        if (!empty($c['route']['final']) && !in_array($c['route']['final'], $tags, true)) {
+            $c['route']['final'] = in_array('direct', $tags, true) ? 'direct' : ($tags[0] ?? '');
+        }
         return $c;
     }
 
@@ -2625,13 +2715,28 @@ public function filterSingOutbounds($c, $off)
             return $c;
         }
         $c['outbounds'] = array_values($c['outbounds']);
+        // Чистим ВСЕ группы, а не только Proxy/⚡️Auto: в своей группе админа
+        // осталась бы ссылка на выключенный протокол, а outbound с таким тегом
+        // уже удалён — sing-box отвергает такой конфиг целиком.
+        $left = [];
+        foreach ($c['outbounds'] as $o) {
+            if (isset($this->outboundProtocols()[$o['type'] ?? ''])) {
+                $left[] = $o['tag'];
+            }
+        }
         foreach ($c['outbounds'] as $k => $o) {
-            if (!in_array($o['tag'] ?? null, ['Proxy', '⚡️Auto'], true)) {
+            if (!isset($o['outbounds']) || !is_array($o['outbounds'])) {
                 continue;
             }
-            $c['outbounds'][$k]['outbounds'] = array_values(array_diff($o['outbounds'], $removedTags));
-            if (($o['tag'] ?? null) === 'Proxy' && in_array($o['default'] ?? null, $removedTags, true)) {
-                $c['outbounds'][$k]['default'] = $c['outbounds'][$k]['outbounds'][0] ?? '';
+            $members = array_values(array_diff($o['outbounds'], $removedTags));
+            // Пустую группу sing-box не принимает ("missing tags") — кладём
+            // оставшиеся протоколы Бота, а если выключены все, то direct.
+            if (empty($members)) {
+                $members = $left ?: ['direct'];
+            }
+            $c['outbounds'][$k]['outbounds'] = $members;
+            if (isset($o['default']) && !in_array($o['default'], $members, true)) {
+                $c['outbounds'][$k]['default'] = $members[0];
             }
         }
         return $c;
@@ -2650,10 +2755,26 @@ public function filterClashOutbounds($c, $off)
             return $c;
         }
         $c['proxies'] = array_values($c['proxies']);
-        foreach ($c['proxy-groups'] ?? [] as $k => $g) {
-            if (($g['name'] ?? null) === 'Proxy') {
-                $c['proxy-groups'][$k]['proxies'] = array_values(array_diff($g['proxies'], $removedNames));
+        // Чистим ВСЕ группы, а не только ту, что названа "Proxy": имя группы
+        // админ может поменять, и в переименованной (как и в своей) осталась бы
+        // ссылка на удалённый прокси — mihomo такой конфиг не грузит.
+        $left = [];
+        foreach ($c['proxies'] as $p) {
+            if (isset($this->outboundProtocols()[$p['type'] ?? ''])) {
+                $left[] = $p['name'];
             }
+        }
+        foreach ($c['proxy-groups'] ?? [] as $k => $g) {
+            if (!isset($g['proxies']) || !is_array($g['proxies'])) {
+                continue;
+            }
+            $members = array_values(array_diff($g['proxies'], $removedNames));
+            // Пустая группа — ошибка mihomo ("`use` or `proxies` missing"),
+            // кроме случая, когда участники берутся из провайдеров (use).
+            if (empty($members) && empty($g['use'])) {
+                $members = $left ?: ['DIRECT'];
+            }
+            $c['proxy-groups'][$k]['proxies'] = $members;
         }
         return $c;
     }
