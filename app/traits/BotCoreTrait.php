@@ -212,6 +212,9 @@ public function action()
             case preg_match('~^/id$~', $this->input['message'], $m):
                 $this->send($this->input['chat'], "your id: {$this->input['from']}\nchat id: {$this->input['chat']}", $this->input['message_id']);
                 break;
+            case preg_match('~^/tgLogs$~', $this->input['callback'], $m):
+                $this->tgLogs();
+                break;
             case preg_match('~^/mtproto$~', $this->input['callback'], $m):
                 $this->mtproto();
                 break;
@@ -761,7 +764,7 @@ public function collectMenuStatus()
         return [
             'time'    => time(),
             'singbox' => (bool) $this->ssh('pgrep sing-box', 'sbx'),
-            'mtproto' => (bool) $this->ssh('pgrep mtproto-proxy', 'tg'),
+            'mtproto' => $this->tgStatus() === 'on',
             'warp'    => $this->warpStatus() == 'on',
             'dnstt'   => !empty($this->getPacConf()['dnsttUsed']) && (bool) $this->ssh('pgrep dnstt-server', 'dnstt'),
         ];
@@ -974,6 +977,77 @@ public function dockerApi($url, $method = 'GET', $data = [])
         $r = json_decode(curl_exec($ch), true);
         curl_close($ch);
         return $r;
+    }
+
+public function containerId($service)
+    {
+        $r = $this->dockerApi('/containers/json?all=1');
+        foreach ($r ?: [] as $v) {
+            if (($v['Labels']['com.docker.compose.service'] ?? '') == $service) {
+                return $v['Id'];
+            }
+        }
+        return null;
+    }
+
+// Состояние контейнера: ['running' => bool, 'health' => 'healthy'|'unhealthy'|
+// 'starting'|null]. Заменяет "pgrep по SSH" там, где в контейнере нет sshd
+// (tg с готовым образом teleproxy) — а заодно честнее: healthcheck образа
+// дёргает /stats самого прокси, то есть проверяет работу, а не наличие процесса.
+public function containerState($service)
+    {
+        $r = $this->dockerApi('/containers/json?all=1');
+        foreach ($r ?: [] as $v) {
+            if (($v['Labels']['com.docker.compose.service'] ?? '') == $service) {
+                // "running (healthy)" — Status приходит строкой, Health отдельного
+                // поля в списке нет, поэтому разбираем из неё.
+                preg_match('~\((healthy|unhealthy|health: starting)\)~', $v['Status'] ?? '', $m);
+                return [
+                    'running' => ($v['State'] ?? '') === 'running',
+                    'health'  => isset($m[1]) ? str_replace('health: ', '', $m[1]) : null,
+                ];
+            }
+        }
+        return ['running' => false, 'health' => null];
+    }
+
+// SIGHUP и подобное: контейнеру с чужим образом иначе не скажешь перечитать
+// конфиг. Без сигнала пришлось бы перезапускать контейнер и рвать соединения.
+public function signalContainer($service, $signal)
+    {
+        $id = $this->containerId($service);
+        if (empty($id)) {
+            return false;
+        }
+        $this->dockerApi("/containers/$id/kill?signal=$signal", 'POST');
+        return true;
+    }
+
+// Логи контейнера. Нужны там, где сервис пишет в stdout, а не в файл в /logs
+// (teleproxy). Docker отдаёт поток кадрами по 8 байт заголовка на каждый —
+// снимаем их, иначе в тексте будет мусор.
+public function containerLogs($service, $tail = 200)
+    {
+        $id = $this->containerId($service);
+        if (empty($id)) {
+            return '';
+        }
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL              => "http://localhost/containers/$id/logs?stdout=1&stderr=1&tail=" . (int) $tail,
+            CURLOPT_RETURNTRANSFER   => true,
+            CURLOPT_UNIX_SOCKET_PATH => '/var/run/docker.sock',
+        ]);
+        $raw = (string) curl_exec($ch);
+        curl_close($ch);
+        $out = '';
+        $i   = 0;
+        while ($i + 8 <= strlen($raw)) {
+            $len = unpack('N', substr($raw, $i + 4, 4))[1];
+            $out .= substr($raw, $i + 8, $len);
+            $i   += 8 + $len;
+        }
+        return $out ?: $raw;
     }
 
 public function restartContainer($service)

@@ -286,7 +286,7 @@ public function nodeToggleOff($id)
         // on: обратное — поднимаем оба сервиса заново.
         if ($off) {
             $this->nodeStopSingbox($node['ip']);
-            $this->ssh('pkill mtproto-proxy', 'tg', true, '/dev/null', $node['ip']);
+            $this->nodeConsole($node['ip'], 'tgStop');
         } else {
             $this->nodeStartSingbox($node['ip']);
             $this->nodeRestartTG($id);
@@ -1213,7 +1213,7 @@ public function nodeMtprotoMenu($id)
         }
         $secret     = $node['mtprotosecret'] ?? '';
         $fakedomain = $node['mtprotodomain'] ?? 'yandex.ru';
-        $st         = $this->ssh('pgrep mtproto-proxy', 'tg', true, '/dev/null', $node['ip']) ? 'on' : 'off';
+        $st         = trim((string) $this->nodeConsole($node['ip'], 'tgStatus')) === 'on' ? 'on' : 'off';
 
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> MTProto";
         $text[] = "status: $st";
@@ -1252,7 +1252,7 @@ public function nodeGenerateSecret($id)
         if (empty($node)) {
             return;
         }
-        $node['mtprotosecret'] = exec('head -c 16 /dev/urandom | xxd -ps');
+        $node['mtprotosecret'] = bin2hex(random_bytes(16));
         $this->setNode($id, $node);
         $this->nodeRestartTG($id);
         $this->nodeMtprotoMenu($id);
@@ -1324,9 +1324,11 @@ public function nodeRestartTG($id)
         }
         $secret     = $node['mtprotosecret'] ?? '';
         $fakedomain = $node['mtprotodomain'] ?? 'yandex.ru';
-        $this->ssh('pkill mtproto-proxy', 'tg', true, '/dev/null', $node['ip']);
-        if (preg_match('~^\w{32}$~', $secret)) {
-            $this->ssh("mtproto-proxy --domain $fakedomain -u nobody -H 443 --nat-info 10.10.0.8:{$node['ip']} -S $secret --aes-pwd /proxy-secret /proxy-multi.conf -M 1", 'tg', false, '/logs/mtproto', $node['ip']);
+        // Ноду больше не запускаем по SSH: в контейнере с готовым образом
+        // teleproxy нет sshd. Отдаём секрет и домен её же боту через
+        // console.php, дальше нода применяет их своим applyMtproto().
+        if (preg_match('~^[0-9a-f]{32}$~i', $secret)) {
+            $this->nodeConsole($node['ip'], 'applyMtproto', $secret, $fakedomain);
         }
     }
 

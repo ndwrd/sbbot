@@ -103,7 +103,7 @@ set_error_handler(function ($no, $str, $file, $line) use (&$WARN) {
 // Всё, что создаётся по ходу работы бота, в 'fresh' не создаём.
 $virgin = $PROFILE === 'fresh';
 
-foreach (['', '/config', '/config/dnstt', '/logs', '/certs', '/ssh', '/update', '/qr'] as $d) @mkdir($TMP . $d, 0777, true);
+foreach (['', '/config', '/config/dnstt', '/docker', '/logs', '/certs', '/ssh', '/update', '/qr'] as $d) @mkdir($TMP . $d, 0777, true);
 foreach (glob("$TMP/config/*") as $f) if (is_file($f)) @unlink($f);   // не тащим хвосты прошлого прогона
 foreach (glob("$REPO/config/*.json") as $f) copy($f, "$TMP/config/" . basename($f));
 if (!$virgin) {
@@ -166,6 +166,7 @@ $map = [
     "'/certs/"  => "'$TMP/certs/",  '"/certs/'  => "\"$TMP/certs/",
     "'/ssh/"    => "'$TMP/ssh/",    '"/ssh/'    => "\"$TMP/ssh/",
     "'/update/" => "'$TMP/update/", '"/update/' => "\"$TMP/update/",
+    "'/docker/" => "'$TMP/docker/",
     "'/version'" => "'$TMP/version'", "'/start'" => "'$TMP/start'",
 ];
 // Заглушки расширений, которых нет в локальной минимальной сборке PHP, но
@@ -257,6 +258,11 @@ class TestBot extends Bot
     public function restartSingbox($c, $norestart = false) { return true; }
     public function queryV2raySingboxStats($host = null) { return ['users' => [], 'inbounds' => []]; }
     public function cleanDocker() { return true; }
+    // Docker API: локально нет ни расширения curl, ни docker.sock.
+    public function dockerApi($url, $method = 'GET', $data = []) { return []; }
+    public function containerLogs($service, $tail = 200) { return "teleproxy: started
+"; }
+
     // curl-расширения локально нет; гео и так кэшируется в pac при создании
     public function geoCountryCode($ip) { return 'DE'; }
 }

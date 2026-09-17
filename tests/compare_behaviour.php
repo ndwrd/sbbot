@@ -16,7 +16,7 @@ $PROFILE = $argv[2] ?? 'full';
 $TMP     = sys_get_temp_dir() . '/sbbot_cmp_' . md5($REPO . $PROFILE);
 $uid     = 'ed5f12c0-6f0a-46ad-9a4b-10eb08e3cb6b';
 
-foreach (['', '/config', '/config/dnstt', '/logs', '/certs', '/ssh', '/update', '/qr'] as $d) @mkdir($TMP . $d, 0777, true);
+foreach (['', '/config', '/config/dnstt', '/docker', '/logs', '/certs', '/ssh', '/update', '/qr'] as $d) @mkdir($TMP . $d, 0777, true);
 foreach (glob("$REPO/config/*.json") as $f) copy($f, "$TMP/config/" . basename($f));
 foreach (['nginx.conf', 'nginx_default.conf', 'upstream.conf'] as $f) if (file_exists("$REPO/config/$f")) copy("$REPO/config/$f", "$TMP/config/$f");
 file_put_contents("$TMP/config/mtprotosecret", str_repeat('a', 32));
@@ -51,6 +51,7 @@ $map = [
     "'/certs/" => "'$TMP/certs/", '"/certs/' => "\"$TMP/certs/",
     "'/ssh/" => "'$TMP/ssh/", '"/ssh/' => "\"$TMP/ssh/",
     "'/update/" => "'$TMP/update/", '"/update/' => "\"$TMP/update/",
+    "'/docker/" => "'$TMP/docker/",
     "'/version'" => "'$TMP/version'", "'/start'" => "'$TMP/start'",
 ];
 if (!function_exists('mb_chr')) { function mb_chr($cp, $e = null) { return html_entity_decode('&#' . (int) $cp . ';', ENT_QUOTES, 'UTF-8'); } }
@@ -104,6 +105,11 @@ class CmpBot extends Bot
     public function queryV2raySingboxStats($host = null) { return ['users' => [], 'inbounds' => []]; }
     public function geoCountryCode($ip) { return 'DE'; }
     public function cleanDocker() { return true; }
+    // Docker API: локально нет ни расширения curl, ни docker.sock.
+    public function dockerApi($url, $method = 'GET', $data = []) { return []; }
+    public function containerLogs($service, $tail = 200) { return "teleproxy: started
+"; }
+
 }
 
 $GLOBALS['debug'] = false;

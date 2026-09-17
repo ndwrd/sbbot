@@ -15,7 +15,7 @@ $bot = new Bot($c['key'], $i);
 
 $s = @file_get_contents('/config/mtprotosecret') ?: '';
 if (empty($s)) {
-    file_put_contents('/config/mtprotosecret', exec('head -c 16 /dev/urandom | xxd -ps'));
+    file_put_contents('/config/mtprotosecret', bin2hex(random_bytes(16)));
     $bot->restartTG();
 }
 $d = trim(@file_get_contents('/config/mtprotodomain') ?: '');

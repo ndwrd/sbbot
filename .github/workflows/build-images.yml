@@ -28,7 +28,6 @@ jobs:
         # Раньше версия была продублирована здесь строкой alpine:3.18.2 и разъехалась
         # бы с .env при первом же обновлении: php.dockerfile просил бы php84, а
         # сборка шла на 3.18, где такого пакета нет, и CI падал бы.
-        # tg собирается от ubuntu и ARG image не принимает.
         include:
           - name: ng
             dockerfile: dockerfile/nginx.dockerfile
@@ -36,9 +35,6 @@ jobs:
           - name: php
             dockerfile: dockerfile/php.dockerfile
             base_image: true
-          - name: tg
-            dockerfile: dockerfile/telegram.dockerfile
-            base_image: false
           - name: wg
             dockerfile: dockerfile/wireguard.dockerfile
             base_image: true

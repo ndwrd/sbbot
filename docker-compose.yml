@@ -125,6 +125,7 @@ services:
             - ./update:/update
             - ./.git:/.git
             - ./docker-compose.override.yml:/docker/compose
+            - ./override.env:/docker/env
             - /var/run/docker.sock:/var/run/docker.sock:ro
             - warp:/etc/warp
         environment:
@@ -171,6 +172,7 @@ services:
             - ./.git:/.git
             - ./scripts/start_service.sh:/start_service.sh
             - ./docker-compose.override.yml:/docker/compose
+            - ./override.env:/docker/env
             - /var/run/docker.sock:/var/run/docker.sock:ro
         environment:
             IP: ${IP}
@@ -198,29 +200,37 @@ services:
             - sbx
             - dnstt
     tg:
-        image: ghcr.io/ndwrd/sbbot/tg:latest
-        build:
-            dockerfile: dockerfile/telegram.dockerfile
+        # Готовый образ вместо своей сборки: наш прежний форк MTProxy
+        # (GetPageSpeed) заархивирован, разработка переехала сюда. Образ сам
+        # обновляет proxy-multi.conf (cron внутри, каждые 6 часов) — именно его
+        # устаревание ломало прокси через несколько дней после запуска.
+        # ME-режим (DIRECT_MODE не включаем): без middle-proxy у не-Premium
+        # аккаунтов не грузятся фото, видео и истории.
+        image: ghcr.io/teleproxy/teleproxy:latest
         volumes:
-            - ./config/.profile:/root/.bashrc:ro
-            - ./ssh:/ssh
-            - ./config/sshd_config:/etc/ssh/sshd_config
-            - ./scripts/start_tg.sh:/start_tg.sh
-            - ./logs/:/logs/
+            # config.toml и proxy-multi.conf: переживают перезапуск контейнера.
+            - ./config/teleproxy:/opt/teleproxy/data
         hostname: telegram
         container_name: relay-${VER}
         depends_on:
             php:
                 condition: service_healthy
         environment:
-            IP: ${IP}
+            # Источник правды — override.env, его пишет бот (см. restartTG()).
+            # start.sh образа заново генерирует config.toml из этих переменных
+            # при каждом старте, поэтому значения обязаны жить в env, а не
+            # только в файле конфига.
+            SECRET: ${TG_SECRET:-}
+            EE_DOMAIN: ${TG_DOMAIN:-}
+            PROXY_TAG: ${TG_TAG:-}
+            EXTERNAL_IP: ${IP}
+            PORT: 443
         env_file:
             - path: ./.env
               required: true # default
             - path: ./override.env
               required: false
         stop_grace_period: 1s
-        command: ["/bin/sh", "/start_tg.sh"]
         networks:
             default:
                 ipv4_address: 10.10.0.8
