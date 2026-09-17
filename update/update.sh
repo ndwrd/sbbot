@@ -32,7 +32,6 @@ do
         _key=$(cat $pwd/update/key)
         _curl_data=$(cat $pwd/update/curl)
         _chat_id=$(echo "$_curl_data" | grep -o '"chat_id":[0-9-]*' | head -1 | cut -d: -f2)
-        _message_id=$(echo "$_curl_data" | grep -o '"message_id":[0-9]*' | head -1 | cut -d: -f2)
 
         tg_draft "stopping the bot"
         docker compose down --remove-orphans

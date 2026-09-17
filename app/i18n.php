@@ -545,6 +545,14 @@ $i = [
         'en' => 'ERROR: a node with this IP already exists: %label%',
         'ru' => 'ERROR: нода с этим IP уже заведена: %label%',
     ],
+    'node updated' => [
+        'en' => 'node updated to',
+        'ru' => 'нода обновлена до',
+    ],
+    'node update timeout' => [
+        'en' => 'node did not come back after the update, check it manually',
+        'ru' => 'нода не вернулась после обновления, проверьте её вручную',
+    ],
     'rebind node'  => [
         'en' => 'Rebind',
         'ru' => 'Перепривязать',

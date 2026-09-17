@@ -591,8 +591,27 @@ public function nodeUpdate($id)
         if (empty($node)) {
             return;
         }
+        // Версию спрашиваем ДО запуска обновления, пока нода ещё отвечает:
+        // по смене версии checkNodeUpdating() и поймёт, что всё закончилось.
+        $from = trim((string) $this->nodeConsole($node['ip'], 'botVersion'));
         $this->ssh('echo 1 > ~/sbbot/update/pipe', null, true, '/dev/null', $node['ip']);
-        $this->send($this->input['chat'], "{$node['label']}: {$this->i18n('node updating')}");
+        $r = $this->send($this->input['chat'], "{$node['label']}: ⏳ {$this->i18n('node updating')}");
+        // Это же сообщение дальше правит checkNodeUpdating() из cron — нода
+        // написать в чат сама не может: у неё случайный ключ, а не токен бота.
+        $msg = $r['result']['message_id'] ?? null;
+        $this->updatePacConf(function ($c) use ($id, $msg, $from) {
+            if (!isset($c['nodes'][$id]) || empty($msg)) {
+                return null;
+            }
+            $c['nodes'][$id]['updating'] = [
+                'chat'      => $this->input['chat'],
+                'messageId' => $msg,
+                'from'      => $from,
+                'startedAt' => time(),
+                'lastPing'  => time(),
+            ];
+            return $c;
+        });
         $this->nodeMenu($id);
     }
 
@@ -905,6 +924,70 @@ public function finishRebindNode($id, $authType, $secret)
         }
         // Карточка сама покажет 🟢 — это и есть подтверждение.
         $this->nodeMenu($id);
+    }
+
+// Версия, на которой сейчас работает бот. VER приходит из compose (git
+// describe --tags на момент запуска контейнеров), поэтому меняется ровно
+// тогда, когда контейнеры пересозданы новой версией — это и есть признак
+// завершённого обновления. Спрашивается у ноды через console.php.
+public function botVersion()
+    {
+        return trim((string) getenv('VER'));
+    }
+
+// Нода не может написать в чат сама: при установке ей выдаётся случайный ключ,
+// а не настоящий токен бота. Поэтому за ходом обновления следит главный — так
+// же, как за установкой (checkNodeProvisioning()): опрашивает ноду и правит то
+// же самое сообщение, которое отправил при нажатии кнопки.
+public function checkNodeUpdating()
+    {
+        $conf = $this->getPacConf();
+        $ops  = [];
+        foreach ($conf['nodes'] ?? [] as $id => $node) {
+            $u = $node['updating'] ?? null;
+            if (empty($u) || empty($u['messageId']) || empty($node['ip'])) {
+                continue;
+            }
+            $label = $node['label'] ?? $id;
+            $elapsed = time() - ($u['startedAt'] ?? time());
+            // Во время обновления контейнеры ноды остановлены, и console.php
+            // не отвечает — пустой ответ здесь штатный, просто ждём дальше.
+            $ver = trim((string) $this->nodeConsole($node['ip'], 'botVersion'));
+            // Версия сменилась — обновление закончено. Если нода была на той же
+            // версии (повторное обновление), считаем законченным по факту
+            // ответа, но не раньше пяти минут: сразу после нажатия она ещё
+            // отвечает старым, ещё не остановленным контейнером.
+            $done = $ver !== '' && ($ver !== ($u['from'] ?? '') || $elapsed > 300);
+            if ($done) {
+                $this->update($u['chat'], $u['messageId'], "$label: ✅ " . $this->i18n('node updated') . " $ver");
+                $ops[$id] = null;
+            } elseif ($elapsed > 900) {
+                $this->update($u['chat'], $u['messageId'], "$label: ⚠️ " . $this->i18n('node update timeout'));
+                $ops[$id] = null;
+            } elseif (time() - ($u['lastPing'] ?? 0) >= 30) {
+                $min = (int) floor($elapsed / 60);
+                $this->update($u['chat'], $u['messageId'], "$label: ⏳ " . $this->i18n('node updating') . " {$min} " . $this->i18n('min'));
+                $ops[$id] = time();
+            }
+        }
+        if (!empty($ops)) {
+            // Тем же способом, что и checkNodeProvisioning(): опрос ноды идёт
+            // секунды, и за это время админ мог что-то поменять в меню —
+            // пишем только своё поле, а не весь снимок конфига.
+            $this->updatePacConf(function ($c) use ($ops) {
+                foreach ($ops as $id => $lastPing) {
+                    if (!isset($c['nodes'][$id])) {
+                        continue;
+                    }
+                    if ($lastPing === null) {
+                        unset($c['nodes'][$id]['updating']);
+                    } elseif (isset($c['nodes'][$id]['updating'])) {
+                        $c['nodes'][$id]['updating']['lastPing'] = $lastPing;
+                    }
+                }
+                return $c;
+            });
+        }
     }
 
 public function checkNodeCerts()

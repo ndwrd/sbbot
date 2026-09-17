@@ -266,12 +266,6 @@ public function mtproto()
         ];
         $data[] = [
             [
-                'text'          => $this->i18n('logs'),
-                'callback_data' => "/tgLogs",
-            ],
-        ];
-        $data[] = [
-            [
                 'text'          => $this->i18n('back'),
                 'callback_data' => "/menu",
             ],
@@ -291,12 +285,12 @@ public function tgLogs()
         $log  = trim($this->containerLogs('tg', 100));
         // Телеграм не принимает сообщение длиннее 4096 символов — оставляем хвост.
         $log  = strlen($log) > 3000 ? '...' . substr($log, -3000) : $log;
-        $text = "Menu -> MTProto -> " . $this->i18n('logs') . "\n\n<pre>" . htmlspecialchars($log ?: '-') . "</pre>";
+        $text = "Menu -> " . $this->i18n('config') . " -> " . $this->i18n('logs') . " -> " . $this->i18n('mtproto') . "\n\n<pre>" . htmlspecialchars($log ?: '-') . "</pre>";
         $data = [
             [
                 [
                     'text'          => $this->i18n('back'),
-                    'callback_data' => "/mtproto",
+                    'callback_data' => "/logs",
                 ],
             ],
         ];

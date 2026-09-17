@@ -23,7 +23,9 @@ file_put_contents("$TMP/config/mtprotosecret", str_repeat('a', 32));
 file_put_contents("$TMP/config/mtprotodomain", 'yandex.ru');
 file_put_contents("$TMP/config/dnstt/server.pub", str_repeat('b', 32));
 file_put_contents("$TMP/config/dnstt/server.key", str_repeat('c', 32));
-file_put_contents("$TMP/certs/cert_public", '');
+// Непустой файл: заглушка openssl_x509_read() ниже возвращает его содержимое,
+// а пустая строка — это "сертификат не прочитался", то есть другая ветка.
+file_put_contents("$TMP/certs/cert_public", '-----BEGIN CERTIFICATE-----');
 file_put_contents("$TMP/version", '1.0');
 
 $pac = [

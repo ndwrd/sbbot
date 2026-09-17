@@ -474,12 +474,15 @@ public function menuLang()
 public function applyupdatebot()
     {
         $this->pinBackup($this->update);
-        $r = $this->sendDraft($this->input['from'], 1, 'update...');
-        file_put_contents('/update/reload_message', "{$this->input['from']}:{$r['result']['message_id']}");
+        // sendMessageDraft отвечает result: true — у черновика нет объекта
+        // сообщения, а значит и message_id. Он и не нужен: update.sh шлёт свои
+        // шаги тем же draft_id и берёт из /update/curl только chat_id, а
+        // selfUpdate() без id просто отправит итог отдельным сообщением.
+        $this->sendDraft($this->input['from'], 1, 'update...');
+        file_put_contents('/update/reload_message', "{$this->input['from']}:");
         file_put_contents('/update/key', $this->key);
         file_put_contents('/update/curl', json_encode([
             'chat_id'    => $this->input['chat'],
-            'message_id' => $r['result']['message_id'],
             'text'       => '~t~'
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         file_put_contents('/update/pipe', '1');
@@ -488,12 +491,12 @@ public function applyupdatebot()
 
 public function restart()
     {
-        $r = $this->sendDraft($this->input['from'], 1, 'restart...');
-        file_put_contents('/update/reload_message', "{$this->input['from']}:{$r['result']['message_id']}");
+        // См. applyupdatebot(): черновик не возвращает message_id.
+        $this->sendDraft($this->input['from'], 1, 'restart...');
+        file_put_contents('/update/reload_message', "{$this->input['from']}:");
         file_put_contents('/update/key', $this->key);
         file_put_contents('/update/curl', json_encode([
             'chat_id'    => $this->input['chat'],
-            'message_id' => $r['result']['message_id'],
             'text'       => '~t~'
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         file_put_contents('/update/pipe', '2');
@@ -504,6 +507,10 @@ public function domainsMenu()
     {
         $conf = $this->getPacConf();
         $cert = $this->nginxGetTypeCert();
+        // Без домена блок ниже не выполняется, и $text оставался неопределённым:
+        // implode() в конце получал null и ронял бота фаталом. Это состояние
+        // штатное — свежая установка и всё, что после /deldomain.
+        $text = [];
         if (!empty($conf['domain'])) {
             $ssl_expiry = $this->expireCert();
             $certs      = $this->domainsCert() ?: [];
@@ -526,8 +533,8 @@ public function domainsMenu()
         $data = [
             [
                 [
-                    'text'          => $conf['domain'] ? "{$this->i18n('delete')} {$conf['domain']}" : $this->i18n('install domain'),
-                    'callback_data' => $conf['domain'] ? '/deldomain' : '/domain',
+                    'text'          => !empty($conf['domain']) ? "{$this->i18n('delete')} {$conf['domain']}" : $this->i18n('install domain'),
+                    'callback_data' => !empty($conf['domain']) ? '/deldomain' : '/domain',
                 ],
                 [
                     'text'          => $this->i18n('nip.io'),
@@ -535,7 +542,7 @@ public function domainsMenu()
                 ],
             ],
         ];
-        if ($conf['domain']) {
+        if (!empty($conf['domain'])) {
             if ($cert) {
                 switch ($cert) {
                     case 'letsencrypt':
@@ -694,15 +701,19 @@ public function ports()
     {
         $text[] = 'Settings -> Ports';
         $f      = '/docker/compose';
-        $c      = yaml_parse_file($f)['services'];
+        // Пустой файл — нормальное состояние: hidePort()/setPort() пишут сюда
+        // пустоту, когда ни один порт не переопределён, и тогда yaml_parse_file()
+        // возвращает null. Секции конкретного сервиса тоже может не быть —
+        // публикуется только то, что админ включил руками.
+        $c      = yaml_parse_file($f)['services'] ?? [];
         $pac = $this->getPacConf();
         $data   = [
             [[
-                'text'          => $this->i18n($c['tg'] ? 'on' : 'off') . ' ' . explode(':', $c['tg']['ports'][0])[0] . ' MTProto ',
+                'text'          => $this->i18n(empty($c['tg']) ? 'off' : 'on') . ' ' . explode(':', $c['tg']['ports'][0] ?? '')[0] . ' MTProto ',
                 'callback_data' => "/changePort tg",
             ]],
             [[
-                'text'          => $this->i18n($c['dnstt'] ? 'on' : 'off') . ' 53 dnstt',
+                'text'          => $this->i18n(empty($c['dnstt']) ? 'off' : 'on') . ' 53 dnstt',
                 'callback_data' => "/hidePort dnstt",
             ]],
         ];
@@ -831,15 +842,24 @@ public function logs()
                 ];
             }
         }
+        // Логи прокси Telegram лежат не файлом в /logs, а в контейнере (образ
+        // пишет в stdout), поэтому строка добавляется отдельно: размера и
+        // очистки у неё нет — ротацией занимается сам docker.
+        $data[] = [
+            [
+                'text'          => $this->i18n('mtproto'),
+                'callback_data' => "/tgLogs",
+            ],
+        ];
         $data[] = [
             [
                 'text'          => $this->i18n('clean all'),
                 'callback_data' => "/cleanLog",
             ],
         ];
-        $autocleanlogs = array_filter(explode('/', $p['autocleanlogs']));
+        $autocleanlogs = array_filter(explode('/', $p['autocleanlogs'] ?? ''));
         if (!empty($autocleanlogs)) {
-            if (!empty(strtotime($autocleanlogs[0])) && !empty(strtotime($autocleanlogs[1]))) {
+            if (!empty(strtotime($autocleanlogs[0])) && !empty(strtotime($autocleanlogs[1] ?? ''))) {
                 $autocleanlogs = "{$autocleanlogs[0]} start / {$autocleanlogs[1]} period";
             } else {
                 $autocleanlogs = $this->i18n('off') . " {$p['autocleanlogs']} - wrong format";

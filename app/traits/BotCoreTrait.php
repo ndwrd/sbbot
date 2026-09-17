@@ -522,6 +522,7 @@ public function cron()
             $this->checkCert();
             $this->singboxStatsUser();
             $this->checkNodeProvisioning();
+            $this->checkNodeUpdating();
             $this->checkNodeCerts();
             $this->checkNodeAutoCleanLogs();
             $this->checkAppDownloadLinks();

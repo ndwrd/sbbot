@@ -313,13 +313,25 @@ public function cloakNginx()
 
 public function expireCert()
     {
+        // Сертификата может не быть вовсе: домен задан, а SSL ещё не выпущен
+        // (или удалён через /deletessl) — это нормальное состояние, а не сбой.
+        if (!file_exists("/certs/cert_public")) {
+            return false;
+        }
         $c = openssl_x509_read(file_get_contents("/certs/cert_public"));
-        return (openssl_x509_parse($c)["validTo_time_t"] ?? null) ?: false;
+        return $c ? (openssl_x509_parse($c)["validTo_time_t"] ?? null) ?: false : false;
     }
 
 public function domainsCert()
     {
-        $domains = openssl_x509_parse(openssl_x509_read(file_get_contents("/certs/cert_public")))['extensions']["subjectAltName"];
+        if (!file_exists("/certs/cert_public")) {
+            return false;
+        }
+        $c = openssl_x509_read(file_get_contents("/certs/cert_public"));
+        if (!$c) {
+            return false;
+        }
+        $domains = openssl_x509_parse($c)['extensions']["subjectAltName"] ?? '';
         if (empty($domains)) {
             return false;
         }

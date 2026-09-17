@@ -202,11 +202,7 @@ public function addInclude(string $domains, $type)
         if (!empty($domains)) {
             $conf = $this->getPacConf();
             foreach ($domains as $k => $v) {
-                if (in_array($type, ['white', 'deny'])) {
-                    $conf[$type][] = $v;
-                } else {
-                    $conf[$type][in_array($type, ['rulessetlist', 'packagelist', 'processlist']) ? trim($v) : idn_to_ascii(trim($v))] = true;
-                }
+                $conf[$type][in_array($type, ['rulessetlist', 'packagelist', 'processlist']) ? trim($v) : idn_to_ascii(trim($v))] = true;
             }
             ksort($conf[$type]);
             $this->setPacConf($conf);

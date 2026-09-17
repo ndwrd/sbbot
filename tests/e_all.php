@@ -37,8 +37,10 @@ $names = [
     'importFile(бэкап vpnbot)', 'applyUsers + writeSingboxRuntime',
     'статусы нод: cron / кэш / устаревший кэш',
     'callbackCheck (нажатие кнопки)', 'addxrus: первый пользователь',
-    'подписка: плейсхолдеры нод (недоступна/нет нод)',
     'дубли: домен ноды и IP ноды',
+    'обновление ноды: ожидание/таймаут/нажатие',
+    'подписка: плейсхолдеры нод (недоступна/нет нод)',
+    'logs() и ports() (пустой override)', 'restart()', 'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -115,7 +117,13 @@ if (!$virgin) {
     foreach (['mtprotosecret', 'mtprotodomain', 'mtprotoadtag', 'singbox.stats'] as $f) @unlink("$TMP/config/$f");
     foreach (['reload_message', 'message'] as $f) @unlink("$TMP/update/$f");
 }
-file_put_contents("$TMP/certs/cert_public", '');
+// В fresh сертификата нет ФАЙЛОМ (домен ещё не заводили) — именно это
+// состояние роняло expireCert()/domainsCert() в warning'и на ноде.
+if (!$virgin) {
+    file_put_contents("$TMP/certs/cert_public", '');
+} else {
+    @unlink("$TMP/certs/cert_public");
+}
 file_put_contents("$TMP/version", '1.0');
 foreach (['nginx.conf', 'nginx_default.conf', 'upstream.conf', 'include.conf'] as $f) {
     if (file_exists("$REPO/config/$f")) copy("$REPO/config/$f", "$TMP/config/$f");
@@ -180,7 +188,9 @@ if (!function_exists('idn_to_utf8'))  { function idn_to_utf8($d, $f = 0, $v = 1,
 if (!function_exists('idn_to_ascii')) { function idn_to_ascii($d, $f = 0, $v = 1, &$i = null) { return $d; } }
 if (!function_exists('yaml_emit'))    { function yaml_emit($d, ...$a) { return json_encode($d); } }
 if (!function_exists('opcache_invalidate')) { function opcache_invalidate($f, $force = false) { return true; } }
-if (!function_exists('yaml_parse_file')) { function yaml_parse_file($f, ...$a) { return []; } }
+// Пустой файл libyaml разбирает в null, а не в массив — именно так выглядит
+// docker-compose.override.yml, пока ни один порт не переопределён.
+if (!function_exists('yaml_parse_file')) { function yaml_parse_file($f, ...$a) { return trim((string) @file_get_contents($f)) === '' ? null : []; } }
 if (!function_exists('yaml_parse'))      { function yaml_parse($s, ...$a) { return []; } }
 if (!class_exists('CURLStringFile')) { class CURLStringFile { public function __construct(public $data = '', public $postname = '', public $mime = '') {} } }
 if (!class_exists('CURLFile'))       { class CURLFile       { public function __construct(public $name = '', public $mime = '', public $postname = '') {} } }
@@ -395,6 +405,20 @@ $s = [
         $b->addNodeIp('203.0.113.10', 'Дубль');
         $b->addNodeIp('203.0.113.77', 'Новая');
     })(),
+    // Нода обновляется: ожидание (нода молчит), затем таймаут, затем нажатие
+    // кнопки «Обновить», которое заводит состояние заново.
+    fn() => (function () use ($b) {
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4'] = ['label' => 'Helsinki', 'ip' => '203.0.113.10'] + ($p['nodes']['n1a2b3c4'] ?? []);
+        $p['nodes']['n1a2b3c4']['updating'] = ['chat' => 1, 'messageId' => 5, 'from' => '1.3.5', 'startedAt' => time() - 60, 'lastPing' => 0];
+        $b->setPacConf($p);
+        $b->checkNodeUpdating();
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4']['updating']['startedAt'] = time() - 1000;
+        $b->setPacConf($p);
+        $b->checkNodeUpdating();
+        $b->nodeUpdate('n1a2b3c4');
+    })(),
     // Группы с плейсхолдерами нод в обоих шаблонах. В full нода FI есть, но не
     // синхронизирована (в подписку не попадает), в fresh нод нет вообще —
     // оба случая раньше отдавали клиенту буквальный плейсхолдер.
@@ -412,6 +436,28 @@ $s = [
             $b->subscription(true);
             ob_end_clean();
         }
+    })(),
+    // Настройки -> Логи и Настройки -> Порты. Автоочистки в pac.json может не
+    // быть вовсе, а docker-compose.override.yml пустой, пока ни один порт не
+    // переопределён (см. hidePort()) — оба состояния давали warning'и в бою.
+    fn() => (function () use ($b, $TMP) {
+        file_put_contents("$TMP/docker/compose", '');
+        $b->logs();
+        $b->ports();
+        file_put_contents("$TMP/docker/compose", "services:\n    tg:\n        ports:\n            - 4443:443\n");
+        $b->ports();
+    })(),
+    // Перезапуск: sendMessageDraft отвечает result: true, объекта сообщения у
+    // черновика нет — и message_id из него доставали.
+    fn() => $b->restart(),
+    // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
+    // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.
+    fn() => (function () use ($b) {
+        $b->menu('domains');
+        $p = $b->getPacConf();
+        unset($p['domain']);
+        $b->setPacConf($p);
+        $b->menu('domains');
     })(),
 ];
 ($s[(int) $argv[1]])();
