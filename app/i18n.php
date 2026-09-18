@@ -365,9 +365,13 @@ $i = [
         'en' => 'ERROR: a node with this IP already exists: %label%',
         'ru' => 'ERROR: нода с этим IP уже заведена: %label%',
     ],
-    'web secret' => [
-        'en' => 'New WEB secret',
-        'ru' => 'Новый WEB-секрет',
+    'telegram proxy' => [
+        'en' => 'Telegram Proxy',
+        'ru' => 'Telegram Proxy',
+    ],
+    'web proxy' => [
+        'en' => 'Web Proxy',
+        'ru' => 'Web Proxy',
     ],
     'web needs letsencrypt' => [
         'en' => 'WEB proxy needs a domain with a Let\'s Encrypt certificate (Settings -> Domains): the client rejects self-signed ones.',

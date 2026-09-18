@@ -36,7 +36,7 @@ public function addDomain($domain, $nomenu = false)
             // nip.io резолвится сам по IP в имени — DNS настраивать не нужно,
             // уведомление имеет смысл только для обычного домена.
             if (!preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $conf['domain'])) {
-                $this->send($this->input['chat'], "Настройте DNS A-записи на IP этого сервера для: {$conf['domain']}, {$conf['naiveSubdomain']}.{$conf['domain']}, {$conf['anytlsSubdomain']}.{$conf['domain']} — и только после этого нажимайте «Letsencrypt SSL».");
+                $this->send($this->input['chat'], "Настройте DNS A-записи на IP этого сервера для: {$conf['domain']}, {$conf['naiveSubdomain']}.{$conf['domain']}, {$conf['anytlsSubdomain']}.{$conf['domain']}, " . $this->tgWebHost($conf) . " (последний — для Telegram Web Proxy) — и только после этого нажимайте «Letsencrypt SSL».");
             }
         }
         if (empty($nomenu)) {
@@ -216,9 +216,12 @@ public function delDomain()
     {
         $this->deleteSSL(1);
         $conf = $this->getPacConf();
-        unset($conf['domain']);
+        // WEB-прокси живёт на поддомене — без домена его нет. Выключаем, чтобы
+        // с новым доменом он не числился включённым без своего сертификата.
+        unset($conf['domain'], $conf['tgWeb']);
         $this->setPacConf($conf);
         $this->cloakNginx();
+        $this->restartTG();
         $this->menu('domains');
     }
 

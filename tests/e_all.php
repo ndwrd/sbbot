@@ -568,7 +568,7 @@ key = \"" . str_repeat("c", 32) . "\"
         $b->input["callback_id"] = "cb1";
         $p = $b->getPacConf();
         if (empty($p["domain"])) {
-            $b->tgWebToggle();                                   // нет домена — отказ
+            $b->tgWebGenerate();                                 // нет домена — отказ
             $chk(empty($b->getPacConf()["tgWeb"]), "включился без домена");
             return;
         }
@@ -584,25 +584,26 @@ key = \"" . str_repeat("c", 32) . "\"
             $chk(str_contains($toml, $line), "в конфиге Telemt нет $line");
         }
         $chk(strpos($toml, "[web]") < strpos($toml, "[access.users]"), "секция [web] после [access.users]");
-        $chk($b->linkWebProxy() === "tg://webproxy?server=$host&secret=dd" . str_repeat("f", 32), "ссылка WEB");
+        $chk($b->linkWebProxy() === "https://t.me/webproxy?server=$host&secret=dd" . str_repeat("f", 32), "ссылка WEB");
         $b->cloakNginx();
         $ng = (string) @file_get_contents("$TMP/config/nginx.conf");
         $chk(preg_match("~^\s+server_name " . preg_quote($host, "~") . ";~m", $ng), "WEB-блок nginx не включён");
         $chk(str_contains($ng, "|$host)"), "WEB-имени нет в проверке Host");
         $chk(str_contains($ng, "listen 10.10.0.2:8088;"), "нет внутреннего сайта-обманки");
         $b->mtproto();
-        $b->tgWebNewSecret();
+        $b->tgWebGenerate();                                     // включён — только новый секрет
         $chk($b->tgWebSecret() !== str_repeat("f", 32), "WEB-секрет не сменился");
         $b->qrWebProxy();
-        $b->tgWebToggle();                                       // выключение
+        $b->tgWebSecretSet("0");                                 // выключение
+        $chk($b->tgWebSecret() !== "", "секрет пропал при выключении");
         $chk(empty($b->getPacConf()["tgWeb"]), "WEB не выключился");
         $chk(!str_contains((string) @file_get_contents("$TMP/config/telemt/config.toml"), "[web]"), "[web] остался после выключения");
         $chk(!preg_match("~^\s+server_name " . preg_quote($host, "~") . ";~m", (string) @file_get_contents("$TMP/config/nginx.conf")), "WEB-блок nginx остался включённым");
         $b->ip = "10.0.0.5";
-        $b->tgWebToggle();                                       // внутренний IP — отказ
+        $b->tgWebGenerate();                                     // внутренний IP — отказ
         $chk(empty($b->getPacConf()["tgWeb"]), "включился с внутренним IP");
         $b->ip = "8.8.8.8";
-        $b->tgWebToggle();                                       // certbot не отработал — откат
+        $b->tgWebSecretSet("dd" . str_repeat("a", 32));          // certbot не отработал — откат
         $chk(empty($b->getPacConf()["tgWeb"]), "нет отката при невыпущенном сертификате");
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в

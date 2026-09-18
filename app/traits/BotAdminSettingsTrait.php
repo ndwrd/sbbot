@@ -526,6 +526,9 @@ public function domainsMenu()
             if (!empty($conf['anytlsSubdomain'])) {
                 $text[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
             }
+            if ($this->tgWebHost($conf) !== '') {
+                $text[] = "Telegram Proxy: " . $this->tgWebHost($conf);
+            }
             if (in_array($conf['domain'], $certs)) {
                 $text[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
             }

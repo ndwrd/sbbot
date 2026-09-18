@@ -316,10 +316,19 @@ public function applyMtproto($secret, $domain = '')
 // WEB-прокси: тот же Telemt, отдельный пользователь "web" с секретом в режиме
 // dd (ee WEB-клиенты не принимают). Отдельный — чтобы его можно было сменить,
 // не трогая обычный MTProto. Клиенты: Telegram Desktop 7.1+.
+//
+// Управление — как у MTProto: «Сгенерировать ключ» и «Установить свой ключ»
+// включают WEB (если он выключен) с новым секретом, «0» вместо ключа —
+// выключает; сам секрет при этом остаётся.
 public function tgWebSecret()
     {
         $s = strtolower(trim((string) ($this->getPacConf()['tgWebSecret'] ?? '')));
         return preg_match('~^[0-9a-f]{32}$~', $s) ? $s : '';
+    }
+
+public function tgWebOn()
+    {
+        return !empty($this->getPacConf()['tgWeb']) && $this->tgWebHost() !== '' && $this->tgStatus() == 'on';
     }
 
 // Порт в WEB-ссылке не указывается: клиент требует 443.
@@ -327,18 +336,80 @@ public function linkWebProxy()
     {
         $host = $this->tgWebHost();
         $s    = $this->tgWebSecret();
-        return $host !== '' && $s !== '' ? "tg://webproxy?server=$host&secret=dd$s" : '';
+        return $host !== '' && $s !== '' ? "https://t.me/webproxy?server=$host&secret=dd$s" : '';
     }
 
-public function tgWebToggle()
+public function tgWebGenerate()
+    {
+        $this->tgWebEnable(bin2hex(random_bytes(16)));
+    }
+
+public function tgWebSetSecret()
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter key or 0 for stop web proxy",
+            $this->input['message_id'],
+            reply: 'enter key or 0 for stop web proxy',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message'  => $this->input['message_id'],
+            'start_callback' => $this->input['callback_id'],
+            'callback'       => 'tgWebSecretSet',
+            'args'           => [],
+        ];
+    }
+
+public function tgWebSecretSet($secret)
+    {
+        $secret = trim($secret);
+        if ($secret === '0') {
+            $this->tgWebDisable();
+            return;
+        }
+        // Как в secretSet(): принимаем и ключ из ссылки — с префиксом dd/ee.
+        if (!preg_match('~^(?:dd|ee)?([0-9a-f]{32})$~i', $secret, $m)) {
+            $this->update($this->input['chat'], $this->input['message_id'], 'wrong secret');
+            sleep(2);
+            $this->mtproto();
+            return;
+        }
+        $this->tgWebEnable(strtolower($m[1]));
+    }
+
+public function tgWebDisable()
+    {
+        $this->updatePacConf(function ($c) {
+            unset($c['tgWeb']);
+            return $c;
+        });
+        $this->cloakNginx();
+        $this->restartTG();
+        $this->mtproto();
+    }
+
+// Отказ: из кнопки — всплывающим окном, из ввода ключа — сообщением (кнопка,
+// с которой начинали, к этому моменту уже отвечена).
+public function tgWebRefuse($text)
+    {
+        if (!empty($this->input['reply'])) {
+            $this->send($this->input['chat'], $text);
+            $this->mtproto();
+        } else {
+            $this->answer($this->input['callback_id'], $text, true);
+        }
+    }
+
+public function tgWebEnable($secret)
     {
         $pac = $this->getPacConf();
+        // Уже включён — меняется только секрет: Telemt подхватит его на лету,
+        // соединения обычного MTProto это не рвёт.
         if (!empty($pac['tgWeb'])) {
-            $this->updatePacConf(function ($c) {
-                unset($c['tgWeb']);
+            $this->updatePacConf(function ($c) use ($secret) {
+                $c['tgWebSecret'] = $secret;
                 return $c;
             });
-            $this->cloakNginx();
             $this->restartTG();
             $this->mtproto();
             return;
@@ -346,19 +417,17 @@ public function tgWebToggle()
         // WebView клиента примет только сертификат публичного CA —
         // самоподписанный мост не загрузит.
         if (empty($pac['domain']) || ($pac['letsencrypt'] ?? '') !== 'letsencrypt') {
-            $this->answer($this->input['callback_id'], $this->i18n('web needs letsencrypt'), true);
+            $this->tgWebRefuse($this->i18n('web needs letsencrypt'));
             return;
         }
         if (!filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE)) {
-            $this->answer($this->input['callback_id'], $this->i18n('web needs public ip'), true);
+            $this->tgWebRefuse($this->i18n('web needs public ip'));
             return;
         }
-        $this->updatePacConf(function ($c) {
-            $c          = $this->ensureProtocolSubdomains($c);
-            $c['tgWeb'] = true;
-            if (!preg_match('~^[0-9a-f]{32}$~', $c['tgWebSecret'] ?? '')) {
-                $c['tgWebSecret'] = bin2hex(random_bytes(16));
-            }
+        $this->updatePacConf(function ($c) use ($secret) {
+            $c                = $this->ensureProtocolSubdomains($c);
+            $c['tgWeb']       = true;
+            $c['tgWebSecret'] = $secret;
             return $c;
         });
         $host = $this->tgWebHost();
@@ -387,24 +456,16 @@ public function tgWebToggle()
         $this->mtproto();
     }
 
-public function tgWebNewSecret()
-    {
-        $this->updatePacConf(function ($c) {
-            $c['tgWebSecret'] = bin2hex(random_bytes(16));
-            return $c;
-        });
-        // Секрет пользователя Telemt подхватывает на лету — соединения обычного
-        // MTProto это не рвёт.
-        $this->restartTG();
-        $this->mtproto();
-    }
-
+// QR WEB-прокси. Когда WEB появится на нодах, их QR пойдут следом отдельными
+// сообщениями — как в qrMtproto().
 public function qrWebProxy()
     {
-        $link = $this->linkWebProxy();
-        if ($link !== '') {
-            $this->sendQr('webproxy', $link, "<code>$link</code>");
+        if (!$this->tgWebOn()) {
+            $this->answer($this->input['callback_id'], $this->i18n('web proxy') . ': ' . $this->i18n('off'), true);
+            return;
         }
+        $link = $this->linkWebProxy();
+        $this->sendQr('webproxy', $link, "<code>$link</code>");
     }
 
 public function linkMtproto()
@@ -420,76 +481,69 @@ public function linkMtproto()
         return "https://t.me/proxy?server=$ip&port=$p&secret=ee$s$d";
     }
 
+// Menu -> Telegram Proxy: блоки MTProto и Web Proxy Бота, под ними — такие же
+// по каждой ноде. Статус MTProto ноды — из кэша опроса нод (checkNodesStatus(),
+// раз в 30 с): по SSH на каждое открытие меню не ходим.
 public function mtproto()
     {
-        $d      = $this->tgDomain();
         $st     = $this->tgStatus();
-        $text[] = "Menu -> MTProto";
-        $text[] = "status: $st";
-        $text[] = "fake domain: <code>$d</code>";
-        if ($st == 'on') {
-            $text[] = $this->linkMtproto();
-        }
-        $web    = !empty($this->getPacConf()['tgWeb']);
+        $web    = $this->tgWebOn();
+        $host   = $this->tgWebHost();
+        $text[] = "Menu -> " . $this->i18n('telegram proxy');
         $text[] = '';
-        $text[] = '<b>WEB</b> (Telegram Desktop 7.1+): ' . $this->i18n($web && $st == 'on' ? 'on' : 'off');
-        if ($web && $st == 'on') {
-            $text[] = '<code>' . $this->linkWebProxy() . '</code>';
+        $text[] = '<b>MTProto</b>';
+        $text[] = "Status: $st";
+        $text[] = 'Fake domain: <code>' . $this->tgDomain() . '</code>';
+        if ($st == 'on') {
+            $text[] = 'Link: ' . $this->linkMtproto();
         }
-        foreach ($this->getNodes() as $id => $node) {
-            $text[] = '';
-            $text[] = "<b>MTProto {$node['label']}</b>";
-            $link   = $this->nodeLinkMtproto($id);
-            $text[] = $link ?: $this->i18n('not configured');
+        $text[] = '';
+        $text[] = '<b>Web Proxy</b> (Telegram Desktop 7.1+)';
+        $text[] = 'Status: ' . ($web ? 'on' : 'off');
+        if ($host !== '') {
+            $text[] = "Domain: <code>$host</code>";
         }
-        $data[] = [
-            [
-                'text'          => $this->i18n('generateSecret'),
-                'callback_data' => "/generateSecret",
-            ],
-            [
-                'text'          => $this->i18n('setSecret'),
-                'callback_data' => "/setSecret",
-            ],
-        ];
-        $data[] = [
-            [
-                'text'          => $this->i18n('changeFakeDomain'),
-                'callback_data' => "/changeTGDomain",
-            ],
-            [
-                'text'          => $this->i18n('show QR'),
-                'callback_data' => "/qrMtproto",
-            ],
-        ];
-        $webRow = [
-            [
-                'text'          => $this->i18n($web ? 'on' : 'off') . ' WEB',
-                'callback_data' => "/tgWebToggle",
-            ],
-        ];
         if ($web) {
-            $webRow[] = [
-                'text'          => 'QR WEB',
-                'callback_data' => "/qrWebProxy",
-            ];
-            $webRow[] = [
-                'text'          => $this->i18n('web secret'),
-                'callback_data' => "/tgWebNewSecret",
-            ];
+            $text[] = 'Link: ' . $this->linkWebProxy();
         }
-        $data[] = $webRow;
-        $data[] = [
+        $cache = $this->readJsonLocked('/config/nodes_status.json') ?: [];
+        foreach ($this->getNodes() as $id => $node) {
+            $link   = $this->nodeLinkMtproto($id);
+            $svc    = $cache[$id]['services'] ?? null;
+            $text[] = '';
+            $text[] = '<b>' . $this->i18n('telegram proxy') . " {$node['label']}</b>";
+            if ($link === '') {
+                $text[] = 'MTProto: ' . $this->i18n('not configured');
+            } else {
+                $text[] = 'MTProto: ' . (is_array($svc) ? (!empty($svc['mtproto']) ? 'on' : 'off') . ' · ' : '')
+                    . '<code>' . trim($node['mtprotodomain'] ?? 'yandex.ru') . '</code>';
+                $text[] = "Link: $link";
+            }
+            $text[] = 'Web Proxy: ' . $this->i18n('not configured');
+        }
+        $data = [
+            [['text' => '· MTProto ·', 'callback_data' => "/mtproto"]],
             [
-                'text'          => $this->i18n('back'),
-                'callback_data' => "/menu",
+                ['text' => $this->i18n('generateSecret'), 'callback_data' => "/generateSecret"],
+                ['text' => $this->i18n('setSecret'), 'callback_data' => "/setSecret"],
             ],
+            [
+                ['text' => $this->i18n('changeFakeDomain'), 'callback_data' => "/changeTGDomain"],
+                ['text' => $this->i18n('show QR'), 'callback_data' => "/qrMtproto"],
+            ],
+            [['text' => '· ' . $this->i18n('web proxy') . ' ·', 'callback_data' => "/mtproto"]],
+            [
+                ['text' => $this->i18n('generateSecret'), 'callback_data' => "/tgWebGenerate"],
+                ['text' => $this->i18n('setSecret'), 'callback_data' => "/tgWebSetSecret"],
+            ],
+            [['text' => $this->i18n('show QR'), 'callback_data' => "/qrWebProxy"]],
+            [['text' => $this->i18n('back'), 'callback_data' => "/menu"]],
         ];
         $this->update(
             $this->input['chat'],
             $this->input['message_id'],
-            implode("\n", $text ?: ['...']),
-            $data ?: false,
+            implode("\n", $text),
+            $data,
         );
     }
 

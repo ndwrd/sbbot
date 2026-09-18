@@ -218,11 +218,11 @@ public function action()
             case preg_match('~^/tgLogs$~', $this->input['callback'], $m):
                 $this->tgLogs();
                 break;
-            case preg_match('~^/tgWebToggle$~', $this->input['callback'], $m):
-                $this->tgWebToggle();
+            case preg_match('~^/tgWebGenerate$~', $this->input['callback'], $m):
+                $this->tgWebGenerate();
                 break;
-            case preg_match('~^/tgWebNewSecret$~', $this->input['callback'], $m):
-                $this->tgWebNewSecret();
+            case preg_match('~^/tgWebSetSecret$~', $this->input['callback'], $m):
+                $this->tgWebSetSecret();
                 break;
             case preg_match('~^/qrWebProxy$~', $this->input['callback'], $m):
                 $this->qrWebProxy();
@@ -867,6 +867,9 @@ public function menu($type = false, $arg = false, $return = false)
                     if (!empty($conf['anytlsSubdomain'])) {
                         $main[] = "Anytls: {$conf['anytlsSubdomain']}.{$conf['domain']}";
                     }
+                    if ($this->tgWebHost($conf) !== '') {
+                        $main[] = "Telegram Proxy: " . $this->tgWebHost($conf);
+                    }
                     if (in_array($conf['domain'], $certs)) {
                         $main[] = "SSL: " . date('Y-m-d H:i:s', $ssl_expiry);
                     }
@@ -905,7 +908,7 @@ public function menu($type = false, $arg = false, $return = false)
         ];
         $protocols = [
             [
-                'text'          => $this->i18n('mtproto'),
+                'text'          => $this->i18n('telegram proxy'),
                 'callback_data' => "/mtproto",
             ],
         ];
