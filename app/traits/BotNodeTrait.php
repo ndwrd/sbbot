@@ -82,6 +82,9 @@ public function statusReport()
     {
         $st = $this->menuStatus();
         return [
+            // Та же строка версии, что в главном меню Бота: VER и ветка git.
+            'version'   => $this->botVersion(),
+            'branch'    => trim((string) exec('git -C / rev-parse --abbrev-ref HEAD 2>/dev/null')),
             'singbox'   => !empty($st['singbox']),
             'mtproto'   => !empty($st['mtproto']),
             'warp'      => !empty($st['warp']),
@@ -182,16 +185,22 @@ public function nodeMenu($id)
         $this->nodeStatusRemember($id, $online);
         $dot    = $off ? '⚪' : ($online ? '🟢' : '🔴');
         $status = $off ? $this->i18n('node off') : ($online ? $this->i18n('node online') : $this->i18n('node offline'));
-        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";
-        $text[] = "IP: {$node['ip']}";
-        $text[] = "$dot $status";
-        // Сервисы и порты — тем же блоком, что в главном меню Бота. Из кэша
+        // Версия, сервисы и порты — как в главном меню Бота. Из кэша
         // checkNodesStatus() (опрос раз в 30 с), не вживую: это SSH-вызов с
         // запуском PHP на ноде на каждое открытие карточки. Старше двух минут
-        // (cron стоит) или нода сейчас недоступна — не показываем.
+        // (cron стоит) или нода сейчас недоступна — не показываем: во время
+        // обновления там была бы уже неверная версия.
         $cached = ($this->readJsonLocked('/config/nodes_status.json') ?: [])[$id] ?? [];
-        if (!$off && $online && is_array($cached['services'] ?? null) && time() - ($cached['servicesTime'] ?? 0) <= 120) {
-            $svc    = $cached['services'];
+        $svc    = !$off && $online && is_array($cached['services'] ?? null) && time() - ($cached['servicesTime'] ?? 0) <= 120
+            ? $cached['services']
+            : null;
+        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";
+        if (!empty($svc['version'])) {
+            $text[] = trim("v{$svc['version']} " . ($svc['branch'] ?? ''));
+        }
+        $text[] = "IP: {$node['ip']}";
+        $text[] = "$dot $status";
+        if ($svc !== null) {
             $text[] = '<code>';
             $text[] = $this->statusColumns($svc, (array) ($svc['ports'] ?? []), !empty($svc['dnsttUsed']));
             $text[] = '</code>';

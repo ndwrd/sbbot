@@ -481,6 +481,7 @@ $s = [
     // (нода на стенде недоступна — блок скрыт, но кэш читается).
     fn() => (function () use ($b, $TMP) {
         $r = $b->statusReport();
+        if (!array_key_exists("version", $r) || !array_key_exists("branch", $r)) trigger_error("statusReport без версии", E_USER_WARNING);
         $b->statusColumns($r, $r['ports'], true);
         $b->statusColumns([], [], false);
         file_put_contents("$TMP/config/nodes_status.json", json_encode(['n1a2b3c4' => ['online' => true, 'time' => time(), 'services' => $r, 'servicesTime' => time()]]));
