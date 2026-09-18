@@ -44,7 +44,7 @@ $names = [
     'логи MTProto: Бот и нода', 'порт MTProto ноды',
     'сервисы и порты: Бот и карточка ноды', 'перезапуск ноды: ожидание/без метки/таймаут/нажатие',
     'MTProto на Telemt: конфиг/миграция/применение', 'WEB-прокси: конфиг/nginx/вкл-выкл/отказы',
-    'menu(domains) с доменом и без',
+    'WEB-прокси ноды', 'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -281,6 +281,12 @@ class TestBot extends Bot
 
     // curl-расширения локально нет; гео и так кэшируется в pac при создании
     public function geoCountryCode($ip) { return 'DE'; }
+
+    // Ответы ноды для сценариев: fn($method, $args); null — как без связи.
+    public $console = null;
+    public function nodeConsole($ip, $method, ...$args) {
+        return $this->console ? ($this->console)($method, $args) : parent::nodeConsole($ip, $method, ...$args);
+    }
 }
 
 // $GLOBALS['debug'] НЕ объявляем: init.php/index.php заводят $debug, только
@@ -605,6 +611,55 @@ key = \"" . str_repeat("c", 32) . "\"
         $b->ip = "8.8.8.8";
         $b->tgWebSecretSet("dd" . str_repeat("a", 32));          // certbot не отработал — откат
         $chk(empty($b->getPacConf()["tgWeb"]), "нет отката при невыпущенном сертификате");
+    })(),
+    // WEB-прокси на ноде: нода не отвечает; отказ по условиям (без certbot);
+    // включение; смена ключа; ссылка/меню/QR/домены из записи ноды;
+    // выключение «0». Ответы ноды — через $b->console (подмена nodeConsole()).
+    fn() => (function () use ($b) {
+        $chk = fn ($ok, $what) => $ok || trigger_error("WEB ноды: $what", E_USER_WARNING);
+        $id  = 'n1a2b3c4';
+        $chk(array_key_exists('webCheck', $b->tgReport()), "tgReport без webCheck");
+        if (empty($b->getNode($id))) {
+            return;
+        }
+        $b->input['callback_id'] = 'cb1';
+        $b->nodeWebGenerate($id);                                // нода не отвечает
+        $chk(empty($b->getNode($id)['tgWeb']), "включился без ответа ноды");
+        $state = ['tgWeb' => false, 'tgWebSecret' => '', 'check' => 'web needs letsencrypt'];
+        $calls = [];
+        $b->console = function ($method, $args) use (&$state, &$calls) {
+            $calls[] = $method;
+            return match ($method) {
+                'tgReport'   => ['status' => 'on', 'tgWeb' => $state['tgWeb'], 'tgWebSecret' => $state['tgWebSecret'],
+                                 'webSubdomain' => 'ab12cd34', 'domain' => 'N.example.com', 'webCheck' => $state['check']],
+                'tgWebApply' => (function () use (&$state, $args) { $state['tgWeb'] = true; $state['tgWebSecret'] = $args[0]; return 'ok'; })(),
+                'tgWebOff'   => (function () use (&$state) { $state['tgWeb'] = false; return 'ok'; })(),
+                default      => '',
+            };
+        };
+        $p = $b->getPacConf();
+        $p['nodes'][$id]['domain'] = 'N.example.com';
+        $b->setPacConf($p);
+        $b->nodeWebGenerate($id);                                // отказ по условиям
+        $chk(!in_array('tgWebApply', $calls, true), "tgWebApply при отказе по условиям");
+        $state['check'] = 'ok';
+        $b->nodeWebSecretSet('dd' . str_repeat('c', 32), $id);   // включение
+        $node = $b->getNode($id);
+        $chk(!empty($node['tgWeb']) && $node['tgWebSecret'] === str_repeat('c', 32), "запись ноды не обновилась");
+        $chk($b->nodeLinkWebProxy($id) === 'https://t.me/webproxy?server=ab12cd34.n.example.com&secret=dd' . str_repeat('c', 32), "ссылка WEB ноды");
+        $b->nodeWebGenerate($id);                                // смена ключа
+        $chk($b->getNode($id)['tgWebSecret'] !== str_repeat('c', 32), "ключ ноды не сменился");
+        $b->nodeMtprotoMenu($id);
+        $b->mtproto();
+        $b->qrWebProxy();
+        $b->nodeQrWeb($id);
+        $b->nodeQrMtproto($id);
+        $b->nodeDomains($id);
+        $b->nodeWebSecretSet('0', $id);                          // выключение
+        $chk(empty($b->getNode($id)['tgWeb']) && $b->nodeLinkWebProxy($id) === '', "WEB ноды не выключился");
+        $b->nodeWebSecretSet('bad', $id);
+        $b->nodeQrWeb($id);
+        $b->console = null;
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.

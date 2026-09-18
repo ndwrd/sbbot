@@ -119,6 +119,18 @@ public function action()
             case preg_match('~^/nodeMtproto (\w+)$~', $this->input['callback'], $m):
                 $this->nodeMtprotoMenu($m[1]);
                 break;
+            case preg_match('~^/nodeWebGenerate (\w+)$~', $this->input['callback'], $m):
+                $this->nodeWebGenerate($m[1]);
+                break;
+            case preg_match('~^/nodeWebSetSecret (\w+)$~', $this->input['callback'], $m):
+                $this->nodeWebSetSecret($m[1]);
+                break;
+            case preg_match('~^/nodeQrMtproto (\w+)$~', $this->input['callback'], $m):
+                $this->nodeQrMtproto($m[1]);
+                break;
+            case preg_match('~^/nodeQrWeb (\w+)$~', $this->input['callback'], $m):
+                $this->nodeQrWeb($m[1]);
+                break;
             case preg_match('~^/nodeGenerateSecret (\w+)$~', $this->input['callback'], $m):
                 $this->nodeGenerateSecret($m[1]);
                 break;

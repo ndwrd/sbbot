@@ -369,6 +369,10 @@ $i = [
         'en' => 'Telegram Proxy',
         'ru' => 'Telegram Proxy',
     ],
+    'node web failed' => [
+        'en' => 'Node %label% did not answer — it may need an update (Update in its card).',
+        'ru' => 'Нода %label% не ответила — возможно, её нужно обновить (Update в карточке ноды).',
+    ],
     'web proxy' => [
         'en' => 'Web Proxy',
         'ru' => 'Web Proxy',

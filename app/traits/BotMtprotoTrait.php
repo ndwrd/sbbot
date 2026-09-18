@@ -364,7 +364,8 @@ public function tgWebSecretSet($secret)
     {
         $secret = trim($secret);
         if ($secret === '0') {
-            $this->tgWebDisable();
+            $this->tgWebOff();
+            $this->mtproto();
             return;
         }
         // Как в secretSet(): принимаем и ключ из ссылки — с префиксом dd/ee.
@@ -377,33 +378,43 @@ public function tgWebSecretSet($secret)
         $this->tgWebEnable(strtolower($m[1]));
     }
 
-public function tgWebDisable()
+public function tgWebEnable($secret)
     {
-        $this->updatePacConf(function ($c) {
-            unset($c['tgWeb']);
-            return $c;
-        });
-        $this->cloakNginx();
-        $this->restartTG();
+        $r = $this->tgWebApply($secret);
+        $text = str_replace('%host%', $this->tgWebHost(), $this->i18n($r));
+        // После certbot (десятки секунд) всплывающее окно уже не показать —
+        // Telegram к этому времени отбрасывает ответ на нажатие.
+        if ($r === 'web cert failed') {
+            $this->send($this->input['chat'], $text);
+        } elseif ($r !== 'ok') {
+            $this->notice($text);
+        }
         $this->mtproto();
     }
 
-// Отказ: из кнопки — всплывающим окном, из ввода ключа — сообщением (кнопка,
-// с которой начинали, к этому моменту уже отвечена).
-public function tgWebRefuse($text)
+// Сообщение об отказе: из кнопки — всплывающим окном, из ввода ключа —
+// отдельным сообщением (кнопка, с которой начинали, к этому моменту уже
+// отвечена).
+public function notice($text)
     {
         if (!empty($this->input['reply'])) {
             $this->send($this->input['chat'], $text);
-            $this->mtproto();
         } else {
             $this->answer($this->input['callback_id'], $text, true);
         }
     }
 
-public function tgWebEnable($secret)
+// Включение WEB и смена его ключа — без интерфейса: зовётся и из меню Бота, и
+// главным на ноде через console.php (nodeWebApply()). Возвращает 'ok' или ключ
+// i18n с причиной отказа.
+public function tgWebApply($secret)
     {
+        $secret = strtolower(trim((string) $secret));
+        if (!preg_match('~^[0-9a-f]{32}$~', $secret)) {
+            return 'wrong secret';
+        }
         $pac = $this->getPacConf();
-        // Уже включён — меняется только секрет: Telemt подхватит его на лету,
+        // Уже включён — меняется только ключ: Telemt подхватит его на лету,
         // соединения обычного MTProto это не рвёт.
         if (!empty($pac['tgWeb'])) {
             $this->updatePacConf(function ($c) use ($secret) {
@@ -411,18 +422,11 @@ public function tgWebEnable($secret)
                 return $c;
             });
             $this->restartTG();
-            $this->mtproto();
-            return;
+            return 'ok';
         }
-        // WebView клиента примет только сертификат публичного CA —
-        // самоподписанный мост не загрузит.
-        if (empty($pac['domain']) || ($pac['letsencrypt'] ?? '') !== 'letsencrypt') {
-            $this->tgWebRefuse($this->i18n('web needs letsencrypt'));
-            return;
-        }
-        if (!filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE)) {
-            $this->tgWebRefuse($this->i18n('web needs public ip'));
-            return;
+        $check = $this->tgWebCheck();
+        if ($check !== 'ok') {
+            return $check;
         }
         $this->updatePacConf(function ($c) use ($secret) {
             $c                = $this->ensureProtocolSubdomains($c);
@@ -435,7 +439,8 @@ public function tgWebEnable($secret)
         // до того, как certbot пойдёт его подтверждать (HTTP-01).
         $this->cloakNginx();
         if (!in_array($host, $this->domainsCert() ?: [], true)) {
-            if (!preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $pac['domain'])) {
+            // На ноде чата нет (console.php) — там это сообщение шлёт главный.
+            if (!empty($this->input['chat']) && !preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $pac['domain'])) {
                 $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web dns')));
             }
             $this->setSSL('letsencrypt');
@@ -447,25 +452,77 @@ public function tgWebEnable($secret)
                     return $c;
                 });
                 $this->cloakNginx();
-                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web cert failed')));
-                $this->mtproto();
-                return;
+                return 'web cert failed';
             }
         }
         $this->restartTG();
-        $this->mtproto();
+        return 'ok';
     }
 
-// QR WEB-прокси. Когда WEB появится на нодах, их QR пойдут следом отдельными
-// сообщениями — как в qrMtproto().
+// Можно ли включить WEB: 'ok' или ключ i18n с причиной.
+public function tgWebCheck()
+    {
+        $pac = $this->getPacConf();
+        // WebView клиента примет только сертификат публичного CA —
+        // самоподписанный мост не загрузит.
+        if (empty($pac['domain']) || ($pac['letsencrypt'] ?? '') !== 'letsencrypt') {
+            return 'web needs letsencrypt';
+        }
+        if (!filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE)) {
+            return 'web needs public ip';
+        }
+        return 'ok';
+    }
+
+public function tgWebOff()
+    {
+        $this->updatePacConf(function ($c) {
+            unset($c['tgWeb']);
+            return $c;
+        });
+        $this->cloakNginx();
+        $this->restartTG();
+        return 'ok';
+    }
+
+// Состояние прокси одним вызовом — для главного: он зовёт это на ноде через
+// console.php (nodeTgReport()) и кэширует WEB-часть в записи ноды, чтобы
+// строить ссылки без SSH.
+public function tgReport()
+    {
+        $pac = $this->getPacConf();
+        return [
+            'status'       => $this->tgStatus(),
+            'tgWeb'        => !empty($pac['tgWeb']) && $this->tgWebHost($pac) !== '',
+            'tgWebSecret'  => $this->tgWebSecret(),
+            'webSubdomain' => $pac['webSubdomain'] ?? null,
+            'domain'       => $pac['domain'] ?? null,
+            'webCheck'     => $this->tgWebCheck(),
+        ];
+    }
+
+// QR WEB-прокси: Бота и каждой ноды, где он включён, — отдельными
+// сообщениями, как в qrMtproto().
 public function qrWebProxy()
     {
-        if (!$this->tgWebOn()) {
-            $this->answer($this->input['callback_id'], $this->i18n('web proxy') . ': ' . $this->i18n('off'), true);
+        $links = [];
+        if ($this->tgWebOn()) {
+            $links['webproxy'] = $this->linkWebProxy();
+        }
+        foreach ($this->getNodes() as $id => $node) {
+            $link = $this->nodeLinkWebProxy($id);
+            if ($link !== '') {
+                $links["webproxy {$node['label']}"] = $link;
+            }
+        }
+        if (empty($links)) {
+            $this->answer($this->input['callback_id'], $this->i18n('web proxy') . ': off', true);
             return;
         }
-        $link = $this->linkWebProxy();
-        $this->sendQr('webproxy', $link, "<code>$link</code>");
+        foreach ($links as $name => $link) {
+            $label = $name === 'webproxy' ? '' : substr($name, 9) . ': ';
+            $this->sendQr($name, $link, "$label<code>$link</code>");
+        }
     }
 
 public function linkMtproto()
@@ -482,8 +539,9 @@ public function linkMtproto()
     }
 
 // Menu -> Telegram Proxy: блоки MTProto и Web Proxy Бота, под ними — такие же
-// по каждой ноде. Статус MTProto ноды — из кэша опроса нод (checkNodesStatus(),
-// раз в 30 с): по SSH на каждое открытие меню не ходим.
+// по каждой ноде. Состояние нод — из кэша (статус MTProto — из опроса нод
+// checkNodesStatus() раз в 30 с, WEB — из записи ноды): по SSH на каждое
+// открытие меню не ходим.
 public function mtproto()
     {
         $st     = $this->tgStatus();
@@ -519,7 +577,13 @@ public function mtproto()
                     . '<code>' . trim($node['mtprotodomain'] ?? 'yandex.ru') . '</code>';
                 $text[] = "Link: $link";
             }
-            $text[] = 'Web Proxy: ' . $this->i18n('not configured');
+            $webLink = $this->nodeLinkWebProxy($id);
+            if ($webLink === '') {
+                $text[] = 'Web Proxy: off';
+            } else {
+                $text[] = 'Web Proxy: ' . (is_array($svc) && empty($svc['mtproto']) ? 'off' : 'on') . ' · <code>' . $this->nodeWebHost($node) . '</code>';
+                $text[] = "Link: $webLink";
+            }
         }
         $data = [
             [['text' => '· MTProto ·', 'callback_data' => "/mtproto"]],

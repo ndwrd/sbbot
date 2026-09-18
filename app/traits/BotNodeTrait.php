@@ -242,7 +242,7 @@ public function nodeMenu($id)
             ],
             [
                 [
-                    'text'          => $this->i18n('mtproto'),
+                    'text'          => $this->i18n('telegram proxy'),
                     'callback_data' => "/nodeMtproto $id",
                 ],
                 [
@@ -386,6 +386,9 @@ public function nodeDomains($id, $restart = false)
             if (!empty($node['anytlsSubdomain'])) {
                 $text[] = "Anytls: {$node['anytlsSubdomain']}.{$node['domain']}";
             }
+            if ($this->nodeWebHost($node) !== '') {
+                $text[] = "Telegram Proxy: " . $this->nodeWebHost($node);
+            }
             $text[] = "SSL: " . (!empty($node['certExpiry']) ? date('Y-m-d H:i:s', $node['certExpiry']) : $this->i18n('not configured'));
         }
 
@@ -482,6 +485,10 @@ public function nodeCacheDomain($id)
         $conf['nodes'][$id]['domain']          = $pac['domain'] ?? null;
         $conf['nodes'][$id]['naiveSubdomain']  = $pac['naiveSubdomain'] ?? null;
         $conf['nodes'][$id]['anytlsSubdomain'] = $pac['anytlsSubdomain'] ?? null;
+        // WEB-прокси — чтобы ссылку можно было строить без SSH (nodeLinkWebProxy()).
+        $conf['nodes'][$id]['webSubdomain']    = $pac['webSubdomain'] ?? null;
+        $conf['nodes'][$id]['tgWeb']           = !empty($pac['tgWeb']) && !empty($pac['domain']);
+        $conf['nodes'][$id]['tgWebSecret']     = $pac['tgWebSecret'] ?? '';
         $conf['nodes'][$id]['hash']            = $hash ?: null;
         $conf['nodes'][$id]['cert']            = $cert ?: null;
         $conf['nodes'][$id]['certExpiry']      = !empty($expiry) ? $expiry : null;
@@ -518,7 +525,8 @@ public function nodeSetDomain($domain, $id)
         $this->nodeCacheDomain($id);
         $node = $this->getNode($id);
         if (!empty($node['domain']) && !preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $node['domain'])) {
-            $hosts = "{$node['domain']}, {$node['naiveSubdomain']}.{$node['domain']}, {$node['anytlsSubdomain']}.{$node['domain']}";
+            $hosts = "{$node['domain']}, {$node['naiveSubdomain']}.{$node['domain']}, {$node['anytlsSubdomain']}.{$node['domain']}"
+                . ($this->nodeWebHost($node) !== '' ? ", " . $this->nodeWebHost($node) . " (Telegram Web Proxy)" : '');
             $notice = str_replace(['%ip%', '%hosts%'], [$node['ip'], $hosts], $this->i18n('node dns notice'));
             $this->send($this->input['chat'], $notice);
         }
@@ -1436,6 +1444,9 @@ public function nodeBootstrap($ip, $login, $authType, $secret)
         }
     }
 
+// Menu -> Nodes -> <нода> -> Telegram Proxy: то же, что у Бота, — блоки
+// MTProto и Web Proxy. Состояние — одним SSH-вызовом (nodeTgReport()), он же
+// обновляет WEB-часть в записи ноды.
 public function nodeMtprotoMenu($id)
     {
         $node = $this->getNode($id);
@@ -1443,39 +1454,200 @@ public function nodeMtprotoMenu($id)
             $this->nodeMenu($id);
             return;
         }
+        $report     = $this->nodeTgReport($id);
+        $node       = $this->getNode($id);
         $secret     = $node['mtprotosecret'] ?? '';
         $fakedomain = $node['mtprotodomain'] ?? 'yandex.ru';
-        $st         = trim((string) $this->nodeConsole($node['ip'], 'tgStatus')) === 'on' ? 'on' : 'off';
+        $st         = ($report['status'] ?? '') === 'on' ? 'on' : 'off';
+        $web        = $st == 'on' && !empty($node['tgWeb']);
+        $host       = $this->nodeWebHost($node);
 
-        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> MTProto";
-        $text[] = "status: $st";
-        $text[] = "fake domain: <code>$fakedomain</code>";
+        $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('telegram proxy');
+        $text[] = '';
+        $text[] = '<b>MTProto</b>';
+        $text[] = "Status: $st";
+        $text[] = "Fake domain: <code>$fakedomain</code>";
         if ($st == 'on' && !empty($secret)) {
-            $text[] = $this->nodeLinkMtproto($id);
+            $text[] = 'Link: ' . $this->nodeLinkMtproto($id);
         }
-        $data[] = [
+        $text[] = '';
+        $text[] = '<b>Web Proxy</b>';
+        $text[] = 'Status: ' . ($web ? 'on' : 'off');
+        if ($host !== '') {
+            $text[] = "Domain: <code>$host</code>";
+        }
+        if ($web) {
+            $text[] = 'Link: ' . $this->nodeLinkWebProxy($id);
+        }
+        $data = [
+            [['text' => '· MTProto ·', 'callback_data' => "/nodeMtproto $id"]],
             [
-                'text'          => $this->i18n('generateSecret'),
-                'callback_data' => "/nodeGenerateSecret $id",
+                ['text' => $this->i18n('generateSecret'), 'callback_data' => "/nodeGenerateSecret $id"],
+                ['text' => $this->i18n('setSecret'), 'callback_data' => "/nodeSetSecret $id"],
             ],
             [
-                'text'          => $this->i18n('setSecret'),
-                'callback_data' => "/nodeSetSecret $id",
+                ['text' => $this->i18n('changeFakeDomain'), 'callback_data' => "/nodeChangeTGDomain $id"],
+                ['text' => $this->i18n('show QR'), 'callback_data' => "/nodeQrMtproto $id"],
             ],
-        ];
-        $data[] = [
+            [['text' => '· ' . $this->i18n('web proxy') . ' ·', 'callback_data' => "/nodeMtproto $id"]],
             [
-                'text'          => $this->i18n('changeFakeDomain'),
-                'callback_data' => "/nodeChangeTGDomain $id",
+                ['text' => $this->i18n('generateSecret'), 'callback_data' => "/nodeWebGenerate $id"],
+                ['text' => $this->i18n('setSecret'), 'callback_data' => "/nodeWebSetSecret $id"],
             ],
-        ];
-        $data[] = [
-            [
-                'text'          => $this->i18n('back'),
-                'callback_data' => "/nodeMenu $id",
-            ],
+            [['text' => $this->i18n('show QR'), 'callback_data' => "/nodeQrWeb $id"]],
+            [['text' => $this->i18n('back'), 'callback_data' => "/nodeMenu $id"]],
         ];
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+// Состояние прокси ноды (tgReport() на ней). WEB-часть сохраняем в записи
+// ноды: по ней меню Бота и QR строят ссылки без SSH. null — нода не ответила
+// (или ещё не обновлена и такого метода у неё нет).
+public function nodeTgReport($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return null;
+        }
+        $r = $this->nodeConsole($node['ip'], 'tgReport');
+        if (!is_array($r)) {
+            return null;
+        }
+        $this->updatePacConf(function ($c) use ($id, $r) {
+            if (!empty($c['nodes'][$id])) {
+                $c['nodes'][$id]['tgWeb']        = !empty($r['tgWeb']);
+                $c['nodes'][$id]['tgWebSecret']  = $r['tgWebSecret'] ?? '';
+                $c['nodes'][$id]['webSubdomain'] = $r['webSubdomain'] ?? null;
+            }
+            return $c;
+        });
+        return $r;
+    }
+
+public function nodeWebHost(array $node)
+    {
+        return !empty($node['domain']) && !empty($node['webSubdomain'])
+            ? strtolower("{$node['webSubdomain']}.{$node['domain']}")
+            : '';
+    }
+
+// Порт в WEB-ссылке не указывается: клиент требует 443 — как в linkWebProxy().
+public function nodeLinkWebProxy($id)
+    {
+        $node = $this->getNode($id);
+        $host = !empty($node) ? $this->nodeWebHost($node) : '';
+        $s    = $node['tgWebSecret'] ?? '';
+        return !empty($node['tgWeb']) && $host !== '' && preg_match('~^[0-9a-f]{32}$~', $s)
+            ? "https://t.me/webproxy?server=$host&secret=dd$s"
+            : '';
+    }
+
+public function nodeWebGenerate($id)
+    {
+        $this->nodeWebApply($id, bin2hex(random_bytes(16)));
+    }
+
+public function nodeWebSetSecret($id)
+    {
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} enter key or 0 for stop web proxy",
+            $this->input['message_id'],
+            reply: 'enter key or 0 for stop web proxy',
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'nodeWebSecretSet',
+            'args'          => [$id],
+        ];
+    }
+
+public function nodeWebSecretSet($secret, $id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $secret = trim($secret);
+        if ($secret === '0') {
+            $this->nodeConsole($node['ip'], 'tgWebOff');
+            $this->nodeMtprotoMenu($id);
+            return;
+        }
+        if (!preg_match('~^(?:dd|ee)?([0-9a-f]{32})$~i', $secret, $m)) {
+            $this->update($this->input['chat'], $this->input['message_id'], 'wrong secret');
+            sleep(2);
+            $this->nodeMtprotoMenu($id);
+            return;
+        }
+        $this->nodeWebApply($id, strtolower($m[1]));
+    }
+
+// Включение WEB на ноде и смена его ключа: сама работа — tgWebApply() на ноде
+// (через console.php), отсюда — только сообщения: у ноды своего чата нет.
+public function nodeWebApply($id, $secret)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $report = $this->nodeTgReport($id);
+        $node   = $this->getNode($id);
+        $host   = $this->nodeWebHost($node);
+        if (!is_array($report)) {
+            $this->send($this->input['chat'], str_replace('%label%', $node['label'], $this->i18n('node web failed')));
+            $this->nodeMtprotoMenu($id);
+            return;
+        }
+        if (empty($report['tgWeb'])) {
+            // Отказ по условиям — сразу, без похода к certbot.
+            if (($report['webCheck'] ?? 'ok') !== 'ok') {
+                $this->send($this->input['chat'], $this->i18n($report['webCheck']));
+                $this->nodeMtprotoMenu($id);
+                return;
+            }
+            $this->send(
+                $this->input['chat'],
+                $host !== '' && !preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $node['domain'] ?? '')
+                    ? str_replace('%host%', $host, $this->i18n('web dns'))
+                    : $this->i18n('installing certificate')
+            );
+        }
+        $r = $this->nodeConsole($node['ip'], 'tgWebApply', $secret);
+        $this->nodeTgReport($id);
+        $host = $this->nodeWebHost($this->getNode($id)) ?: $host;
+        if ($r !== 'ok') {
+            $this->send(
+                $this->input['chat'],
+                is_string($r) && $r !== ''
+                    ? str_replace('%host%', $host, $this->i18n($r))
+                    : str_replace('%label%', $node['label'], $this->i18n('node web failed'))
+            );
+        }
+        $this->nodeMtprotoMenu($id);
+    }
+
+// QR — отдельным сообщением, как у Бота (qrMtproto()/qrWebProxy()).
+public function nodeQrMtproto($id)
+    {
+        $node = $this->getNode($id);
+        $link = $this->nodeLinkMtproto($id);
+        if ($link === '') {
+            $this->answer($this->input['callback_id'], 'MTProto: ' . $this->i18n('not configured'), true);
+            return;
+        }
+        $this->sendQr("mtproto {$node['label']}", $link, "{$node['label']}: <code>$link</code>");
+    }
+
+public function nodeQrWeb($id)
+    {
+        $node = $this->getNode($id);
+        $link = $this->nodeLinkWebProxy($id);
+        if ($link === '') {
+            $this->answer($this->input['callback_id'], $this->i18n('web proxy') . ': off', true);
+            return;
+        }
+        $this->sendQr("webproxy {$node['label']}", $link, "{$node['label']}: <code>$link</code>");
     }
 
 public function nodeGenerateSecret($id)
