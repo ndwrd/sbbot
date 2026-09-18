@@ -2,8 +2,8 @@
 
 trait BotMtprotoTrait
 {
-// Контейнер tg — Telemt (github.com/telemt/telemt): обычный MTProto (ee) и,
-// следующим шагом, WEB-прокси в одном процессе. sshd в образе нет (distroless),
+// Контейнер tg — Telemt (github.com/telemt/telemt): обычный MTProto (ee) и
+// WEB-прокси в одном процессе. sshd в образе нет (distroless),
 // поэтому управление — через Docker API, а конфиг целиком пишет бот:
 // tgWriteConfig() -> /config/telemt/config.toml, в контейнере это
 // /data/config.toml. Смонтирован каталог, а не файл: атомарную замену
@@ -315,7 +315,7 @@ public function applyMtproto($secret, $domain = '')
 
 // WEB-прокси: тот же Telemt, отдельный пользователь "web" с секретом в режиме
 // dd (ee WEB-клиенты не принимают). Отдельный — чтобы его можно было сменить,
-// не трогая обычный MTProto. Клиенты: Telegram Desktop 7.1+.
+// не трогая обычный MTProto.
 //
 // Управление — как у MTProto: «Сгенерировать ключ» и «Установить свой ключ»
 // включают WEB (если он выключен) с новым секретом, «0» вместо ключа —
@@ -498,7 +498,7 @@ public function mtproto()
             $text[] = 'Link: ' . $this->linkMtproto();
         }
         $text[] = '';
-        $text[] = '<b>Web Proxy</b> (Telegram Desktop 7.1+)';
+        $text[] = '<b>Web Proxy</b>';
         $text[] = 'Status: ' . ($web ? 'on' : 'off');
         if ($host !== '') {
             $text[] = "Domain: <code>$host</code>";
