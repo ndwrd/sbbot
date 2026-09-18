@@ -212,6 +212,13 @@ services:
             - ./config/telemt:/data
         working_dir: /data
         command: ["/data/config.toml"]
+        # RUST_LOG главнее log_level из конфига. На уровне info middle-proxy каждые
+        # несколько секунд пишет плановое обновление своих соединений — лог
+        # (и кнопка логов MTProto в боте, это последние 100 строк) тонул в нём.
+        # Глушим только эти два модуля; старт, клиентские события и все
+        # предупреждения остаются. Имена модулей сверять при подъёме версии.
+        environment:
+            RUST_LOG: "info,telemt::transport::middle_proxy::health=warn,telemt::transport::middle_proxy::handshake=warn"
         # Встроенный healthcheck образа смотрит в /app/config.toml, а наш конфиг
         # в /data. Проверка идёт через API Telemt (server.api в конфиге).
         healthcheck:
