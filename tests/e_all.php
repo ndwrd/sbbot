@@ -44,7 +44,7 @@ $names = [
     'логи MTProto: Бот и нода', 'порт MTProto ноды',
     'сервисы и порты: Бот и карточка ноды', 'перезапуск ноды: ожидание/без метки/таймаут/нажатие',
     'MTProto на Telemt: конфиг/миграция/применение', 'WEB-прокси: конфиг/nginx/вкл-выкл/отказы',
-    'WEB-прокси ноды', 'menu(domains) с доменом и без',
+    'WEB-прокси ноды', 'статус Warp: раз в минуту, две неудачи', 'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -284,6 +284,9 @@ class TestBot extends Bot
 
     // Ответы ноды для сценариев: fn($method, $args); null — как без связи.
     public $console = null;
+    // Ответ Cloudflare для статуса Warp; null — как без связи.
+    public $warp = null;
+    public function warpStatus() { return $this->warp ?? parent::warpStatus(); }
     public function nodeConsole($ip, $method, ...$args) {
         return $this->console ? ($this->console)($method, $args) : parent::nodeConsole($ip, $method, ...$args);
     }
@@ -660,6 +663,35 @@ key = \"" . str_repeat("c", 32) . "\"
         $b->nodeWebSecretSet('bad', $id);
         $b->nodeQrWeb($id);
         $b->console = null;
+    })(),
+    // Статус Warp: раз в минуту, красный только после двух неудач подряд,
+    // warp=plus — рабочий. Ответ Cloudflare — через $b->warp (подмена warpStatus()).
+    fn() => (function () use ($b, $TMP) {
+        $chk  = fn ($ok, $what) => $ok || trigger_error("Warp: $what", E_USER_WARNING);
+        $file = "$TMP/config/menu_status.json";
+        $step = function ($answer, $old = true) use ($b, $file) {
+            $prev = json_decode(@file_get_contents($file) ?: '', true) ?: [];
+            if ($old && isset($prev['warpTime'])) {
+                $prev['warpTime'] -= 61;
+            }
+            file_put_contents($file, json_encode($prev));
+            $b->warp = $answer;
+            $r = $b->warpMenuStatus();
+            file_put_contents($file, json_encode($r + $prev));
+            return $r;
+        };
+        @unlink($file);
+        $chk($step('on')['warp'] === true, "on не зелёный");
+        $chk($step('off', false)['warp'] === true, "проверка чаще раза в минуту");
+        $r = $step('off');
+        $chk($r['warp'] === true && $r['warpFails'] === 1, "одна неудача уже красная");
+        $r = $step('off');
+        $chk($r['warp'] === false && $r['warpFails'] === 2, "две неудачи подряд не красные");
+        $chk($step('plus')['warp'] === true, "warp=plus не зелёный");
+        @unlink($file);
+        $chk($step('off')['warp'] === false, "без прошлого статуса неудача не красная");
+        $b->warp = null;
+        @unlink($file);
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.

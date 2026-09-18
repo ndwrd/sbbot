@@ -89,19 +89,38 @@ public function addWarpPlus($key)
 
 public function warpStatus()
     {
-        // На весь запрос раньше давалась одна секунда, а он включает TLS с
-        // Cloudflare через сам туннель WARP: с удалённой ноды это дольше, и
-        // рабочий Warp показывался выключенным. Если wp не запущен, отказ
-        // приходит сразу, так что 5 с тратятся, только когда туннель медленный.
-        // Зовётся из cron (collectMenuStatus()), меню ждать не заставляет.
-        // --connect-timeout сюда не годится: в curl он ограничивает всю фазу
-        // соединения, включая SOCKS и TLS через туннель, — то есть ту же
-        // медленную часть.
-        $st = $this->ssh('curl -m 5 -x socks5://wp:1080 https://cloudflare.com/cdn-cgi/trace', 'sbx');
+        // Запрос идёт через сам туннель WARP до Cloudflare, и на ноде с потерями
+        // по пути TLS через туннель занимает от долей секунды до 9 с (замер на
+        // BG: TCP переотправляет потерянные пакеты с растущей паузой). Отсюда
+        // 10 с. Если wp не запущен, отказ приходит сразу — ждать приходится,
+        // только когда туннель медленный. --connect-timeout сюда не годится: в
+        // curl он ограничивает всю фазу соединения, включая SOCKS и TLS через
+        // туннель, — то есть ту же медленную часть.
+        $st = $this->ssh('curl -m 10 -x socks5://wp:1080 https://cloudflare.com/cdn-cgi/trace', 'sbx');
         // Ответа может не быть вовсе (контейнер wp не поднят, нет сети) — тогда
         // preg_match не заполнит $m, и это штатное "выключено", а не ошибка.
         preg_match('~warp=(\w+)~', $st, $m);
         return trim($m[1] ?? '') ?: 'off';
+    }
+
+// Warp для блока статуса. Проверка дорогая (см. warpStatus()), поэтому раз в
+// минуту, а не на каждом проходе cron (раз в 10 с), и красный — только после
+// двух неудач подряд: одна медленная попытка статус не меняет. Состояние между
+// проходами — в том же menu_status.json, так что переживает и перезапуск cron.
+// Рабочими считаются и on, и plus (WARP+).
+public function warpMenuStatus()
+    {
+        $prev = json_decode(@file_get_contents('/config/menu_status.json') ?: '', true) ?: [];
+        if (isset($prev['warp']) && time() - (int) ($prev['warpTime'] ?? 0) < 60) {
+            return array_intersect_key($prev, ['warp' => 1, 'warpFails' => 1, 'warpTime' => 1]);
+        }
+        $ok    = in_array($this->warpStatus(), ['on', 'plus'], true);
+        $fails = $ok ? 0 : (int) ($prev['warpFails'] ?? 0) + 1;
+        return [
+            'warp'      => $ok || (!empty($prev['warp']) && $fails < 2),
+            'warpFails' => $fails,
+            'warpTime'  => time(),
+        ];
     }
 
 public function offWarp()

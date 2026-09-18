@@ -791,9 +791,8 @@ public function collectMenuStatus()
             'time'    => time(),
             'singbox' => (bool) $this->ssh('pgrep sing-box', 'sbx'),
             'mtproto' => $this->tgStatus() === 'on',
-            'warp'    => $this->warpStatus() == 'on',
             'dnstt'   => !empty($this->getPacConf()['dnsttUsed']) && (bool) $this->ssh('pgrep dnstt-server', 'dnstt'),
-        ];
+        ] + $this->warpMenuStatus();
     }
 
 // Блок «сервис — порт» главного меню. Один на Бота (menu()) и карточку ноды
