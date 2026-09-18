@@ -70,7 +70,20 @@ public function ensureProtocolSubdomains(array $conf)
         // буквальное имя протокола в SNI/DNS сразу выдаёт censor'у, что тут за сервис.
         $conf['naiveSubdomain']  = ($conf['naiveSubdomain']  ?? null) ?: bin2hex(random_bytes(4));
         $conf['anytlsSubdomain'] = ($conf['anytlsSubdomain'] ?? null) ?: bin2hex(random_bytes(4));
+        $conf['webSubdomain']    = ($conf['webSubdomain']    ?? null) ?: bin2hex(random_bytes(4));
         return $conf;
+    }
+
+// Имя WEB-прокси: случайный поддомен основного домена, как у naive/anytls, —
+// сертификат и SNI-маршрут для таких имён уже автоматизированы (в up он уходит
+// по default other в ng). Telemt требует канонический lowercase ACE, а домен у
+// нас и так хранится в punycode (addDomain()).
+public function tgWebHost(?array $conf = null)
+    {
+        $conf ??= $this->getPacConf();
+        return !empty($conf['domain']) && !empty($conf['webSubdomain'])
+            ? strtolower("{$conf['webSubdomain']}.{$conf['domain']}")
+            : '';
     }
 
 public function sslip()
@@ -136,6 +149,10 @@ public function deleteSSL($notmenu = false)
 public function setSSL($name)
     {
         $conf = $this->getPacConf();
+        // Неудачный certbot выходит из switch через break раньше, чем $bundle
+        // присваивается, а ниже его читает preg_match — каждый несостоявшийся
+        // выпуск оставлял warning в php_error.
+        $bundle = '';
         switch ($name) {
             case 'letsencrypt':
                 $out[] = 'Install certificate:';
@@ -160,6 +177,10 @@ public function setSSL($name)
                     . ' -d ' . escapeshellarg($conf['domain'])
                     . ' -d ' . escapeshellarg("{$conf['naiveSubdomain']}.{$conf['domain']}")
                     . ' -d ' . escapeshellarg("{$conf['anytlsSubdomain']}.{$conf['domain']}")
+                    // WEB-имя — только когда WEB включён: для своего домена ему
+                    // нужна отдельная A-запись, и без неё безусловное имя в
+                    // списке ломало бы выпуск и продление всего сертификата.
+                    . (!empty($conf['tgWeb']) && $this->tgWebHost($conf) !== '' ? ' -d ' . escapeshellarg($this->tgWebHost($conf)) : '')
                     . ' --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1';
                 exec($cmd, $out, $code);
                 @unlink('/certs/.want_port80');
@@ -267,7 +288,14 @@ public function cloakNginx()
         }
         if (!empty($conf['domain']) && !empty($conf['letsencrypt'])) {
             $template = preg_replace('/#~([^\n]+)?/', "#~{$conf['letsencrypt']}", $template);
-            foreach (['domain', 'naive', 'anytls', 'hostcheck'] as $tag) {
+            // WEB-прокси — только когда он включён в меню MTProto (tgWeb): без
+            // этого WEB-имени нет и в сертификате.
+            $webHost = !empty($conf['tgWeb']) ? $this->tgWebHost($conf) : '';
+            $tags    = ['domain', 'naive', 'anytls', 'hostcheck'];
+            if ($webHost !== '') {
+                $tags[] = 'web';
+            }
+            foreach ($tags as $tag) {
                 preg_match_all("~#-$tag.+?#-$tag~s", $template, $m);
                 foreach ($m[0] as $v) {
                     $template = preg_replace("~#-$tag.+?#-$tag~s", $this->uncomment($v, $tag), $template, 1);
@@ -277,9 +305,11 @@ public function cloakNginx()
             // тут делать нечего, кроме как прийти по нашим домену/поддоменам;
             // certbot валидирует именно их же (см. setSSL()), так что список
             // разрешённых Host'ов совпадает с тем, что покрывает сертификат.
+            // HOSTCHECK_WEB без WEB — просто ещё раз основной домен: WEB-имени
+            // тогда нет в сертификате, и пускать его на 80-й незачем.
             $template = str_replace(
-                ['HOSTCHECK_DOMAIN', 'HOSTCHECK_NAIVE', 'HOSTCHECK_ANYTLS'],
-                [$conf['domain'], "{$conf['naiveSubdomain']}.{$conf['domain']}", "{$conf['anytlsSubdomain']}.{$conf['domain']}"],
+                ['HOSTCHECK_DOMAIN', 'HOSTCHECK_NAIVE', 'HOSTCHECK_ANYTLS', 'HOSTCHECK_WEB', 'WEBHOST'],
+                [$conf['domain'], "{$conf['naiveSubdomain']}.{$conf['domain']}", "{$conf['anytlsSubdomain']}.{$conf['domain']}", $webHost ?: $conf['domain'], $webHost ?: 'web.invalid'],
                 $template
             );
         }

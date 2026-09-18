@@ -365,6 +365,26 @@ $i = [
         'en' => 'ERROR: a node with this IP already exists: %label%',
         'ru' => 'ERROR: нода с этим IP уже заведена: %label%',
     ],
+    'web secret' => [
+        'en' => 'New WEB secret',
+        'ru' => 'Новый WEB-секрет',
+    ],
+    'web needs letsencrypt' => [
+        'en' => 'WEB proxy needs a domain with a Let\'s Encrypt certificate (Settings -> Domains): the client rejects self-signed ones.',
+        'ru' => 'Для WEB-прокси нужен домен с сертификатом Let\'s Encrypt (Настройки -> Домены): самоподписанный клиент не примет.',
+    ],
+    'web needs public ip' => [
+        'en' => 'Could not determine the public IP of this server — it is required for the WEB proxy.',
+        'ru' => 'Не удалось определить публичный IP сервера — без него WEB-прокси не настроить.',
+    ],
+    'web dns' => [
+        'en' => 'Issuing a certificate for %host%. It needs a DNS A record pointing to this server\'s IP — without it the certificate will not be issued.',
+        'ru' => 'Выпускаю сертификат для %host%. Нужна DNS A-запись этого имени на IP сервера — без неё сертификат не выпустится.',
+    ],
+    'web cert failed' => [
+        'en' => 'Could not issue a certificate for %host%, the WEB proxy stays off. Check the DNS A record and try again.',
+        'ru' => 'Не удалось выпустить сертификат для %host%, WEB-прокси не включён. Проверьте DNS A-запись и попробуйте снова.',
+    ],
     'node restarted' => [
         'en' => 'node restarted',
         'ru' => 'нода перезапущена',

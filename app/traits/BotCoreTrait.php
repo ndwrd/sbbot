@@ -218,6 +218,15 @@ public function action()
             case preg_match('~^/tgLogs$~', $this->input['callback'], $m):
                 $this->tgLogs();
                 break;
+            case preg_match('~^/tgWebToggle$~', $this->input['callback'], $m):
+                $this->tgWebToggle();
+                break;
+            case preg_match('~^/tgWebNewSecret$~', $this->input['callback'], $m):
+                $this->tgWebNewSecret();
+                break;
+            case preg_match('~^/qrWebProxy$~', $this->input['callback'], $m):
+                $this->qrWebProxy();
+                break;
             case preg_match('~^/mtproto$~', $this->input['callback'], $m):
                 $this->mtproto();
                 break;

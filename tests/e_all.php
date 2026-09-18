@@ -43,7 +43,7 @@ $names = [
     'logs() и ports() (пустой override)', 'restart()',
     'логи MTProto: Бот и нода', 'порт MTProto ноды',
     'сервисы и порты: Бот и карточка ноды', 'перезапуск ноды: ожидание/без метки/таймаут/нажатие',
-    'MTProto на Telemt: конфиг/миграция/применение',
+    'MTProto на Telemt: конфиг/миграция/применение', 'WEB-прокси: конфиг/nginx/вкл-выкл/отказы',
     'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
@@ -198,6 +198,7 @@ if (!function_exists('yaml_parse_file')) { function yaml_parse_file($f, ...$a) {
 if (!function_exists('yaml_parse'))      { function yaml_parse($s, ...$a) { return []; } }
 if (!class_exists('CURLStringFile')) { class CURLStringFile { public function __construct(public $data = '', public $postname = '', public $mime = '') {} } }
 if (!class_exists('CURLFile'))       { class CURLFile       { public function __construct(public $name = '', public $mime = '', public $postname = '') {} } }
+if (!function_exists('curl_file_create')) { function curl_file_create($f, $m = '', $n = '') { return new CURLFile($f, $m, $n); } }
 if (!function_exists('mb_strlen'))   { function mb_strlen($s, $e = null) { return preg_match_all('/./us', (string) $s); } }
 if (!function_exists('mb_str_pad'))  { function mb_str_pad($s, $l, $p = ' ', $t = STR_PAD_RIGHT, $e = null) { return str_pad($s, $l + strlen($s) - mb_strlen($s), $p, $t); } }
 // Главное меню разбирает сертификат (expireCert()/domainsCert()).
@@ -264,6 +265,7 @@ class TestBot extends Bot
     public function update($chat, $message_id, $text, $button = false, $reply = false, $mode = 'HTML') { return ['result' => ['message_id' => 1]]; }
     public function answer($callback_id, $textNotify = false, $notify = false) { return true; }
     public function sendPhoto($chat, $id_url_cFile, $caption = false, $to = false) { return ['result' => ['message_id' => 1]]; }
+    public function sendQr($name, $code, $title = false) { return true; }
     public function sendFile($chat, $id_url_cFile, $caption = false, $to = false) { return ['result' => ['message_id' => 1]]; }
     public function sendDraft($chat, $draft_id, $text = '', $mode = 'HTML') { return true; }
     public function upload($name, $code, $chat = false) { return ['result' => ['message_id' => 1]]; }
@@ -550,6 +552,58 @@ key = \"" . str_repeat("c", 32) . "\"
         $b->ip = "8.8.8.8";
         $b->tgWriteConfig();
         $chk(str_contains((string) @file_get_contents("$TMP/config/telemt/config.toml"), "middle_proxy_nat_ip = \"8.8.8.8\""), "публичного IP нет в конфиге");
+    })(),
+    // WEB-прокси: конфиг Telemt с WEB-частью, nginx с раскомментированным
+    // WEB-блоком и WEB-именем в проверке Host, ссылка, выключение; отказы без
+    // домена и с внутренним IP; откат, когда сертификат не выпустился (certbot
+    // на стенде не запускается). Проверки — через trigger_error().
+    fn() => (function () use ($b, $TMP) {
+        $chk = fn ($ok, $what) => $ok || trigger_error("WEB: $what", E_USER_WARNING);
+        // Маркеры блоков шаблона nginx: cloakNginx() ищет пару #-тег…#-тег, и
+        // лишнее упоминание (хоть в комментарии) раскомментирует не тот кусок.
+        foreach (["domain", "naive", "anytls", "hostcheck", "web"] as $tag) {
+            $chk(substr_count(file_get_contents("$TMP/config/nginx_default.conf"), "#-$tag") === 2, "маркер #-$tag встречается не дважды");
+        }
+        $b->ip = "8.8.8.8";
+        $b->input["callback_id"] = "cb1";
+        $p = $b->getPacConf();
+        if (empty($p["domain"])) {
+            $b->tgWebToggle();                                   // нет домена — отказ
+            $chk(empty($b->getPacConf()["tgWeb"]), "включился без домена");
+            return;
+        }
+        $p = $b->ensureProtocolSubdomains($p);
+        $p["tgWeb"] = true;
+        $p["tgWebSecret"] = str_repeat("f", 32);
+        $b->setPacConf($p);
+        $host = $b->tgWebHost();
+        $chk($host === strtolower("{$p["webSubdomain"]}.{$p["domain"]}"), "имя WEB");
+        $b->tgWriteConfig();
+        $toml = (string) @file_get_contents("$TMP/config/telemt/config.toml");
+        foreach (["transport = \"web\"", "web_trusted_proxy_cidrs = [\"10.10.0.2/32\"]", "[web]", "enabled = true", "host = \"$host\"", "public_addr = \"8.8.8.8:443\"", "upstream = \"http://10.10.0.2:8088\"", "user = \"web\"", "secret_mode = \"dd\"", "web = \"" . str_repeat("f", 32) . "\""] as $line) {
+            $chk(str_contains($toml, $line), "в конфиге Telemt нет $line");
+        }
+        $chk(strpos($toml, "[web]") < strpos($toml, "[access.users]"), "секция [web] после [access.users]");
+        $chk($b->linkWebProxy() === "tg://webproxy?server=$host&secret=dd" . str_repeat("f", 32), "ссылка WEB");
+        $b->cloakNginx();
+        $ng = (string) @file_get_contents("$TMP/config/nginx.conf");
+        $chk(preg_match("~^\s+server_name " . preg_quote($host, "~") . ";~m", $ng), "WEB-блок nginx не включён");
+        $chk(str_contains($ng, "|$host)"), "WEB-имени нет в проверке Host");
+        $chk(str_contains($ng, "listen 10.10.0.2:8088;"), "нет внутреннего сайта-обманки");
+        $b->mtproto();
+        $b->tgWebNewSecret();
+        $chk($b->tgWebSecret() !== str_repeat("f", 32), "WEB-секрет не сменился");
+        $b->qrWebProxy();
+        $b->tgWebToggle();                                       // выключение
+        $chk(empty($b->getPacConf()["tgWeb"]), "WEB не выключился");
+        $chk(!str_contains((string) @file_get_contents("$TMP/config/telemt/config.toml"), "[web]"), "[web] остался после выключения");
+        $chk(!preg_match("~^\s+server_name " . preg_quote($host, "~") . ";~m", (string) @file_get_contents("$TMP/config/nginx.conf")), "WEB-блок nginx остался включённым");
+        $b->ip = "10.0.0.5";
+        $b->tgWebToggle();                                       // внутренний IP — отказ
+        $chk(empty($b->getPacConf()["tgWeb"]), "включился с внутренним IP");
+        $b->ip = "8.8.8.8";
+        $b->tgWebToggle();                                       // certbot не отработал — откат
+        $chk(empty($b->getPacConf()["tgWeb"]), "нет отката при невыпущенном сертификате");
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.

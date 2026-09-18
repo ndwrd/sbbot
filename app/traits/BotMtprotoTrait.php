@@ -151,6 +151,48 @@ public function tgWriteConfig()
         $ip    = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE) ? $this->ip : '';
         $adtag = strtolower(trim((string) @file_get_contents('/config/mtprotoadtag')));
         $q     = fn ($s) => '"' . addcslashes((string) $s, "\\\"") . '"';
+        // WEB-прокси — только когда он включён и собран целиком: Telemt с
+        // web.enabled требует listener, vhost и профиль, а vhost — публичный
+        // IP (public_addr участвует во внутреннем маршруте relay).
+        $pac     = $this->getPacConf();
+        $webHost = $this->tgWebHost($pac);
+        $webKey  = $this->tgWebSecret();
+        $web     = !empty($pac['tgWeb']) && $webHost !== '' && $ip !== '' && $webKey !== '';
+        $webLines = !$web ? [] : [
+            // Не опубликован наружу: сюда ходит только ng, он же снимает TLS.
+            '[[server.listeners]]',
+            'ip = "0.0.0.0"',
+            'port = 18080',
+            'transport = "web"',
+            'proxy_protocol = false',
+            'reuse_allow = false',
+            'web_client_ip_source = "x_forwarded_for"',
+            'web_trusted_proxy_cidrs = ["10.10.0.2/32"]',
+            '',
+            // Автовыбор транспорта: WebSocket-варианты и HTTPS-lanes по очереди,
+            // обычный HTTPS (long polling) — последний откат. Если провайдер
+            // режет WebSocket, клиент останется на HTTPS.
+            '[web]',
+            'enabled = true',
+            'carrier = "https"',
+            'carriers = ["websocket-lanes", "websocket", "https-lanes"]',
+            '',
+            '[[web.vhosts]]',
+            'host = ' . $q($webHost),
+            'public_addr = ' . $q("$ip:443"),
+            '',
+            // Всё неопознанное — на тот же сайт-обманку, что и основной домен
+            // (внутренний server на 8088 в nginx_default.conf).
+            '[web.vhosts.decoy]',
+            'mode = "http_upstream"',
+            'upstream = "http://10.10.0.2:8088"',
+            '',
+            // ee WEB-клиенты не принимают, поэтому свой пользователь в режиме dd.
+            '[[web.vhosts.profiles]]',
+            'user = "web"',
+            'secret_mode = "dd"',
+            '',
+        ];
         $lines = [
             '# Генерирует бот (BotMtprotoTrait::tgWriteConfig()) при старте и при',
             '# смене настроек MTProto — правки руками будут перезаписаны.',
@@ -184,6 +226,7 @@ public function tgWriteConfig()
             '[[server.listeners]]',
             'ip = "0.0.0.0"',
             '',
+            ...$webLines,
             '[censorship]',
             'tls_domain = ' . $q($this->tgDomain()),
             'mask = true',
@@ -191,6 +234,7 @@ public function tgWriteConfig()
             '',
             '[access.users]',
             'sbbot = ' . $q($this->tgSecret()),
+            $web ? 'web = ' . $q($webKey) : null,
         ];
         $toml = implode("\n", array_filter($lines, fn ($l) => $l !== null)) . "\n";
         $old  = @file_get_contents($path);
@@ -269,6 +313,100 @@ public function applyMtproto($secret, $domain = '')
         return 'ok';
     }
 
+// WEB-прокси: тот же Telemt, отдельный пользователь "web" с секретом в режиме
+// dd (ee WEB-клиенты не принимают). Отдельный — чтобы его можно было сменить,
+// не трогая обычный MTProto. Клиенты: Telegram Desktop 7.1+.
+public function tgWebSecret()
+    {
+        $s = strtolower(trim((string) ($this->getPacConf()['tgWebSecret'] ?? '')));
+        return preg_match('~^[0-9a-f]{32}$~', $s) ? $s : '';
+    }
+
+// Порт в WEB-ссылке не указывается: клиент требует 443.
+public function linkWebProxy()
+    {
+        $host = $this->tgWebHost();
+        $s    = $this->tgWebSecret();
+        return $host !== '' && $s !== '' ? "tg://webproxy?server=$host&secret=dd$s" : '';
+    }
+
+public function tgWebToggle()
+    {
+        $pac = $this->getPacConf();
+        if (!empty($pac['tgWeb'])) {
+            $this->updatePacConf(function ($c) {
+                unset($c['tgWeb']);
+                return $c;
+            });
+            $this->cloakNginx();
+            $this->restartTG();
+            $this->mtproto();
+            return;
+        }
+        // WebView клиента примет только сертификат публичного CA —
+        // самоподписанный мост не загрузит.
+        if (empty($pac['domain']) || ($pac['letsencrypt'] ?? '') !== 'letsencrypt') {
+            $this->answer($this->input['callback_id'], $this->i18n('web needs letsencrypt'), true);
+            return;
+        }
+        if (!filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE)) {
+            $this->answer($this->input['callback_id'], $this->i18n('web needs public ip'), true);
+            return;
+        }
+        $this->updatePacConf(function ($c) {
+            $c          = $this->ensureProtocolSubdomains($c);
+            $c['tgWeb'] = true;
+            if (!preg_match('~^[0-9a-f]{32}$~', $c['tgWebSecret'] ?? '')) {
+                $c['tgWebSecret'] = bin2hex(random_bytes(16));
+            }
+            return $c;
+        });
+        $host = $this->tgWebHost();
+        // Сначала nginx: проверка Host на 80-м порту должна пропускать WEB-имя
+        // до того, как certbot пойдёт его подтверждать (HTTP-01).
+        $this->cloakNginx();
+        if (!in_array($host, $this->domainsCert() ?: [], true)) {
+            if (!preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $pac['domain'])) {
+                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web dns')));
+            }
+            $this->setSSL('letsencrypt');
+            if (!in_array($host, $this->domainsCert() ?: [], true)) {
+                // Сертификат не выпустился (чаще всего нет A-записи для имени) —
+                // откатываемся, чтобы не держать включённым то, что не работает.
+                $this->updatePacConf(function ($c) {
+                    unset($c['tgWeb']);
+                    return $c;
+                });
+                $this->cloakNginx();
+                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web cert failed')));
+                $this->mtproto();
+                return;
+            }
+        }
+        $this->restartTG();
+        $this->mtproto();
+    }
+
+public function tgWebNewSecret()
+    {
+        $this->updatePacConf(function ($c) {
+            $c['tgWebSecret'] = bin2hex(random_bytes(16));
+            return $c;
+        });
+        // Секрет пользователя Telemt подхватывает на лету — соединения обычного
+        // MTProto это не рвёт.
+        $this->restartTG();
+        $this->mtproto();
+    }
+
+public function qrWebProxy()
+    {
+        $link = $this->linkWebProxy();
+        if ($link !== '') {
+            $this->sendQr('webproxy', $link, "<code>$link</code>");
+        }
+    }
+
 public function linkMtproto()
     {
         $s  = $this->tgSecret();
@@ -291,6 +429,12 @@ public function mtproto()
         $text[] = "fake domain: <code>$d</code>";
         if ($st == 'on') {
             $text[] = $this->linkMtproto();
+        }
+        $web    = !empty($this->getPacConf()['tgWeb']);
+        $text[] = '';
+        $text[] = '<b>WEB</b> (Telegram Desktop 7.1+): ' . $this->i18n($web && $st == 'on' ? 'on' : 'off');
+        if ($web && $st == 'on') {
+            $text[] = '<code>' . $this->linkWebProxy() . '</code>';
         }
         foreach ($this->getNodes() as $id => $node) {
             $text[] = '';
@@ -318,6 +462,23 @@ public function mtproto()
                 'callback_data' => "/qrMtproto",
             ],
         ];
+        $webRow = [
+            [
+                'text'          => $this->i18n($web ? 'on' : 'off') . ' WEB',
+                'callback_data' => "/tgWebToggle",
+            ],
+        ];
+        if ($web) {
+            $webRow[] = [
+                'text'          => 'QR WEB',
+                'callback_data' => "/qrWebProxy",
+            ];
+            $webRow[] = [
+                'text'          => $this->i18n('web secret'),
+                'callback_data' => "/tgWebNewSecret",
+            ];
+        }
+        $data[] = $webRow;
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
