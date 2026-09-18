@@ -2,24 +2,23 @@
 
 trait BotMtprotoTrait
 {
-// Контейнер tg — готовый образ teleproxy (наш прежний форк MTProxy от
-// GetPageSpeed заархивирован, разработка переехала туда). Управление им
-// отличается от остальных контейнеров: sshd внутри нет, поэтому вместо
-// ssh+pkill используется Docker API, а настройки живут в двух местах:
+// Контейнер tg — Telemt (github.com/telemt/telemt): обычный MTProto (ee) и,
+// следующим шагом, WEB-прокси в одном процессе. sshd в образе нет (distroless),
+// поэтому управление — через Docker API, а конфиг целиком пишет бот:
+// tgWriteConfig() -> /config/telemt/config.toml, в контейнере это
+// /data/config.toml. Смонтирован каталог, а не файл: атомарную замену
+// одиночного bind-mount docker внутри не показывает.
 //
-//   override.env (/docker/env) — источник правды. start.sh образа при КАЖДОМ
-//                                старте заново генерирует config.toml из
-//                                переменных окружения, так что запись только
-//                                в config.toml не пережила бы пересоздание
-//                                контейнера;
-//   data/config.toml + SIGHUP  — мгновенное применение без разрыва соединений
-//                                (образ это прямо поддерживает).
+// Применение. Telemt сам следит за каталогом конфига (inotify плюс опрос раз
+// в 3 с) и на лету подхватывает секрет пользователя и ad_tag — без разрыва
+// соединений. Остальное (fake-домен, порт, middle-proxy) читается только при
+// старте, поэтому такая правка перезапускает контейнер — короткий обрыв.
 //
 // Сами секрет и домен по-прежнему лежат в /config/mtprotosecret и
 // /config/mtprotodomain: на них завязаны меню, бэкап и восстановление.
 public function tgConfigFile()
     {
-        return '/config/teleproxy/config.toml';
+        return '/config/telemt/config.toml';
     }
 
 public function generateSecret()
@@ -50,11 +49,22 @@ public function secretSet($secret)
         // сюда, а не сырой 32-символьный ключ, он не пройдёт проверку и
         // mtproto молча не поднимется. Достаём чистый ключ сами.
         $secret = trim($secret);
-        if (preg_match('~^(?:dd|ee)?([0-9a-f]{32})~i', $secret, $m)) {
-            $secret = strtolower($m[1]);
+        // «0» по подсказке в setSecret() — остановить прокси; секрет не трогаем,
+        // чтобы следующий «Сгенерировать»/«Установить» поднял его заново.
+        if ($secret === '0') {
+            $this->tgStop();
+            $this->mtproto();
+            return;
         }
-        file_put_contents('/config/mtprotosecret', $secret);
+        if (!preg_match('~^(?:dd|ee)?([0-9a-f]{32})~i', $secret, $m)) {
+            $this->update($this->input['chat'], $this->input['message_id'], 'wrong secret');
+            sleep(2);
+            $this->mtproto();
+            return;
+        }
+        file_put_contents('/config/mtprotosecret', strtolower($m[1]));
         $this->restartTG();
+        $this->tgStart();
         $this->mtproto();
     }
 
@@ -81,22 +91,22 @@ public function setTelegramAdtag($adtag)
         $this->mtproto();
     }
 
-// Секрет, с которым реально работает прокси. Обычно это наш файл, но на свежей
-// установке его ещё нет, а контейнер уже поднялся и сгенерировал себе секрет
-// сам — тогда забираем его из config.toml и сохраняем у себя, иначе ссылка из
-// меню не совпала бы с тем, что принимает прокси.
+// Секрет прокси. Обычно это наш файл. Если его нет — берём тот, с которым
+// работал прежний прокси: teleproxy на свежей установке генерировал секрет сам,
+// и ссылки клиентов выданы именно с ним. Нет и его — создаём новый: Telemt, в
+// отличие от teleproxy, без пользователя в конфиге не стартует.
 public function tgSecret()
     {
         $secret = trim(@file_get_contents('/config/mtprotosecret') ?: '');
         if (preg_match('~^[0-9a-f]{32}$~i', $secret)) {
             return strtolower($secret);
         }
-        $toml = @file_get_contents($this->tgConfigFile()) ?: '';
-        if (preg_match('~^\s*key\s*=\s*"([0-9a-f]{32})"~mi', $toml, $m)) {
-            file_put_contents('/config/mtprotosecret', strtolower($m[1]));
-            return strtolower($m[1]);
-        }
-        return '';
+        $old    = @file_get_contents('/config/teleproxy/config.toml') ?: '';
+        $secret = preg_match('~^\s*key\s*=\s*"([0-9a-f]{32})"~mi', $old, $m)
+            ? strtolower($m[1])
+            : bin2hex(random_bytes(16));
+        file_put_contents('/config/mtprotosecret', $secret);
+        return $secret;
     }
 
 public function tgDomain()
@@ -104,78 +114,115 @@ public function tgDomain()
         return trim(@file_get_contents('/config/mtprotodomain') ?: '') ?: 'yandex.ru';
     }
 
-// Статус берём из состояния контейнера, а не из pgrep: в образе нет sshd, а
-// healthcheck там дёргает /stats самого прокси — это честнее, чем наличие
-// процесса.
+// Статус берём из состояния контейнера, а не из pgrep: в образе нет ни sshd,
+// ни shell, а healthcheck (см. docker-compose.yml) спрашивает сам Telemt через
+// его API — это честнее, чем наличие процесса.
 public function tgStatus()
     {
         $state = $this->containerState('tg');
         return !empty($state['running']) && ($state['health'] ?? 'healthy') !== 'unhealthy' ? 'on' : 'off';
     }
 
-// Ключи в override.env. Файл читают все контейнеры как env_file, поэтому имена
-// с префиксом TG_, а в compose они отображаются в SECRET/EE_DOMAIN/PROXY_TAG.
-public function tgEnvSet(array $vars)
+// Собрать конфиг Telemt из текущих настроек и записать, если он изменился.
+// Возвращает null — ничего не поменялось, 'hot' — поменялись только секрет или
+// ad_tag (Telemt подхватит их сам, без разрыва соединений), 'restart' — всё
+// остальное, нужен перезапуск контейнера.
+//
+// Зовётся и из init.php — ДО того, как php станет healthy: контейнер tg ждёт
+// именно этого (depends_on), а без готового файла Telemt не стартует. teleproxy
+// собирал конфиг сам из переменных окружения, у Telemt такого нет.
+public function tgWriteConfig()
     {
-        $path  = '/docker/env';
-        $lines = preg_split('~\R~', (string) @file_get_contents($path)) ?: [];
-        foreach ($vars as $k => $v) {
-            $found = false;
-            foreach ($lines as $i => $line) {
-                if (preg_match('~^\s*' . preg_quote($k, '~') . '\s*=~', $line)) {
-                    $lines[$i] = "$k=$v";
-                    $found     = true;
-                }
-            }
-            if (!$found) {
-                $lines[] = "$k=$v";
-            }
+        $path = $this->tgConfigFile();
+        $dir  = dirname($path);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
         }
-        $lines = array_values(array_filter($lines, fn ($l) => trim($l) !== ''));
-        return file_put_contents($path, implode("\n", $lines) . "\n") !== false;
+        // Образ Telemt работает от nonroot и пишет в этот же каталог своё
+        // состояние (кэш TLS-эмуляции, proxy-secret, cache/), а создаёт каталог
+        // php от root — открываем на запись. Снаружи он недоступен: лежит внутри
+        // каталога бота.
+        chmod($dir, 0777);
+        $ip    = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $this->ip : '';
+        $adtag = strtolower(trim((string) @file_get_contents('/config/mtprotoadtag')));
+        $q     = fn ($s) => '"' . addcslashes((string) $s, "\\\"") . '"';
+        $lines = [
+            '# Генерирует бот (BotMtprotoTrait::tgWriteConfig()) при старте и при',
+            '# смене настроек MTProto — правки руками будут перезаписаны.',
+            '[general]',
+            // Middle-proxy обязателен: без него у аккаунтов без Premium не грузятся
+            // фото, видео и истории. За docker-NAT ему нужен внешний адрес.
+            'use_middle_proxy = true',
+            $ip !== '' ? 'middle_proxy_nat_ip = ' . $q($ip) : null,
+            'log_level = "normal"',
+            preg_match('~^[0-9a-f]{32}$~', $adtag) ? 'ad_tag = ' . $q($adtag) : null,
+            '',
+            '[general.modes]',
+            'classic = false',
+            'secure = false',
+            'tls = true',
+            '',
+            // Ссылки строит бот; печатать секреты в логи незачем.
+            '[general.links]',
+            'show = []',
+            '',
+            '[server]',
+            'port = 443',
+            '',
+            // healthcheck образа ходит в этот API — выключать нельзя, иначе
+            // контейнер навсегда unhealthy, и меню покажет MTProto выключенным.
+            '[server.api]',
+            'enabled = true',
+            'listen = "127.0.0.1:9091"',
+            'whitelist = ["127.0.0.1/32"]',
+            '',
+            '[[server.listeners]]',
+            'ip = "0.0.0.0"',
+            '',
+            '[censorship]',
+            'tls_domain = ' . $q($this->tgDomain()),
+            'mask = true',
+            'tls_emulation = true',
+            '',
+            '[access.users]',
+            'sbbot = ' . $q($this->tgSecret()),
+        ];
+        $toml = implode("\n", array_filter($lines, fn ($l) => $l !== null)) . "\n";
+        $old  = @file_get_contents($path);
+        if ($old === $toml) {
+            return null;
+        }
+        $tmp = "$path.tmp";
+        file_put_contents($tmp, $toml);
+        chmod($tmp, 0644);
+        rename($tmp, $path);
+        return $old !== false && $this->tgColdPart($old) === $this->tgColdPart($toml) ? 'hot' : 'restart';
     }
 
+// Часть конфига, которую Telemt читает только при старте: всё, кроме ad_tag и
+// секции [access.users] (она последняя — см. tgWriteConfig()).
+public function tgColdPart($toml)
+    {
+        $toml = preg_replace('~^ad_tag\s*=.*\R?~m', '', $toml);
+        return preg_replace('~^\[access\.users\].*~ms', '', $toml);
+    }
+
+// Применить текущие настройки. Остановленный контейнер не поднимаем: его
+// остановили намеренно («0» вместо секрета) — он прочитает конфиг, когда его
+// запустят (tgStart()).
 public function restartTG()
     {
-        $secret = $this->tgSecret();
-        $domain = $this->tgDomain();
-        $adtag  = trim(file_exists('/config/mtprotoadtag') ? file_get_contents('/config/mtprotoadtag') : '');
-        if (!preg_match('~^[0-9a-f]{32}$~i', $secret)) {
-            // Секрета нет вообще (свежая установка до первого «сгенерировать») —
-            // пусть контейнер поднимается со своим, tgSecret() заберёт его при
-            // первом открытии меню.
+        $change = $this->tgWriteConfig();
+        if ($change === null || empty($this->containerState('tg')['running'])) {
             return;
         }
-        $this->tgEnvSet([
-            'TG_SECRET' => $secret,
-            'TG_DOMAIN' => $domain,
-            'TG_TAG'    => $adtag,
-        ]);
-
-        // Быстрый путь: правим уже сгенерированный config.toml и просим
-        // перечитать его сигналом. Если файла ещё нет (контейнер ни разу не
-        // стартовал), делать нечего — start.sh создаст его из env.
-        $path = $this->tgConfigFile();
-        $toml = @file_get_contents($path);
-        if ($toml === false) {
-            return;
-        }
-        $toml = preg_replace('~^\s*domain\s*=.*$~m', 'domain = "' . $domain . '"', $toml, -1, $n);
-        if (empty($n)) {
-            $toml = preg_replace('~^(\s*http_stats\s*=.*)$~m', "$1\ndomain = \"$domain\"", $toml, 1);
-        }
-        // Секрет у нас один: заменяем ключ во всех блоках [[secret]].
-        $toml = preg_replace('~^(\s*key\s*=\s*)"[^"]*"~m', '$1"' . $secret . '"', $toml);
-        if ($adtag) {
-            $toml = preg_replace('~^\s*proxy_tag\s*=.*$~m', 'proxy_tag = "' . $adtag . '"', $toml, -1, $n);
-            if (empty($n)) {
-                $toml = preg_replace('~^(\s*http_stats\s*=.*)$~m', "$1\nproxy_tag = \"$adtag\"", $toml, 1);
-            }
+        if ($change === 'restart') {
+            $this->restartContainer('tg');
         } else {
-            $toml = preg_replace('~^\s*proxy_tag\s*=.*$\R?~m', '', $toml);
+            // Наблюдатель Telemt и сам увидит новый файл за пару секунд; SIGHUP —
+            // тот же триггер перечитывания, только сразу.
+            $this->signalContainer('tg', 'HUP');
         }
-        file_put_contents($path, $toml);
-        $this->signalContainer('tg', 'HUP');
     }
 
 public function tgStop()
@@ -210,8 +257,10 @@ public function applyMtproto($secret, $domain = '')
         if (trim((string) $domain) !== '') {
             file_put_contents('/config/mtprotodomain', trim((string) $domain));
         }
-        $this->tgStart();
+        // Сначала конфиг, потом старт: остановленный контейнер поднимется сразу
+        // с новыми настройками, работающий — применит их в restartTG().
         $this->restartTG();
+        $this->tgStart();
         return 'ok';
     }
 

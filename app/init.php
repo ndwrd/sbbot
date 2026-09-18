@@ -11,6 +11,11 @@ if (!empty($c['debug'])) {
     require __DIR__ . '/debug.php';
 }
 
+$bot = new Bot($c['key'], $i);
+// Конфиг Telemt должен лежать на диске раньше, чем стартует контейнер tg: тот
+// ждёт, пока php станет healthy (а это /start ниже), и без файла не запускается.
+$bot->tgWriteConfig();
+
 if (!empty($c['node'])) {
     // Нода не имеет настоящего токена бота — polling() тут всегда получал
     // бы 401 от Telegram и никогда не создавал /start (тот пишется только
@@ -24,7 +29,6 @@ if (!empty($c['node'])) {
     }
 }
 
-$bot = new Bot($c['key'], $i);
 $bot->cleanQueue();
 $bot->setcommands();
 $bot->polling();

@@ -5,7 +5,6 @@ require __DIR__ . '/config.php';
 if (!empty($c['debug'])) {
     require __DIR__ . '/debug.php';
 }
-require __DIR__ . '/calc.php';
 require __DIR__ . '/bot.php';
 require __DIR__ . '/i18n.php';
 if (file_exists(__DIR__ . '/override.php')) {

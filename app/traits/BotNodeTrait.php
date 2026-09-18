@@ -1548,7 +1548,7 @@ public function nodeRestartTG($id)
         $secret     = $node['mtprotosecret'] ?? '';
         $fakedomain = $node['mtprotodomain'] ?? 'yandex.ru';
         // Ноду больше не запускаем по SSH: в контейнере с готовым образом
-        // teleproxy нет sshd. Отдаём секрет и домен её же боту через
+        // Telemt нет sshd. Отдаём секрет и домен её же боту через
         // console.php, дальше нода применяет их своим applyMtproto().
         if (preg_match('~^[0-9a-f]{32}$~i', $secret)) {
             $this->nodeConsole($node['ip'], 'applyMtproto', $secret, $fakedomain);

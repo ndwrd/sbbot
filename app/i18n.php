@@ -5,14 +5,6 @@ $i = [
         'en' => 'Warp',
         'ru' => 'Warp',
     ],
-    'wg_title'             => [
-        'en' => 'Wireguard',
-        'ru' => 'Wireguard',
-    ],
-    'sh_title'             => [
-        'en' => 'Shadowsocks',
-        'ru' => 'Shadowsocks',
-    ],
     'config'               => [
         'en' => 'Settings',
         'ru' => 'Настройки',
@@ -49,10 +41,6 @@ $i = [
         'en' => 'Add',
         'ru' => 'Добавить',
     ],
-    'donate'               => [
-        'en' => 'Donate',
-        'ru' => 'Донат',
-    ],
     'admin'                => [
         'en' => 'Admin',
         'ru' => 'Админа',
@@ -61,26 +49,6 @@ $i = [
         'en' => 'Menu',
         'ru' => 'Меню',
     ],
-    'update status'        => [
-        'en' => 'Update status',
-        'ru' => 'Обновить статус',
-    ],
-    'add peer'             => [
-        'en' => 'Add peer',
-        'ru' => 'Добавить клиента',
-    ],
-    'all traffic'          => [
-        'en' => 'All traffic',
-        'ru' => 'Весь трафик',
-    ],
-    'subnet'               => [
-        'en' => 'Subnet',
-        'ru' => 'Подсеть',
-    ],
-    'proxy ip'             => [
-        'en' => 'Proxy ip',
-        'ru' => 'Айпи прокси',
-    ],
     'rename'               => [
         'en' => 'Rename',
         'ru' => 'Переименовать',
@@ -88,10 +56,6 @@ $i = [
     'show QR'              => [
         'en' => 'Show QR',
         'ru' => 'Показать QR',
-    ],
-    'download config'      => [
-        'en' => 'Download config',
-        'ru' => 'Скачать настройки',
     ],
     'install domain'       => [
         'en' => 'Install domain',
@@ -117,37 +81,9 @@ $i = [
         'en' => 'Update',
         'ru' => 'Обновить',
     ],
-    'self list'            => [
-        'en' => 'Self list',
-        'ru' => 'Собственный список',
-    ],
-    'reverse list'         => [
-        'en' => 'Reverse list',
-        'ru' => 'Обратный список',
-    ],
-    'subzones'             => [
-        'en' => 'Subzones',
-        'ru' => 'Поддомены',
-    ],
-    'check url'            => [
-        'en' => 'Check url',
-        'ru' => 'Проверить домен',
-    ],
-    'blacklist exclude'    => [
-        'en' => 'Blacklist exclude',
-        'ru' => 'Исключения из списка ркн',
-    ],
     'lang'                 => [
         'en' => 'Language',
         'ru' => 'Язык интерфейса',
-    ],
-    'self list explain'    => [
-        'en' => ' - domains that will work through a proxy, all others directly',
-        'ru' => ' - домены, которые будут работать через прокси, все остальные напрямую',
-    ],
-    'reverse list explain' => [
-        'en' => ' - domains that will work directly, all others through a proxy',
-        'ru' => ' - домены которые будут работать напрямую, все остальные через прокси',
     ],
     'timer'                => [
         'en' => 'Set timer',
@@ -157,18 +93,6 @@ $i = [
         'en' => 'Reset nginx',
         'ru' => 'Сбросить nginx',
     ],
-    'set internal dns'     => [
-        'en' => 'Set internal dns',
-        'ru' => 'Установить внутренний dns',
-    ],
-    'delete internal dns'  => [
-        'en' => 'Delete internal dns',
-        'ru' => 'Удалить внутренний dns',
-    ],
-    'no devices' => [
-        'en' => 'No devices',
-        'ru' => 'Нет устройств',
-    ],
     'on'  => [
         'en' => '🟢',
         'ru' => '🟢',
@@ -176,22 +100,6 @@ $i = [
     'off'  => [
         'en' => '🔴',
         'ru' => '🔴',
-    ],
-    'torrent'  => [
-        'en' => 'Torrents',
-        'ru' => 'Торренты',
-    ],
-    'listSubnet'  => [
-        'en' => 'ListSubnet',
-        'ru' => 'Список подсетей',
-    ],
-    'AllowedIPs'  => [
-        'en' => 'AllowedIPs',
-        'ru' => 'AllowedIPs',
-    ],
-    'calc'  => [
-        'en' => 'Calc CIDR',
-        'ru' => 'Calc CIDR',
     ],
     'mtproto'  => [
         'en' => 'MTProto',
@@ -204,18 +112,6 @@ $i = [
     'setSecret'  => [
         'en' => 'SetSecret',
         'ru' => 'Установить свой ключ',
-    ],
-    'setAdTag'  => [
-        'en' => 'Set adtag',
-        'ru' => 'Установить adtag',
-    ],
-    'defaultDNS'  => [
-        'en' => 'DefaultDNS',
-        'ru' => 'Дефолтный днс',
-    ],
-    'defaultMTU'  => [
-        'en' => 'DefaultMTU',
-        'ru' => 'Дефолтный MTU',
     ],
     'debug'  => [
         'en' => 'Debug mode',
@@ -241,41 +137,17 @@ $i = [
         'en' => 'Mihomo',
         'ru' => 'Mihomo',
     ],
-    'geodb'  => [
-        'en' => 'GeoIp/GeoSite',
-        'ru' => 'GeoIp/GeoSite',
-    ],
     'changeFakeDomain'  => [
         'en' => 'ChangeFakeDomain',
         'ru' => 'Фейковый домен',
-    ],
-    'selfFakeDomain'  => [
-        'en' => 'Steal from yourself',
-        'ru' => 'Steal from yourself',
     ],
     'page'  => [
         'en' => 'Pagination',
         'ru' => 'Пагинация',
     ],
-    'exchange'  => [
-        'en' => 'Client isolation',
-        'ru' => 'Изоляция клиентов',
-    ],
-    'ocserv'  => [
-        'en' => 'OpenConnect',
-        'ru' => 'OpenConnect',
-    ],
     'naive'  => [
         'en' => 'NaiveProxy',
         'ru' => 'NaiveProxy',
-    ],
-    'change login'  => [
-        'en' => 'Change login',
-        'ru' => 'Изменить логин',
-    ],
-    'change secret'  => [
-        'en' => 'Change secret',
-        'ru' => 'Секретное слово',
     ],
     'dns'  => [
         'en' => 'Dns',
@@ -288,22 +160,6 @@ $i = [
     'update bot'  => [
         'en' => 'Update bot',
         'ru' => 'Обновить бота',
-    ],
-    'no updates'  => [
-        'en' => 'No updates',
-        'ru' => 'Нет обновлений',
-    ],
-    'have updates'  => [
-        'en' => '🟢 Have updates',
-        'ru' => '🟢 Есть обновления',
-    ],
-    'fake html'  => [
-        'en' => 'Fake html',
-        'ru' => 'Фейк заглушка',
-    ],
-    'expose-iroutes'  => [
-        'en' => 'Expose-iroutes',
-        'ru' => 'Изоляция клиентов',
     ],
     'success'  => [
         'en' => 'Success',
@@ -365,25 +221,9 @@ $i = [
         'en' => 'Autoupdate',
         'ru' => 'Автообновление',
     ],
-    'analyze'  => [
-        'en' => 'Analyze',
-        'ru' => 'Анализ',
-    ],
-    'autoscan'  => [
-        'en' => 'Autoscan',
-        'ru' => 'Автосканирование',
-    ],
-    'autoblock'  => [
-        'en' => 'Autoblock',
-        'ru' => 'Автоблокировка',
-    ],
     'notify'  => [
         'en' => 'Notify',
         'ru' => 'Уведомления',
-    ],
-    'ignorelist'  => [
-        'en' => 'Ignorelist',
-        'ru' => 'Белый список',
     ],
     'blocklist'  => [
         'en' => 'Blocklist',
@@ -396,26 +236,6 @@ $i = [
     'ignore'  => [
         'en' => 'Ignore',
         'ru' => 'Игнорировать',
-    ],
-    'all logs'  => [
-        'en' => 'All logs',
-        'ru' => 'Все логи',
-    ],
-    'suspicious log'  => [
-        'en' => 'Suspicious log',
-        'ru' => 'Подозрительные логи',
-    ],
-    'telegram IPs'  => [
-        'en' => 'Telegram IPs',
-        'ru' => 'IP телеграма',
-    ],
-    'gcore IPs'  => [
-        'en' => 'Gcore IPs',
-        'ru' => 'IP gcore',
-    ],
-    'cloudflare IPs'  => [
-        'en' => 'Cloudflare IPs',
-        'ru' => 'IP cloudflare',
     ],
     'templates'  => [
         'en' => 'Templates',

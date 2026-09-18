@@ -1001,8 +1001,8 @@ public function containerId($service)
 
 // Состояние контейнера: ['running' => bool, 'health' => 'healthy'|'unhealthy'|
 // 'starting'|null]. Заменяет "pgrep по SSH" там, где в контейнере нет sshd
-// (tg с готовым образом teleproxy) — а заодно честнее: healthcheck образа
-// дёргает /stats самого прокси, то есть проверяет работу, а не наличие процесса.
+// (tg на distroless-образе Telemt) — а заодно честнее: healthcheck спрашивает
+// сам прокси через его API, то есть проверяет работу, а не наличие процесса.
 public function containerState($service)
     {
         $r = $this->dockerApi('/containers/json?all=1');
@@ -1033,7 +1033,7 @@ public function signalContainer($service, $signal)
     }
 
 // Логи контейнера. Нужны там, где сервис пишет в stdout, а не в файл в /logs
-// (teleproxy). Docker отдаёт поток кадрами по 8 байт заголовка на каждый —
+// (Telemt). Docker отдаёт поток кадрами по 8 байт заголовка на каждый —
 // снимаем их, иначе в тексте будет мусор.
 public function containerLogs($service, $tail = 200)
     {

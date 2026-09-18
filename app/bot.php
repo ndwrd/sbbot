@@ -66,7 +66,6 @@ class Bot
         $this->update   = '/update/json';
         $this->ports = [
             'tg'    => '443',
-            'ad'    => '853',
             'dnstt' => '53/udp',
         ];
     }

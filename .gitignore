@@ -22,10 +22,9 @@
 /config/singbox.stats
 /config/sing-box/
 /config/teleproxy/
+/config/telemt/
 /config/apps_cache.json
 /todo.todo
-/app/zapretlists/*
-!/app/zapretlists/.gitkeep
 .vscode/
 .idea/
 mirror/.env

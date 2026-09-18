@@ -125,7 +125,6 @@ services:
             - ./update:/update
             - ./.git:/.git
             - ./docker-compose.override.yml:/docker/compose
-            - ./override.env:/docker/env
             - /var/run/docker.sock:/var/run/docker.sock:ro
             - warp:/etc/warp
         environment:
@@ -172,7 +171,6 @@ services:
             - ./.git:/.git
             - ./scripts/start_service.sh:/start_service.sh
             - ./docker-compose.override.yml:/docker/compose
-            - ./override.env:/docker/env
             - /var/run/docker.sock:/var/run/docker.sock:ro
         environment:
             IP: ${IP}
@@ -200,36 +198,38 @@ services:
             - sbx
             - dnstt
     tg:
-        # Готовый образ вместо своей сборки: наш прежний форк MTProxy
-        # (GetPageSpeed) заархивирован, разработка переехала сюда. Образ сам
-        # обновляет proxy-multi.conf (cron внутри, каждые 6 часов) — именно его
-        # устаревание ломало прокси через несколько дней после запуска.
-        # ME-режим (DIRECT_MODE не включаем): без middle-proxy у не-Premium
-        # аккаунтов не грузятся фото, видео и истории.
-        image: ghcr.io/teleproxy/teleproxy:latest
+        # Telemt (github.com/telemt/telemt): обычный MTProto (ee) и — следующим
+        # шагом — WEB-прокси в одном процессе. Версия зафиксирована: релизы
+        # выходят раз в несколько дней, поднимаем осознанно, проверив конфиг.
+        # Middle-proxy включён в конфиге: без него у аккаунтов без Premium не
+        # грузятся фото, видео и истории.
+        image: ghcr.io/telemt/telemt:3.5.7
+        # Конфиг целиком пишет бот (BotMtprotoTrait::tgWriteConfig()) — каталогом,
+        # а не файлом: атомарную замену одиночного bind-mount docker внутри не
+        # показывает. Там же Telemt держит своё состояние (кэш TLS-эмуляции,
+        # proxy-secret, cache/) — отсюда и working_dir.
         volumes:
-            # config.toml и proxy-multi.conf: переживают перезапуск контейнера.
-            - ./config/teleproxy:/opt/teleproxy/data
+            - ./config/telemt:/data
+        working_dir: /data
+        command: ["/data/config.toml"]
+        # Встроенный healthcheck образа смотрит в /app/config.toml, а наш конфиг
+        # в /data. Проверка идёт через API Telemt (server.api в конфиге).
+        healthcheck:
+            test: ["CMD", "/app/telemt", "healthcheck", "/data/config.toml", "--mode", "liveness"]
+            interval: 30s
+            timeout: 5s
+            start_period: 20s
+            retries: 3
+        # Образ работает от nonroot, а слушает 443 внутри контейнера.
+        sysctls:
+            net.ipv4.ip_unprivileged_port_start: 0
         hostname: telegram
         container_name: relay-${VER}
+        # Конфиг появляется в init.php до того, как php станет healthy, — без
+        # него Telemt не стартует.
         depends_on:
             php:
                 condition: service_healthy
-        environment:
-            # Источник правды — override.env, его пишет бот (см. restartTG()).
-            # start.sh образа заново генерирует config.toml из этих переменных
-            # при каждом старте, поэтому значения обязаны жить в env, а не
-            # только в файле конфига.
-            SECRET: ${TG_SECRET:-}
-            EE_DOMAIN: ${TG_DOMAIN:-}
-            PROXY_TAG: ${TG_TAG:-}
-            EXTERNAL_IP: ${IP}
-            PORT: 443
-        env_file:
-            - path: ./.env
-              required: true # default
-            - path: ./override.env
-              required: false
         stop_grace_period: 1s
         networks:
             default:

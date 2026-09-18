@@ -43,6 +43,7 @@ $names = [
     'logs() и ports() (пустой override)', 'restart()',
     'логи MTProto: Бот и нода', 'порт MTProto ноды',
     'сервисы и порты: Бот и карточка ноды', 'перезапуск ноды: ожидание/без метки/таймаут/нажатие',
+    'MTProto на Telemt: конфиг/миграция/применение',
     'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
@@ -128,7 +129,7 @@ if (!$virgin) {
     @unlink("$TMP/certs/cert_public");
 }
 file_put_contents("$TMP/version", '1.0');
-foreach (['nginx.conf', 'nginx_default.conf', 'upstream.conf', 'include.conf'] as $f) {
+foreach (['nginx.conf', 'nginx_default.conf', 'upstream.conf'] as $f) {
     if (file_exists("$REPO/config/$f")) copy("$REPO/config/$f", "$TMP/config/$f");
 }
 if (!$virgin) {
@@ -273,7 +274,7 @@ class TestBot extends Bot
     public function cleanDocker() { return true; }
     // Docker API: локально нет ни расширения curl, ни docker.sock.
     public function dockerApi($url, $method = 'GET', $data = []) { return []; }
-    public function containerLogs($service, $tail = 200) { return "teleproxy: started
+    public function containerLogs($service, $tail = 200) { return "telemt: started
 "; }
 
     // curl-расширения локально нет; гео и так кэшируется в pac при создании
@@ -506,6 +507,40 @@ $s = [
         $b->checkNodeRestarting();
         $b->nodeRestart('n1a2b3c4');
         $b->nodeRestart('gone0000');
+    })(),
+    // MTProto на Telemt: конфиг на свежей установке, повторная запись без
+    // изменений, смена секрета (на лету) и домена (перезапуск), миграция
+    // секрета из конфига teleproxy, ветки ввода секрета. Проверки — через
+    // trigger_error(): стенд считает их предупреждениями.
+    fn() => (function () use ($b, $TMP) {
+        $chk = fn ($ok, $what) => $ok || trigger_error("Telemt: $what", E_USER_WARNING);
+        foreach (["mtprotosecret", "mtprotodomain", "mtprotoadtag"] as $f) @unlink("$TMP/config/$f");
+        @unlink("$TMP/config/telemt/config.toml");
+        @unlink("$TMP/config/teleproxy/config.toml");
+        $chk($b->tgWriteConfig() === "restart", "первая запись не restart");
+        $toml = (string) @file_get_contents("$TMP/config/telemt/config.toml");
+        $chk(preg_match('~^sbbot = "[0-9a-f]{32}"$~m', $toml), "нет пользователя с секретом");
+        foreach (["use_middle_proxy = true", "tls = true", "tls_domain = \"yandex.ru\"", "[server.api]", "enabled = true", "listen = \"127.0.0.1:9091\""] as $line) {
+            $chk(str_contains($toml, $line), "в конфиге нет $line");
+        }
+        $chk($b->tgWriteConfig() === null, "повтор без изменений не null");
+        file_put_contents("$TMP/config/mtprotosecret", str_repeat("b", 32));
+        $chk($b->tgWriteConfig() === "hot", "смена секрета не hot");
+        file_put_contents("$TMP/config/mtprotodomain", "example.com");
+        $chk($b->tgWriteConfig() === "restart", "смена домена не restart");
+        unlink("$TMP/config/mtprotosecret");
+        @mkdir("$TMP/config/teleproxy", 0777, true);
+        file_put_contents("$TMP/config/teleproxy/config.toml", "[[secret]]
+key = \"" . str_repeat("c", 32) . "\"
+");
+        $chk($b->tgSecret() === str_repeat("c", 32), "секрет teleproxy не перенесён");
+        $b->restartTG();
+        $b->secretSet("0");
+        $b->secretSet("не секрет");
+        $b->secretSet("ee" . str_repeat("d", 32) . bin2hex("example.com"));
+        $chk($b->tgSecret() === str_repeat("d", 32), "ee-строка не разобрана");
+        $b->applyMtproto(str_repeat("e", 32), "ya.ru");
+        $b->applyMtproto("bad");
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.

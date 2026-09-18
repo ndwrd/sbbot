@@ -30,8 +30,8 @@ up: # консоль сервиса
 	docker compose exec up /bin/sh
 wp: # консоль сервиса
 	docker compose exec wp /bin/sh
-tg: # консоль сервиса
-	docker compose exec tg /bin/bash
+tg: # логи MTProto (в образе Telemt нет shell)
+	docker compose logs --tail 100 -f tg
 dnstt: # консоль сервиса
 	docker compose exec dnstt /bin/sh
 sbx: # консоль сервиса
@@ -49,8 +49,6 @@ s:
 	git status -su
 c: # discard local runtime edits to tracked config/ files before a git pull
 	git checkout -- config/
-webhook:
-	docker compose exec php php checkwebhook.php
 reset:
 	make d
 	git reset --hard
