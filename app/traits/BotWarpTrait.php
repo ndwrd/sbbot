@@ -89,7 +89,14 @@ public function addWarpPlus($key)
 
 public function warpStatus()
     {
-        $st = $this->ssh('curl -m 1 -x socks5://wp:1080 https://cloudflare.com/cdn-cgi/trace', 'sbx');
+        // Раньше на весь запрос давалась одна секунда, а он включает TLS с
+        // Cloudflare через сам туннель WARP: с удалённой ноды это дольше, и
+        // рабочий Warp показывался выключенным. Теперь 1 с — только на
+        // подключение к wp (не запущен — отказ сразу), и до 5 с на сам запрос.
+        // Зовётся из cron (collectMenuStatus()), меню ждать не заставляет.
+        // Адрес литералом, как у outbound в sing-box: имя wp резолвится и в
+        // IPv6, а microsocks слушает только IPv4.
+        $st = $this->ssh('curl -s --connect-timeout 1 -m 5 -x socks5://10.10.0.13:1080 https://cloudflare.com/cdn-cgi/trace', 'sbx');
         // Ответа может не быть вовсе (контейнер wp не поднят, нет сети) — тогда
         // preg_match не заполнит $m, и это штатное "выключено", а не ошибка.
         preg_match('~warp=(\w+)~', $st, $m);
