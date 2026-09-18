@@ -511,7 +511,7 @@ public function qrWebProxy()
         }
         foreach ($this->getNodes() as $id => $node) {
             $link = $this->nodeLinkWebProxy($id);
-            if ($link !== '') {
+            if ($link !== '' && $this->nodeTgOn($id)) {
                 $links["webproxy {$node['label']}"] = $link;
             }
         }

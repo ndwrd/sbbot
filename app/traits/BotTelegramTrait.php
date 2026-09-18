@@ -31,17 +31,26 @@ public function qrVless($i, $s = false)
         $this->sendQr('vless', $link, "<code>$link</code>");
     }
 
+// QR Бота и нод — только тех, где прокси сейчас работает.
 public function qrMtproto()
     {
-        $link = $this->linkMtproto();
-        $this->sendQr('mtproto', $link, "<code>$link</code>");
+        $sent = false;
+        if ($this->tgStatus() == 'on') {
+            $link = $this->linkMtproto();
+            $this->sendQr('mtproto', $link, "<code>$link</code>");
+            $sent = true;
+        }
         // Один QR = одна ссылка, поэтому у каждой ноды свой QR отдельным
         // сообщением, а не общий на всё сразу.
         foreach ($this->getNodes() as $id => $node) {
             $nodeLink = $this->nodeLinkMtproto($id);
-            if (!empty($nodeLink)) {
+            if (!empty($nodeLink) && $this->nodeTgOn($id)) {
+                $sent = true;
                 $this->sendQr("mtproto {$node['label']}", $nodeLink, "{$node['label']}: <code>$nodeLink</code>");
             }
+        }
+        if (!$sent) {
+            $this->answer($this->input['callback_id'], 'MTProto: off', true);
         }
     }
 

@@ -1627,13 +1627,22 @@ public function nodeWebApply($id, $secret)
         $this->nodeMtprotoMenu($id);
     }
 
+// Работает ли прокси на ноде — по кэшу опроса нод (checkNodesStatus(), раз в
+// 30 с): для QR по SSH не ходим. Нет данных (нода не отвечала) — считаем
+// выключенным: QR прокси, до которого не достучаться, бесполезен.
+public function nodeTgOn($id)
+    {
+        $svc = ($this->readJsonLocked('/config/nodes_status.json') ?: [])[$id]['services'] ?? null;
+        return is_array($svc) && !empty($svc['mtproto']);
+    }
+
 // QR — отдельным сообщением, как у Бота (qrMtproto()/qrWebProxy()).
 public function nodeQrMtproto($id)
     {
         $node = $this->getNode($id);
         $link = $this->nodeLinkMtproto($id);
-        if ($link === '') {
-            $this->answer($this->input['callback_id'], 'MTProto: ' . $this->i18n('not configured'), true);
+        if ($link === '' || !$this->nodeTgOn($id)) {
+            $this->answer($this->input['callback_id'], 'MTProto: off', true);
             return;
         }
         $this->sendQr("mtproto {$node['label']}", $link, "{$node['label']}: <code>$link</code>");
@@ -1643,7 +1652,7 @@ public function nodeQrWeb($id)
     {
         $node = $this->getNode($id);
         $link = $this->nodeLinkWebProxy($id);
-        if ($link === '') {
+        if ($link === '' || !$this->nodeTgOn($id)) {
             $this->answer($this->input['callback_id'], $this->i18n('web proxy') . ': off', true);
             return;
         }
