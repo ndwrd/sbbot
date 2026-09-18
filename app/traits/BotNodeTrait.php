@@ -389,7 +389,10 @@ public function nodeDomains($id, $restart = false)
             if ($this->nodeWebHost($node) !== '') {
                 $text[] = "Telegram Proxy: " . $this->nodeWebHost($node);
             }
-            $text[] = "SSL: " . (!empty($node['certExpiry']) ? date('Y-m-d H:i:s', $node['certExpiry']) : $this->i18n('not configured'));
+            // Дата — только у настроенного сертификата: после смены домена на
+            // ноде остаётся файл старого (например, от nip.io) со своей датой,
+            // но для нового домена он не годится, и нода не идёт в подписку.
+            $text[] = "SSL: " . (!empty($node['cert']) && !empty($node['certExpiry']) ? date('Y-m-d H:i:s', $node['certExpiry']) : $this->i18n('not configured'));
         }
 
         $data = [
@@ -406,10 +409,13 @@ public function nodeDomains($id, $restart = false)
                 'callback_data' => "/nodeAddNip $id",
             ];
         }
-        if (!empty($node['domain']) && empty($node['certExpiry'])) {
+        // Как у Бота: нет сертификата — выпуск, есть — перевыпуск (та же
+        // команда). Раньше кнопка пряталась по одной дате сертификата, и нода
+        // со старым файлом после смены домена оставалась совсем без кнопки.
+        if (!empty($node['domain'])) {
             $data[] = [
                 [
-                    'text'          => $this->i18n('Letsencrypt SSL'),
+                    'text'          => $this->i18n(!empty($node['cert']) ? 'renew SSL' : 'Letsencrypt SSL'),
                     'callback_data' => "/nodeIssueSSL $id",
                 ],
             ];
