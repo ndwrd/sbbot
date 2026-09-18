@@ -285,6 +285,24 @@ null` — только кнопка «Скачать», для приложен�
 Оба override-файла в `.gitignore`, сам `subscription.php`/`apps.json` —
 трекаются и обновляются вместе с ботом.
 
+## Обновление бота и origin-шаблоны
+
+Origin-шаблоны (Шаблоны → Origin) — это файлы `config/sing.json`,
+`config/clash.json`, `config/xray.json`, рядом серверный
+`config/sing-server.json`. Что с ними будет, зависит от способа обновления:
+
+- **кнопкой** «update bot» (и автообновлением) — шаблоны не меняются: перед
+  обновлением бот делает бэкап и после перезапуска возвращает их из него.
+  Правки сохраняются, но и новые шаблоны из релиза не приходят;
+- **из консоли** (`echo 1 > update/pipe` или `make c && git pull`) — шаблоны
+  заменяются версиями из репозитория: приходят новые, правки теряются.
+
+Обновиться из консоли, сохранив свои шаблоны:
+
+```bash
+cd ~/sbbot && mkdir -p /root/origin_keep && cp config/sing.json config/clash.json config/xray.json config/sing-server.json /root/origin_keep/ && make c && git pull && cp /root/origin_keep/*.json config/ && make r
+```
+
 ## Переезд с vpnbot
 
 Бэкап vpnbot восстанавливается в sbbot так же, как собственный: бот сам

@@ -173,6 +173,9 @@ public function action()
             case preg_match('~^/nodeLogs (\w+)$~', $this->input['callback'], $m):
                 $this->nodeLogs($m[1]);
                 break;
+            case preg_match('~^/nodeTgLogs (\w+)$~', $this->input['callback'], $m):
+                $this->nodeTgLogs($m[1]);
+                break;
             case preg_match('~^/nodeGetLog (\w+) (\d+)$~', $this->input['callback'], $m):
                 $this->nodeGetLog($m[1], $m[2]);
                 break;
@@ -523,6 +526,7 @@ public function cron()
             $this->singboxStatsUser();
             $this->checkNodeProvisioning();
             $this->checkNodeUpdating();
+            $this->checkNodeRestarting();
             $this->checkNodeCerts();
             $this->checkNodeAutoCleanLogs();
             $this->checkAppDownloadLinks();
@@ -771,6 +775,32 @@ public function collectMenuStatus()
         ];
     }
 
+// Блок «сервис — порт» главного меню. Один на Бота (menu()) и карточку ноды
+// (nodeMenu()), чтобы они выглядели одинаково.
+public function statusColumns(array $st, array $ports, $dnsttUsed)
+    {
+        $tg   = $ports['tg'] ?? [];
+        $col1 = [
+            $this->i18n(!empty($st['singbox']) ? 'on' : 'off') . ' ' . $this->i18n('vless'),
+            $this->i18n(!empty($st['mtproto']) ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
+            $this->i18n(!empty($st['warp']) ? 'on' : 'off') . ' ' . $this->i18n('warp'),
+        ];
+        $col2 = [
+            $this->i18n('on') . ' 443',
+            $this->i18n(!empty($tg['enable']) ? 'on' : 'off') . (!empty($tg['enable']) ? ' ' . $tg['port'] : 'port unavailable'),
+            '',
+        ];
+        // Статус dnstt появляется насовсем после первой настройки (dnsttUsed,
+        // см. setdnsttDomain()/setdnsttPassword()) — до этого dnstt никак себя
+        // не проявляет. Порт у него всегда 53 (сменить нельзя, в отличие от
+        // tg), поэтому без ветки "port unavailable" — только on/off.
+        if ($dnsttUsed) {
+            $col1[] = $this->i18n(!empty($st['dnstt']) ? 'on' : 'off') . ' dnstt';
+            $col2[] = $this->i18n(!empty($ports['dnstt']['enable']) ? 'on' : 'off') . ' 53';
+        }
+        return $this->alignColumns([$col1, $col2]);
+    }
+
 public function checkMenuStatus()
     {
         // Через временный файл и rename: меню читает из другого процесса и не
@@ -836,30 +866,8 @@ public function menu($type = false, $arg = false, $return = false)
             }
 
 
-            $ports  = $this->getPorts();
-
-            $statusCol1 = [
-                $this->i18n($st['singbox'] ? 'on' : 'off') . ' ' . $this->i18n('vless'),
-                $this->i18n($st['mtproto'] ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
-                $this->i18n($st['warp'] ? 'on' : 'off') . ' ' . $this->i18n('warp'),
-            ];
-            $statusCol2 = [
-                $this->i18n('on') . ' 443',
-                $this->i18n($ports['tg']['enable'] ? 'on' : 'off') . ($ports['tg']['enable'] ? ' ' . $ports['tg']['port'] : 'port unavailable'),
-                '',
-            ];
-            // Кнопка/статус dnstt в меню появляются насовсем после первой
-            // настройки (dnsttUsed, см. setdnsttDomain()/setdnsttPassword())
-            // — до этого dnstt никак себя не проявляет. Порт у него всегда
-            // 53 (сменить нельзя, в отличие от tg), поэтому без ветки
-            // "port unavailable" — есть/нет только по on/off сервиса.
-            if (!empty($conf['dnsttUsed'])) {
-                $statusCol1[] = $this->i18n($st['dnstt'] ? 'on' : 'off') . ' dnstt';
-                $statusCol2[] = $this->i18n($ports['dnstt']['enable'] ? 'on' : 'off') . ' 53';
-            }
-
             $main[] = '<code>';
-            $main[] = $this->alignColumns([$statusCol1, $statusCol2]);
+            $main[] = $this->statusColumns($st, $this->getPorts(), !empty($conf['dnsttUsed']));
             $main[] = '';
             $main[] = $this->alignColumns([
                 [

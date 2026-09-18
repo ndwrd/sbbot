@@ -40,7 +40,10 @@ $names = [
     'дубли: домен ноды и IP ноды',
     'обновление ноды: ожидание/таймаут/нажатие',
     'подписка: плейсхолдеры нод (недоступна/нет нод)',
-    'logs() и ports() (пустой override)', 'restart()', 'menu(domains) с доменом и без',
+    'logs() и ports() (пустой override)', 'restart()',
+    'логи MTProto: Бот и нода', 'порт MTProto ноды',
+    'сервисы и порты: Бот и карточка ноды', 'перезапуск ноды: ожидание/без метки/таймаут/нажатие',
+    'menu(domains) с доменом и без',
     // Ниже — точки входа. Они грузят bot.php сами, поэтому обрабатываются
     // отдельной веткой и обязаны идти последними: $ENTRY_FROM смотрит на индекс.
     'index.php запрос подписки', 'index.php мусорный URL',
@@ -450,6 +453,44 @@ $s = [
     // Перезапуск: sendMessageDraft отвечает result: true, объекта сообщения у
     // черновика нет — и message_id из него доставали.
     fn() => $b->restart(),
+    // Логи MTProto: экран Бота и такой же экран ноды (текст едет через
+    // console-мост, на стенде ssh() заглушен и отдаёт пустоту).
+    fn() => [$b->tgLogs(), $b->nodeLogs('n1a2b3c4'), $b->nodeTgLogs('n1a2b3c4'), $b->nodeTgLogs('gone0000')],
+    // Смена порта MTProto на ноде: кнопка перезапуска только при расхождении
+    // записанного и опубликованного порта (ssh() на стенде пустой — расхождения нет).
+    fn() => [$b->nodeSetPort(' 4443 ', 'n1a2b3c4'), $b->nodeSetPort('4443', 'gone0000'), $b->nodeTgPortPending('203.0.113.10')],
+    // Блок сервисов и портов: отчёт ноды (statusReport() на стенде работает
+    // локально), тот же блок для Бота и карточка ноды со статусами в кэше
+    // (нода на стенде недоступна — блок скрыт, но кэш читается).
+    fn() => (function () use ($b, $TMP) {
+        $r = $b->statusReport();
+        $b->statusColumns($r, $r['ports'], true);
+        $b->statusColumns([], [], false);
+        file_put_contents("$TMP/config/nodes_status.json", json_encode(['n1a2b3c4' => ['online' => true, 'time' => time(), 'services' => $r, 'servicesTime' => time()]]));
+        $b->nodeStatusRemember('n1a2b3c4', true);
+        $b->nodeMenu('n1a2b3c4');
+    })(),
+    // Перезапуск ноды: ожидание с известной меткой запуска, затем без неё
+    // (нода на версии без bootId(), ждём минуту), таймаут и нажатие кнопки.
+    fn() => (function () use ($b) {
+        $b->bootId();
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4'] = ['label' => 'Helsinki', 'ip' => '203.0.113.10'] + ($p['nodes']['n1a2b3c4'] ?? []);
+        $p['nodes']['n1a2b3c4']['restarting'] = ['chat' => 1, 'messageId' => 7, 'from' => '1700000000:123', 'startedAt' => time() - 40, 'lastPing' => 0];
+        $b->setPacConf($p);
+        $b->checkNodeRestarting();
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4']['restarting']['from'] = '';
+        $p['nodes']['n1a2b3c4']['restarting']['startedAt'] = time() - 90;
+        $b->setPacConf($p);
+        $b->checkNodeRestarting();
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4']['restarting']['startedAt'] = time() - 700;
+        $b->setPacConf($p);
+        $b->checkNodeRestarting();
+        $b->nodeRestart('n1a2b3c4');
+        $b->nodeRestart('gone0000');
+    })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.
     fn() => (function () use ($b) {

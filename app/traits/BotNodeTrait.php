@@ -41,6 +41,16 @@ public function checkNodesStatus()
             if (empty($node['off']) && !empty($node['ip'])) {
                 $online      = $this->nodeIsOnline($node['ip']);
                 $status[$id] = ['online' => $online, 'time' => time()];
+                // Сервисы и порты для карточки ноды — тот же блок, что в
+                // главном меню Бота. Нода на старой версии statusReport() не
+                // знает и ответит не массивом — тогда блока просто нет.
+                if ($online) {
+                    $services = $this->nodeConsole($node['ip'], 'statusReport');
+                    if (is_array($services)) {
+                        $status[$id]['services']     = $services;
+                        $status[$id]['servicesTime'] = time();
+                    }
+                }
                 // Пуш пользователей не прошёл (нода не ответила, когда меняли
                 // список или стартовал бот) — без повтора нода молча выпадала из
                 // подписок до ручного «Sync users». Повторяем только для
@@ -56,11 +66,29 @@ public function checkNodesStatus()
         $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($status) {
             foreach ($status as $id => $v) {
                 if (($c[$id]['time'] ?? 0) > $v['time']) {
-                    $status[$id] = $c[$id];
+                    // Онлайн — из карточки (свежее), сервисы — из опроса:
+                    // карточка их не собирает.
+                    $status[$id] = ['online' => !empty($c[$id]['online']), 'time' => $c[$id]['time']] + $v;
                 }
             }
             return $status;
         });
+    }
+
+// Отчёт ноды для её карточки на главном: то же, что показывает главное меню
+// самой ноды — статусы сервисов (из её кэша menu_status.json, его пишет её
+// собственный cron) и опубликованные порты. Зовётся через console.php.
+public function statusReport()
+    {
+        $st = $this->menuStatus();
+        return [
+            'singbox'   => !empty($st['singbox']),
+            'mtproto'   => !empty($st['mtproto']),
+            'warp'      => !empty($st['warp']),
+            'dnstt'     => !empty($st['dnstt']),
+            'dnsttUsed' => !empty($this->getPacConf()['dnsttUsed']),
+            'ports'     => array_intersect_key($this->getPorts(), ['tg' => 1, 'dnstt' => 1]),
+        ];
     }
 
 // Живой результат из карточки ноды — чтобы список сразу показывал то же самое
@@ -68,7 +96,8 @@ public function checkNodesStatus()
 public function nodeStatusRemember($id, $online)
     {
         $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($id, $online) {
-            $c[$id] = ['online' => (bool) $online, 'time' => time()];
+            // Сервисы не трогаем — их собирает только checkNodesStatus().
+            $c[$id] = ['online' => (bool) $online, 'time' => time()] + ($c[$id] ?? []);
             return $c;
         });
     }
@@ -156,6 +185,17 @@ public function nodeMenu($id)
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']}";
         $text[] = "IP: {$node['ip']}";
         $text[] = "$dot $status";
+        // Сервисы и порты — тем же блоком, что в главном меню Бота. Из кэша
+        // checkNodesStatus() (опрос раз в 30 с), не вживую: это SSH-вызов с
+        // запуском PHP на ноде на каждое открытие карточки. Старше двух минут
+        // (cron стоит) или нода сейчас недоступна — не показываем.
+        $cached = ($this->readJsonLocked('/config/nodes_status.json') ?: [])[$id] ?? [];
+        if (!$off && $online && is_array($cached['services'] ?? null) && time() - ($cached['servicesTime'] ?? 0) <= 120) {
+            $svc    = $cached['services'];
+            $text[] = '<code>';
+            $text[] = $this->statusColumns($svc, (array) ($svc['ports'] ?? []), !empty($svc['dnsttUsed']));
+            $text[] = '</code>';
+        }
         if (!empty($node['geoTag'])) {
             $tagPrefix = $this->nodeTagPrefix($node);
             $text[]    = '';
@@ -310,7 +350,10 @@ public function nodeConsole($ip, $method, ...$args)
         return $out !== '' && ($decoded !== null || $out === 'null') ? $decoded : $out;
     }
 
-public function nodeDomains($id)
+// $restart — показать кнопку перезапуска (порт MTProto изменён, но ещё не
+// опубликован, см. nodeSetPort()). Отдельно не проверяем при каждом открытии
+// экрана: это два SSH-вызова на каждое нажатие.
+public function nodeDomains($id, $restart = false)
     {
         $node = $this->getNode($id);
         if (empty($node)) {
@@ -365,6 +408,14 @@ public function nodeDomains($id)
                 'callback_data' => "/nodePortsDialog $id",
             ],
         ];
+        if ($restart) {
+            $data[] = [
+                [
+                    'text'          => $this->i18n('restart'),
+                    'callback_data' => "/nodeRestart $id",
+                ],
+            ];
+        }
         $data[] = [
             [
                 'text'          => $this->i18n('back'),
@@ -512,8 +563,27 @@ public function nodeSetPort($port, $id)
             return;
         }
         $this->nodeConsole($node['ip'], 'setPort', trim($port), 'tg');
-        $this->send($this->input['chat'], "{$this->i18n('restart')}?");
-        $this->nodeDomains($id);
+        // Порт публикует docker при создании контейнера, так что новая запись
+        // в docker-compose.override.yml заработает только после перезапуска
+        // ноды. Предлагаем его кнопкой на экране портов — как на главном в
+        // ports() — и только когда он правда нужен: ввели тот же порт, что уже
+        // открыт, — перезапускать нечего.
+        $this->nodeDomains($id, $this->nodeTgPortPending($node['ip']));
+    }
+
+// Расходится ли порт MTProto, записанный в docker-compose.override.yml ноды, с
+// тем, что сейчас публикует её работающий контейнер tg. Оба читаем по SSH с
+// хоста ноды, а не через console.php — так проверка не зависит от того, какая
+// версия кода стоит на ноде.
+public function nodeTgPortPending($ip)
+    {
+        $yaml    = (string) $this->ssh('cat ~/sbbot/docker-compose.override.yml 2>/dev/null', null, true, '/dev/null', $ip);
+        $conf    = trim($yaml) === '' ? [] : (yaml_parse($yaml) ?: []);
+        $wanted  = explode(':', (string) ($conf['services']['tg']['ports'][0] ?? ''))[0];
+        // "0.0.0.0:4443" или пусто, если порт не опубликован.
+        $current = trim((string) $this->ssh('cd ~/sbbot && docker compose port tg 443 2>/dev/null | head -1', null, true, '/dev/null', $ip));
+        $current = $current === '' ? '' : substr($current, strrpos($current, ':') + 1);
+        return $wanted !== $current;
     }
 
 public function nodeStats($id)
@@ -572,11 +642,15 @@ public function nodeRestart($id)
         if (empty($node)) {
             return;
         }
+        // Метку запуска спрашиваем ДО перезапуска, пока нода ещё отвечает: по
+        // её смене checkNodeRestarting() и поймёт, что всё закончилось.
+        $from = trim((string) $this->nodeConsole($node['ip'], 'bootId'));
         // Тот же механизм, что и make r/restart() на главном: пишем в
         // /update/pipe, а уже поднятый на ноде update.sh (стартует автоматом
         // с make u при провижининге) сам делает down+up на своём хосте.
         $this->ssh('echo 2 > ~/sbbot/update/pipe', null, true, '/dev/null', $node['ip']);
-        $this->send($this->input['chat'], "{$node['label']}: {$this->i18n('restarting')}");
+        // Эту строку дальше правит checkNodeRestarting() из cron.
+        $this->startNodeOperation($id, 'restarting', $from, "{$node['label']}: ⏳ {$this->i18n('restarting')}");
         $this->nodeMenu($id);
     }
 
@@ -595,23 +669,8 @@ public function nodeUpdate($id)
         // по смене версии checkNodeUpdating() и поймёт, что всё закончилось.
         $from = trim((string) $this->nodeConsole($node['ip'], 'botVersion'));
         $this->ssh('echo 1 > ~/sbbot/update/pipe', null, true, '/dev/null', $node['ip']);
-        $r = $this->send($this->input['chat'], "{$node['label']}: ⏳ {$this->i18n('node updating')}");
-        // Это же сообщение дальше правит checkNodeUpdating() из cron — нода
-        // написать в чат сама не может: у неё случайный ключ, а не токен бота.
-        $msg = $r['result']['message_id'] ?? null;
-        $this->updatePacConf(function ($c) use ($id, $msg, $from) {
-            if (!isset($c['nodes'][$id]) || empty($msg)) {
-                return null;
-            }
-            $c['nodes'][$id]['updating'] = [
-                'chat'      => $this->input['chat'],
-                'messageId' => $msg,
-                'from'      => $from,
-                'startedAt' => time(),
-                'lastPing'  => time(),
-            ];
-            return $c;
-        });
+        // Эту строку дальше правит checkNodeUpdating() из cron.
+        $this->startNodeOperation($id, 'updating', $from, "{$node['label']}: ⏳ {$this->i18n('node updating')}");
         $this->nodeMenu($id);
     }
 
@@ -935,38 +994,72 @@ public function botVersion()
         return trim((string) getenv('VER'));
     }
 
+// Метка запуска контейнера, в котором работает console.php (php ноды): btime
+// хоста + время старта его PID 1. make start пересоздаёт контейнеры
+// (--force-recreate), так что после перезапуска ноды метка другая — по ней
+// checkNodeRestarting() и понимает, что перезапуск прошёл. Версия тут не
+// годится: при перезапуске она та же.
+public function bootId()
+    {
+        $stat = @file_get_contents('/proc/1/stat') ?: '';
+        // Имя процесса (поле 2) в скобках может содержать пробелы, поэтому
+        // считаем от последней ')': дальше идут поля с третьего, starttime — 22-е.
+        $start = explode(' ', substr($stat, (int) strrpos($stat, ')') + 2))[19] ?? '';
+        preg_match('~^btime (\d+)~m', @file_get_contents('/proc/stat') ?: '', $m);
+        return $start === '' ? '' : ($m[1] ?? '') . ':' . $start;
+    }
+
+// Запомнить операцию над нодой, которую дальше ведёт trackNodeOperation():
+// в чат уходит строка с ⏳, и её id сохраняется в записи ноды.
+public function startNodeOperation($id, $field, $from, $text)
+    {
+        $r   = $this->send($this->input['chat'], $text);
+        $msg = $r['result']['message_id'] ?? null;
+        $this->updatePacConf(function ($c) use ($id, $field, $msg, $from) {
+            if (!isset($c['nodes'][$id]) || empty($msg)) {
+                return null;
+            }
+            $c['nodes'][$id][$field] = [
+                'chat'      => $this->input['chat'],
+                'messageId' => $msg,
+                'from'      => $from,
+                'startedAt' => time(),
+                'lastPing'  => time(),
+            ];
+            return $c;
+        });
+    }
+
 // Нода не может написать в чат сама: при установке ей выдаётся случайный ключ,
-// а не настоящий токен бота. Поэтому за ходом обновления следит главный — так
-// же, как за установкой (checkNodeProvisioning()): опрашивает ноду и правит то
-// же самое сообщение, которое отправил при нажатии кнопки.
-public function checkNodeUpdating()
+// а не настоящий токен бота. Поэтому за долгими операциями, запущенными
+// кнопкой (обновление, перезапуск), следит главный — так же, как за установкой
+// (checkNodeProvisioning()): опрашивает ноду и правит то же самое сообщение,
+// которое отправил при нажатии: ⏳ с минутами, ✅ по готовности, ⚠️ по таймауту.
+//
+// $done($node, $state, $elapsed) возвращает хвост ✅-строки, когда операция
+// закончилась, или null, пока нет. Во время операции контейнеры ноды
+// остановлены и console.php не отвечает — это штатно, просто ждём дальше.
+public function trackNodeOperation($field, callable $done, $timeout, $waitKey, $timeoutKey)
     {
         $conf = $this->getPacConf();
         $ops  = [];
         foreach ($conf['nodes'] ?? [] as $id => $node) {
-            $u = $node['updating'] ?? null;
+            $u = $node[$field] ?? null;
             if (empty($u) || empty($u['messageId']) || empty($node['ip'])) {
                 continue;
             }
-            $label = $node['label'] ?? $id;
+            $label   = $node['label'] ?? $id;
             $elapsed = time() - ($u['startedAt'] ?? time());
-            // Во время обновления контейнеры ноды остановлены, и console.php
-            // не отвечает — пустой ответ здесь штатный, просто ждём дальше.
-            $ver = trim((string) $this->nodeConsole($node['ip'], 'botVersion'));
-            // Версия сменилась — обновление закончено. Если нода была на той же
-            // версии (повторное обновление), считаем законченным по факту
-            // ответа, но не раньше пяти минут: сразу после нажатия она ещё
-            // отвечает старым, ещё не остановленным контейнером.
-            $done = $ver !== '' && ($ver !== ($u['from'] ?? '') || $elapsed > 300);
-            if ($done) {
-                $this->update($u['chat'], $u['messageId'], "$label: ✅ " . $this->i18n('node updated') . " $ver");
+            $ok      = $done($node, $u, $elapsed);
+            if ($ok !== null) {
+                $this->update($u['chat'], $u['messageId'], "$label: ✅ $ok");
                 $ops[$id] = null;
-            } elseif ($elapsed > 900) {
-                $this->update($u['chat'], $u['messageId'], "$label: ⚠️ " . $this->i18n('node update timeout'));
+            } elseif ($elapsed > $timeout) {
+                $this->update($u['chat'], $u['messageId'], "$label: ⚠️ " . $this->i18n($timeoutKey));
                 $ops[$id] = null;
             } elseif (time() - ($u['lastPing'] ?? 0) >= 30) {
                 $min = (int) floor($elapsed / 60);
-                $this->update($u['chat'], $u['messageId'], "$label: ⏳ " . $this->i18n('node updating') . " {$min} " . $this->i18n('min'));
+                $this->update($u['chat'], $u['messageId'], "$label: ⏳ " . $this->i18n($waitKey) . " {$min} " . $this->i18n('min'));
                 $ops[$id] = time();
             }
         }
@@ -974,20 +1067,52 @@ public function checkNodeUpdating()
             // Тем же способом, что и checkNodeProvisioning(): опрос ноды идёт
             // секунды, и за это время админ мог что-то поменять в меню —
             // пишем только своё поле, а не весь снимок конфига.
-            $this->updatePacConf(function ($c) use ($ops) {
+            $this->updatePacConf(function ($c) use ($ops, $field) {
                 foreach ($ops as $id => $lastPing) {
                     if (!isset($c['nodes'][$id])) {
                         continue;
                     }
                     if ($lastPing === null) {
-                        unset($c['nodes'][$id]['updating']);
-                    } elseif (isset($c['nodes'][$id]['updating'])) {
-                        $c['nodes'][$id]['updating']['lastPing'] = $lastPing;
+                        unset($c['nodes'][$id][$field]);
+                    } elseif (isset($c['nodes'][$id][$field])) {
+                        $c['nodes'][$id][$field]['lastPing'] = $lastPing;
                     }
                 }
                 return $c;
             });
         }
+    }
+
+public function checkNodeUpdating()
+    {
+        $this->trackNodeOperation('updating', function ($node, $u, $elapsed) {
+            $ver = trim((string) $this->nodeConsole($node['ip'], 'botVersion'));
+            // Версия сменилась — обновление закончено. Если нода была на той же
+            // версии (повторное обновление), считаем законченным по факту
+            // ответа, но не раньше пяти минут: сразу после нажатия она ещё
+            // отвечает старым, ещё не остановленным контейнером.
+            if ($ver !== '' && ($ver !== ($u['from'] ?? '') || $elapsed > 300)) {
+                return $this->i18n('node updated') . " $ver";
+            }
+            return null;
+        }, 900, 'node updating', 'node update timeout');
+    }
+
+public function checkNodeRestarting()
+    {
+        $this->trackNodeOperation('restarting', function ($node, $u, $elapsed) {
+            $boot = trim((string) $this->nodeConsole($node['ip'], 'bootId'));
+            $from = $u['from'] ?? '';
+            // Метка запуска сменилась — контейнеры пересозданы. Нода на версии
+            // без bootId() метку не отдаёт вовсе: тогда считаем готовой, когда
+            // она снова отвечает, но не раньше минуты — сразу после нажатия
+            // она ещё работает старыми контейнерами.
+            if ($from !== '' ? ($boot !== '' && $boot !== $from)
+                : ($elapsed >= 60 && trim((string) $this->nodeConsole($node['ip'], 'botVersion')) !== '')) {
+                return $this->i18n('node restarted');
+            }
+            return null;
+        }, 600, 'restarting', 'node restart timeout');
     }
 
 public function checkNodeCerts()
@@ -1449,6 +1574,15 @@ public function nodeLogs($id)
                 ],
             ];
         }
+        // Как и у Бота (см. logs()): логи прокси Telegram лежат в stdout
+        // контейнера, а не файлом в /logs, поэтому в списке выше их нет —
+        // отдельная строка без размера и без очистки.
+        $data[] = [
+            [
+                'text'          => $this->i18n('mtproto'),
+                'callback_data' => "/nodeTgLogs $id",
+            ],
+        ];
         $data[] = [
             [
                 'text'          => $this->i18n('clean all'),
@@ -1478,6 +1612,33 @@ public function nodeLogs($id)
             ],
         ];
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text ?: ['...']), $data);
+    }
+
+// Логи прокси Telegram на ноде — тот же экран, что у Бота, только текст
+// приезжает через console-мост: до docker.sock ноды дотягивается лишь её
+// собственный php-контейнер.
+public function nodeTgLogs($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $raw = $this->nodeConsole($node['ip'], 'tgLogsText');
+        // nodeConsole() отдаёт разобранный JSON, если вывод им оказался —
+        // для логов это нормальная строка, но подстраховываемся.
+        $log = trim(is_scalar($raw) ? (string) $raw : '');
+        $log = strlen($log) > 3000 ? '...' . substr($log, -3000) : $log;
+        $text = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('logs') . " -> " . $this->i18n('mtproto')
+            . "\n\n<pre>" . htmlspecialchars($log ?: '-') . "</pre>";
+        $data = [
+            [
+                [
+                    'text'          => $this->i18n('back'),
+                    'callback_data' => "/nodeLogs $id",
+                ],
+            ],
+        ];
+        $this->update($this->input['chat'], $this->input['message_id'], $text, $data);
     }
 
 public function nodeAutoCleanLogsDialog($id)

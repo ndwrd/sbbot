@@ -545,6 +545,14 @@ $i = [
         'en' => 'ERROR: a node with this IP already exists: %label%',
         'ru' => 'ERROR: нода с этим IP уже заведена: %label%',
     ],
+    'node restarted' => [
+        'en' => 'node restarted',
+        'ru' => 'нода перезапущена',
+    ],
+    'node restart timeout' => [
+        'en' => 'node did not come back after the restart, check it manually',
+        'ru' => 'нода не вернулась после перезапуска, проверьте её вручную',
+    ],
     'node updated' => [
         'en' => 'node updated to',
         'ru' => 'нода обновлена до',

@@ -430,7 +430,9 @@ public function delAdmin($id)
 public function getPorts()
     {
         $f = '/docker/compose';
-        $c =  yaml_parse_file($f);
+        // Пустой override (ни один порт не переопределён) libyaml разбирает в
+        // null — см. ports().
+        $c = yaml_parse_file($f) ?: [];
         $r = [];
         foreach ($this->ports as $k => $v) {
             $r[$k] = [

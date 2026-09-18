@@ -775,14 +775,6 @@
                 "action": "hijack-dns"
             },
             {
-                "clash_mode": "Direct",
-                "outbound": "direct"
-            },
-            {
-                "clash_mode": "Global",
-                "outbound": "Proxy"
-            },
-            {
                 "ip_is_private": true,
                 "outbound": "direct"
             },

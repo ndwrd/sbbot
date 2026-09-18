@@ -278,13 +278,21 @@ public function mtproto()
         );
     }
 
+// Хвост логов прокси одним текстом. Отдельно от tgLogs() потому, что ноде
+// нужен именно возврат: main зовёт этот метод на ноде через console.php
+// (nodeTgLogs()), а docker.sock ноды виден только её собственному php.
+public function tgLogsText($tail = 100)
+    {
+        $log = trim($this->containerLogs('tg', (int) $tail));
+        // Телеграм не принимает сообщение длиннее 4096 символов — оставляем хвост.
+        return strlen($log) > 3000 ? '...' . substr($log, -3000) : $log;
+    }
+
 // Логи прокси. Готовый образ пишет в stdout контейнера, а не в файл в /logs,
 // поэтому в общий список логов они не попадают — показываем отдельной кнопкой.
 public function tgLogs()
     {
-        $log  = trim($this->containerLogs('tg', 100));
-        // Телеграм не принимает сообщение длиннее 4096 символов — оставляем хвост.
-        $log  = strlen($log) > 3000 ? '...' . substr($log, -3000) : $log;
+        $log  = $this->tgLogsText();
         $text = "Menu -> " . $this->i18n('config') . " -> " . $this->i18n('logs') . " -> " . $this->i18n('mtproto') . "\n\n<pre>" . htmlspecialchars($log ?: '-') . "</pre>";
         $data = [
             [
