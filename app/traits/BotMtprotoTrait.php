@@ -435,24 +435,35 @@ public function tgWebApply($secret)
             return $c;
         });
         $host = $this->tgWebHost();
+        // Откат, если WEB не удалось довести до рабочего состояния: не держать
+        // включённым то, что не работает.
+        $rollback = function ($reason) {
+            $this->updatePacConf(function ($c) {
+                unset($c['tgWeb']);
+                return $c;
+            });
+            $this->cloakNginx();
+            return $reason;
+        };
         // Сначала nginx: проверка Host на 80-м порту должна пропускать WEB-имя
         // до того, как certbot пойдёт его подтверждать (HTTP-01).
         $this->cloakNginx();
+        // Сертификат перевыпускаем, только если WEB-имени в нём нет: setSSL()
+        // добавляет его сам, как только DNS имени смотрит на сервер, так что
+        // после выпуска SSL с готовым DNS (и всегда у nip.io) включение WEB
+        // обходится без certbot.
         if (!in_array($host, $this->domainsCert() ?: [], true)) {
+            // Без A-записи certbot провалил бы выпуск целиком — не зовём его.
+            if (!$this->tgWebDnsReady()) {
+                return $rollback('web dns missing');
+            }
             // На ноде чата нет (console.php) — там это сообщение шлёт главный.
-            if (!empty($this->input['chat']) && !preg_match('~^(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\.nip\.io$~', $pac['domain'])) {
-                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web dns')));
+            if (!empty($this->input['chat'])) {
+                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web cert issuing')));
             }
             $this->setSSL('letsencrypt');
             if (!in_array($host, $this->domainsCert() ?: [], true)) {
-                // Сертификат не выпустился (чаще всего нет A-записи для имени) —
-                // откатываемся, чтобы не держать включённым то, что не работает.
-                $this->updatePacConf(function ($c) {
-                    unset($c['tgWeb']);
-                    return $c;
-                });
-                $this->cloakNginx();
-                return 'web cert failed';
+                return $rollback('web cert failed');
             }
         }
         $this->restartTG();
@@ -498,6 +509,10 @@ public function tgReport()
             'webSubdomain' => $pac['webSubdomain'] ?? null,
             'domain'       => $pac['domain'] ?? null,
             'webCheck'     => $this->tgWebCheck(),
+            // Нужен ли перевыпуск при включении и готов ли для него DNS — чтобы
+            // главный сообщал о выпуске сертификата, только когда он будет.
+            'webCert'      => $this->tgWebHost($pac) !== '' && in_array($this->tgWebHost($pac), $this->domainsCert() ?: [], true),
+            'webDns'       => $this->tgWebDnsReady($pac),
         ];
     }
 

@@ -385,9 +385,13 @@ $i = [
         'en' => 'Could not determine the public IP of this server — it is required for the WEB proxy.',
         'ru' => 'Не удалось определить публичный IP сервера — без него WEB-прокси не настроить.',
     ],
-    'web dns' => [
-        'en' => 'Issuing a certificate for %host%. It needs a DNS A record pointing to this server\'s IP — without it the certificate will not be issued.',
-        'ru' => 'Выпускаю сертификат для %host%. Нужна DNS A-запись этого имени на IP сервера — без неё сертификат не выпустится.',
+    'web cert issuing' => [
+        'en' => 'The certificate does not cover %host% yet — reissuing it, this takes up to a minute.',
+        'ru' => 'Сертификат ещё не покрывает %host% — перевыпускаю, это до минуты.',
+    ],
+    'web dns missing' => [
+        'en' => '%host% has no DNS A record pointing to this server (it must match the main domain). Add it and try again — the WEB proxy stays off.',
+        'ru' => 'У %host% нет DNS A-записи на этот сервер (должна совпадать с основным доменом). Добавьте её и повторите — WEB-прокси не включён.',
     ],
     'web cert failed' => [
         'en' => 'Could not issue a certificate for %host%, the WEB proxy stays off. Check the DNS A record and try again.',

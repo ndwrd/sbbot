@@ -86,6 +86,32 @@ public function tgWebHost(?array $conf = null)
             : '';
     }
 
+// Указывает ли WEB-имя на этот сервер: у nip.io — всегда (имя резолвится само
+// по IP в нём), у своего домена — если A-запись WEB-имени совпадает с A-записью
+// основного домена. Только такое имя можно отдавать certbot: не подтверждённое
+// имя валит выпуск всего сертификата, а Let's Encrypt ещё и ограничивает число
+// неудачных проверок в час.
+public function tgWebDnsReady(?array $conf = null)
+    {
+        $conf ??= $this->getPacConf();
+        $host = $this->tgWebHost($conf);
+        if ($host === '') {
+            return false;
+        }
+        if (preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $conf['domain'])) {
+            return true;
+        }
+        $ip = $this->resolveA($host);
+        return $ip !== '' && $ip === $this->resolveA($conf['domain']);
+    }
+
+// IPv4-адрес имени или '', если не резолвится.
+public function resolveA($host)
+    {
+        $ip = gethostbyname($host);
+        return $ip !== $host && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $ip : '';
+    }
+
 public function sslip()
     {
         require dirname(__DIR__) . '/config.php';
@@ -177,10 +203,11 @@ public function setSSL($name)
                     . ' -d ' . escapeshellarg($conf['domain'])
                     . ' -d ' . escapeshellarg("{$conf['naiveSubdomain']}.{$conf['domain']}")
                     . ' -d ' . escapeshellarg("{$conf['anytlsSubdomain']}.{$conf['domain']}")
-                    // WEB-имя — только когда WEB включён: для своего домена ему
-                    // нужна отдельная A-запись, и без неё безусловное имя в
-                    // списке ломало бы выпуск и продление всего сертификата.
-                    . (!empty($conf['tgWeb']) && $this->tgWebHost($conf) !== '' ? ' -d ' . escapeshellarg($this->tgWebHost($conf)) : '')
+                    // WEB-имя — всякий раз, когда его DNS уже смотрит на сервер,
+                    // даже если WEB выключен: тогда включение WEB потом не
+                    // требует перевыпуска. Без A-записи имени в списке нет —
+                    // иначе оно ломало бы выпуск и продление всего сертификата.
+                    . ($this->tgWebDnsReady($conf) ? ' -d ' . escapeshellarg($this->tgWebHost($conf)) : '')
                     . ' --webroot -w /certs/ --logs-dir /logs --max-log-backups 0 2>&1';
                 exec($cmd, $out, $code);
                 @unlink('/certs/.want_port80');
@@ -308,11 +335,12 @@ public function cloakNginx()
             // тут делать нечего, кроме как прийти по нашим домену/поддоменам;
             // certbot валидирует именно их же (см. setSSL()), так что список
             // разрешённых Host'ов совпадает с тем, что покрывает сертификат.
-            // HOSTCHECK_WEB без WEB — просто ещё раз основной домен: WEB-имени
-            // тогда нет в сертификате, и пускать его на 80-й незачем.
+            // WEB-имя пускаем и при выключенном WEB: оно может быть в
+            // сертификате (setSSL() добавляет его, как только DNS готов), и без
+            // него на 80-м продление всего сертификата провалилось бы.
             $template = str_replace(
                 ['HOSTCHECK_DOMAIN', 'HOSTCHECK_NAIVE', 'HOSTCHECK_ANYTLS', 'HOSTCHECK_WEB', 'WEBHOST'],
-                [$conf['domain'], "{$conf['naiveSubdomain']}.{$conf['domain']}", "{$conf['anytlsSubdomain']}.{$conf['domain']}", $webHost ?: $conf['domain'], $webHost ?: 'web.invalid'],
+                [$conf['domain'], "{$conf['naiveSubdomain']}.{$conf['domain']}", "{$conf['anytlsSubdomain']}.{$conf['domain']}", $this->tgWebHost($conf) ?: $conf['domain'], $webHost ?: 'web.invalid'],
                 $template
             );
         }

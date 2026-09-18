@@ -1615,12 +1615,18 @@ public function nodeWebApply($id, $secret)
                 $this->nodeMtprotoMenu($id);
                 return;
             }
-            $this->send(
-                $this->input['chat'],
-                $host !== '' && !preg_match('~^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\.nip\.io$~', $node['domain'] ?? '')
-                    ? str_replace('%host%', $host, $this->i18n('web dns'))
-                    : $this->i18n('installing certificate')
-            );
+            // О выпуске сертификата — только если он действительно будет: WEB-
+            // имени нет в сертификате ноды. Нет и A-записи — отказ сразу, без
+            // certbot (tgWebApply() на ноде отказал бы так же). Нода старше 1.4.0
+            // этих полей не присылает — тогда сообщаем, как раньше.
+            if (empty($report['webCert'])) {
+                if (isset($report['webDns']) && empty($report['webDns'])) {
+                    $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web dns missing')));
+                    $this->nodeMtprotoMenu($id);
+                    return;
+                }
+                $this->send($this->input['chat'], str_replace('%host%', $host, $this->i18n('web cert issuing')));
+            }
         }
         $r = $this->nodeConsole($node['ip'], 'tgWebApply', $secret);
         $this->nodeTgReport($id);
