@@ -803,12 +803,12 @@ public function statusColumns(array $st, array $ports, $dnsttUsed)
         $tg   = $ports['tg'] ?? [];
         $col1 = [
             $this->i18n(!empty($st['singbox']) ? 'on' : 'off') . ' ' . $this->i18n('vless'),
-            $this->i18n(!empty($st['mtproto']) ? 'on' : 'off') . ' ' . $this->i18n('mtproto'),
+            $this->i18n(!empty($st['mtproto']) ? 'on' : 'off') . ' ' . $this->i18n('telegram proxy'),
             $this->i18n(!empty($st['warp']) ? 'on' : 'off') . ' ' . $this->i18n('warp'),
         ];
         $col2 = [
             $this->i18n('on') . ' 443',
-            $this->i18n(!empty($tg['enable']) ? 'on' : 'off') . (!empty($tg['enable']) ? ' ' . $tg['port'] : 'port unavailable'),
+            $this->i18n(!empty($tg['enable']) ? 'on' : 'off') . (!empty($tg['enable']) ? ' ' . $tg['port'] : ' port unavailable'),
             '',
         ];
         // Статус dnstt появляется насовсем после первой настройки (dnsttUsed,
