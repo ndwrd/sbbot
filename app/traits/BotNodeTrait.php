@@ -923,9 +923,18 @@ public function finishAddNode($tmpId, $authType, $secret)
         // синхронно: apt/docker/git clone/make u — это минуты, а не секунды,
         // $wait=false фонит команду на хосте ноды через nohup (см. ssh()).
         // Ключ — случайный, не настоящий токен бота (нода не должна его знать).
+        //
+        // curl есть не на каждом образе (на минимальном Debian его нет), а без
+        // него установка молча не начиналась: ошибку curl никто не видел, bash
+        // получал пустой скрипт, лог оставался пустым. Гарантирован только apt —
+        // им curl и ставим, если его нет. Группа { } целиком, чтобы в
+        // /root/node_init.log попадал и вывод apt, и ошибки загрузки, а не
+        // только вывод самого скрипта. Внутри — ни $, ни двойных кавычек:
+        // ssh() подставляет команду в sh -c "...".
         $nodeKey = bin2hex(random_bytes(16));
         $this->ssh(
-            "curl -fsSL https://raw.githubusercontent.com/ndwrd/sbbot/main/scripts/init.sh | bash -s $nodeKey main node",
+            '{ command -v curl >/dev/null || { apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl; }; '
+            . "curl -fsSL https://raw.githubusercontent.com/ndwrd/sbbot/main/scripts/init.sh | bash -s $nodeKey main node; }",
             null,
             false,
             '/root/node_init.log',
