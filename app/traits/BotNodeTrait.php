@@ -563,6 +563,21 @@ public function nodeSetPort($port, $id)
             return;
         }
         $this->nodeConsole($node['ip'], 'setPort', trim($port), 'tg');
+        // Запоминаем порт в записи ноды — по нему nodeLinkMtproto() собирает
+        // ссылку. Правило то же, что в setPort(): 443, 80 или не число значит
+        // «порт закрыт».
+        $p = (int) trim($port);
+        $this->updatePacConf(function ($c) use ($id, $p) {
+            if (!isset($c['nodes'][$id])) {
+                return null;
+            }
+            if ($p > 0 && $p != 443 && $p != 80) {
+                $c['nodes'][$id]['mtprotoPort'] = $p;
+            } else {
+                unset($c['nodes'][$id]['mtprotoPort']);
+            }
+            return $c;
+        });
         // Порт публикует docker при создании контейнера, так что новая запись
         // в docker-compose.override.yml заработает только после перезапуска
         // ноды. Предлагаем его кнопкой на экране портов — как на главном в
@@ -1985,6 +2000,16 @@ public function nodeLinkMtproto($id)
         $d  = trim($node['mtprotodomain'] ?? 'yandex.ru');
         // bin2hex() вместо вызова шелла — см. linkMtproto() в BotMtprotoTrait.
         $d  = bin2hex($d);
-        return "https://t.me/proxy?server={$node['ip']}&port=443&secret=ee$s$d";
+        // Порт, который нода публикует наружу. Записывается при смене через
+        // бота (nodeSetPort()); если его меняли раньше, чем появилась запись, —
+        // берём из отчёта ноды в кэше статусов (statusReport(), опрос раз в
+        // 30 с). По SSH не ходим: ссылки всех нод строятся на каждое открытие
+        // меню MTProto главного.
+        $p = $node['mtprotoPort'] ?? null;
+        if (empty($p)) {
+            $tg = ($this->readJsonLocked('/config/nodes_status.json') ?: [])[$id]['services']['ports']['tg'] ?? [];
+            $p  = !empty($tg['enable']) && !empty($tg['port']) ? $tg['port'] : 443;
+        }
+        return "https://t.me/proxy?server={$node['ip']}&port=$p&secret=ee$s$d";
     }
 }

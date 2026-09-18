@@ -458,7 +458,23 @@ $s = [
     fn() => [$b->tgLogs(), $b->nodeLogs('n1a2b3c4'), $b->nodeTgLogs('n1a2b3c4'), $b->nodeTgLogs('gone0000')],
     // Смена порта MTProto на ноде: кнопка перезапуска только при расхождении
     // записанного и опубликованного порта (ssh() на стенде пустой — расхождения нет).
-    fn() => [$b->nodeSetPort(' 4443 ', 'n1a2b3c4'), $b->nodeSetPort('4443', 'gone0000'), $b->nodeTgPortPending('203.0.113.10')],
+    // Порт в ссылке: из записи ноды, затем из отчёта в кэше статусов, затем
+    // 443. Проверки — через trigger_error(), стенд считает их предупреждениями.
+    fn() => (function () use ($b, $TMP) {
+        $p = $b->getPacConf();
+        $p['nodes']['n1a2b3c4'] = ['label' => 'Helsinki', 'ip' => '203.0.113.10'] + ($p['nodes']['n1a2b3c4'] ?? []);
+        $p['nodes']['n1a2b3c4']['mtprotosecret'] = str_repeat('a', 32);
+        $b->setPacConf($p);
+        $b->nodeSetPort(' 4443 ', 'n1a2b3c4');
+        if (!str_contains($b->nodeLinkMtproto('n1a2b3c4'), 'port=4443&')) trigger_error('ссылка ноды не на 4443', E_USER_WARNING);
+        $b->nodeSetPort('443', 'n1a2b3c4');
+        file_put_contents("$TMP/config/nodes_status.json", json_encode(['n1a2b3c4' => ['services' => ['ports' => ['tg' => ['port' => '5443', 'enable' => true]]]]]));
+        if (!str_contains($b->nodeLinkMtproto('n1a2b3c4'), 'port=5443&')) trigger_error('ссылка ноды не из кэша', E_USER_WARNING);
+        file_put_contents("$TMP/config/nodes_status.json", '{}');
+        if (!str_contains($b->nodeLinkMtproto('n1a2b3c4'), 'port=443&')) trigger_error('нет запасного 443', E_USER_WARNING);
+        $b->nodeSetPort('4443', 'gone0000');
+        $b->nodeTgPortPending('203.0.113.10');
+    })(),
     // Блок сервисов и портов: отчёт ноды (statusReport() на стенде работает
     // локально), тот же блок для Бота и карточка ноды со статусами в кэше
     // (нода на стенде недоступна — блок скрыт, но кэш читается).
