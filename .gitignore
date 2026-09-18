@@ -45,3 +45,6 @@ apps.override.json
 location.conf
 override.conf
 i18n.override.php
+# Инструменты разработки — только локально, в репозиторий не идут.
+/tests/
+/.editorConfig
