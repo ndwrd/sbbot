@@ -143,7 +143,12 @@ public function tgWriteConfig()
         // php от root — открываем на запись. Снаружи он недоступен: лежит внутри
         // каталога бота.
         chmod($dir, 0777);
-        $ip    = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $this->ip : '';
+        // Внешний адрес для middle-proxy — только если он публичный. IP в env
+        // берётся из `hostname -I` (makefile), а на многих VPS первым там идёт
+        // внутренний адрес: с ним middle-proxy согласовывал бы ключи с неверным
+        // IP, и медиа без Premium не грузилось бы. Без явного адреса Telemt
+        // определяет его сам (middle_proxy_nat_probe, STUN).
+        $ip    = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE) ? $this->ip : '';
         $adtag = strtolower(trim((string) @file_get_contents('/config/mtprotoadtag')));
         $q     = fn ($s) => '"' . addcslashes((string) $s, "\\\"") . '"';
         $lines = [

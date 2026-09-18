@@ -541,6 +541,14 @@ key = \"" . str_repeat("c", 32) . "\"
         $chk($b->tgSecret() === str_repeat("d", 32), "ee-строка не разобрана");
         $b->applyMtproto(str_repeat("e", 32), "ya.ru");
         $b->applyMtproto("bad");
+        // Внешний IP для middle-proxy: внутренний адрес VPS в конфиг не идёт
+        // (Telemt определит сам), публичный — идёт.
+        $b->ip = "10.0.0.5";
+        $b->tgWriteConfig();
+        $chk(!str_contains((string) @file_get_contents("$TMP/config/telemt/config.toml"), "middle_proxy_nat_ip"), "внутренний IP попал в конфиг");
+        $b->ip = "8.8.8.8";
+        $b->tgWriteConfig();
+        $chk(str_contains((string) @file_get_contents("$TMP/config/telemt/config.toml"), "middle_proxy_nat_ip = \"8.8.8.8\""), "публичного IP нет в конфиге");
     })(),
     // Настройки -> Домены, в том числе без домена: в fresh домена нет вовсе, в
     // full его удаляют прямо тут — ровно то, что делает /deldomain на ноде.
