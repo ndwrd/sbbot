@@ -2241,9 +2241,11 @@ public function applyUsers($json)
         $pac['singboxOutbounds']    = $built['outbounds'];
         $pac['singboxRoutingRules'] = $built['rules'];
         $this->setPacConf($pac);
-        $sing = $this->buildSingboxConfig($pac);
-        $this->writeSingboxRuntime($sing);
-        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
+        // reloadSingbox() сам решит, нужен ли SIGHUP: главный шлёт сюда список
+        // пользователей при любой своей правке, включая те, от которых конфиг
+        // ноды не меняется (шаблон клиента, лимит трафика, описание) — рвать
+        // из-за них соединения незачем.
+        $this->reloadSingbox($this->buildSingboxConfig($pac));
         return 'ok';
     }
 

@@ -42,23 +42,48 @@ public function restartSingbox($c, $norestart = false)
 
         $sing = $this->buildSingboxConfig($pac);
         if (empty($norestart)) {
-            $this->collectSession();
-            $this->writeSingboxRuntime($sing);
-            // SIGHUP в sing-box 1.14 (cmd/sing-box/cmd_run.go): сначала check()
-            // нового конфига — битый не применяется, старый экземпляр продолжает
-            // работать. Если конфиг в порядке — старый экземпляр закрывается
-            // ВМЕСТЕ со всеми соединениями, и поднимается новый. То есть это не
-            // бесшовная подмена: при каждом изменении у клиентов на мгновение
-            // рвутся соединения. Выигрыш перед kill — проверка конфига и отсутствие
-            // перезапуска процесса. "|| sing-box run" — холодный старт, если
-            // процесса ещё нет.
-            // $wait=false makes ssh() nohup-wrap the whole command — confirmed the hard
-            // way that a bare `&` here does NOT survive the ssh channel closing (same
-            // class of bug as `docker exec ... &` needing `exec -d` to actually detach).
-            $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
+            $this->reloadSingbox($sing);
         } else {
             $this->writeSingboxRuntime($sing);
         }
+    }
+
+// Записать рабочий конфиг и перезагрузить sing-box — но только если конфиг
+// реально изменился.
+//
+// SIGHUP в sing-box 1.14 (cmd/sing-box/cmd_run.go): сначала check() нового
+// конфига — битый не применяется, старый экземпляр продолжает работать. Если
+// конфиг в порядке — старый экземпляр закрывается ВМЕСТЕ со всеми соединениями,
+// и поднимается новый. То есть это не бесшовная подмена: у КАЖДОГО клиента
+// рвутся соединения, а Vless с мультиплексом теряет их пачками и выпадает из
+// urltest на весь его интервал.
+//
+// Поводов для холостой перезагрузки хватало: старт бота звал restartSingbox()
+// дважды (cloakNginx() и singboxUpdateRules()) поверх уже запущенного
+// контейнером sing-box, а на ноды тот же конфиг уезжал при выборе шаблона или
+// лимита — полей, которых в серверном конфиге вообще нет. Поэтому решает не
+// вызывающий, а сравнение с тем, что уже лежит на диске.
+//
+// $wait=false makes ssh() nohup-wrap the whole command — confirmed the hard
+// way that a bare `&` here does NOT survive the ssh channel closing (same
+// class of bug as `docker exec ... &` needing `exec -d` to actually detach).
+public function reloadSingbox(array $sing)
+    {
+        if ($this->writeSingboxRuntime($sing) === 'same') {
+            // Перезагружать нечего. Но процесса может не быть вовсе (упал,
+            // либо контейнер не поднял его сам — start_singbox.sh запускает
+            // sing-box только при уже готовом конфиге), поэтому холодный старт
+            // остаётся. pidof есть в busybox, как и pkill ниже.
+            $this->ssh('pidof sing-box >/dev/null || sing-box run -c /sing-box/config.json', 'sbx', false);
+            return false;
+        }
+        // Строго перед перезагрузкой: счётчики v2ray_api обнуляются вместе со
+        // старым экземпляром, и накопленную сессию надо сложить в global. Без
+        // перезагрузки этого делать нельзя — счётчики продолжат расти с прежних
+        // значений, и сложенное посчиталось бы дважды.
+        $this->collectSession();
+        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
+        return true;
     }
 
 // Рабочий конфиг sing-box. Пишется во временный файл и подменяется rename'ом:
@@ -78,6 +103,11 @@ public function writeSingboxRuntime(array $sing)
         if ($json === false) {
             error_log('writeSingboxRuntime: json_encode failed: ' . json_last_error_msg());
             return false;
+        }
+        // Байт в байт то же, что уже лежит — файл не трогаем и говорим об этом
+        // вызывающему: reloadSingbox() по этому ответу не шлёт SIGHUP.
+        if (@file_get_contents("$dir/config.json") === $json) {
+            return 'same';
         }
         @mkdir($dir, 0755, true);
         // pid в имени — у одновременных писателей не общий временный файл.
