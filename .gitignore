@@ -3,6 +3,19 @@
 # затем, чтобы `git clean -fd` в update/update.sh его не сносил при каждом
 # обновлении: без -x clean не трогает игнорируемые файлы.
 /app/webapp/.htpasswd
+# Рабочий конфиг nginx: его пишет cloakNginx() из config/nginx_default.conf, и
+# он живёт в git ровно до тех пор, пока в нём нет домена. Раньше файл лежал в
+# репозитории «стартовой копией», и `git reset --hard` при каждом обновлении
+# возвращал его к шаблону — с закомментированным блоком домена. Контейнер ng
+# поднимался с этой копией и несколько секунд отдавал всем самоподписанный
+# сертификат: клиенты в это время получали "certificate signed by unknown
+# authority", а Vless выпадал из проверок urltest. Теперь файл создаётся из
+# шаблона в `make start`, если его нет, и переживает обновление.
+/config/nginx.conf
+# Ровно то же самое у SNI-роутера: setUpstreamDomain() и cloakNginx() вписывают
+# сюда домен и поддомены naive/anytls, а обновление возвращало файл к
+# репозиторной копии без них. Шаблон — config/upstream_default.conf.
+/config/upstream.conf
 /certs/*
 !/certs/.gitkeep
 /logs/*
