@@ -1956,6 +1956,7 @@ public function subscription($return = false)
                 }
                 // ?? '' — у клиента шаблон для этого формата может быть не выбран
                 $template = base64_decode($v["{$type}template"] ?? '');
+                $index    = $k;
                 $uid      = $v['id'];
                 $username = $v['username'];
                 $password = $v['password'] ?? '';
@@ -2367,12 +2368,37 @@ public function subscription($return = false)
             // Приложению sing-box заголовок не отдаём: оно его не читает, там
             // интервал задаётся в самом профиле (по умолчанию 60 минут).
             header('profile-update-interval: 6');
+            header('subscription-userinfo: ' . $this->subscriptionUserinfo($index));
             echo yaml_emit($c);
             return;
         }
 
         header('Content-type: application/json');
         echo json_encode($c);
+    }
+
+// Заголовок subscription-userinfo: графические клиенты mihomo (Clash Verge и
+// подобные) показывают по нему в карточке профиля потраченный трафик, лимит и
+// срок. Приложение sing-box его не читает, поэтому отдаём только в подписке
+// mihomo. Трафик — тот же, что бот считает для лимита и показывает на странице
+// подписки: статистика sing-box этого сервера (трафик через ноды в неё не
+// входит). total — только при заданном лимите, иначе клиент рисует шкалу
+// «использовано из нуля»; expire — только при заданном сроке. Цифры — на
+// момент загрузки подписки: клиент видит их при её обновлении (раз в 6 часов
+// или по кнопке).
+public function subscriptionUserinfo($i)
+    {
+        $client = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i] ?? [];
+        $u      = $this->getSingboxStats()['users'][$i] ?? [];
+        $sum    = fn ($dir) => (int) (($u['global'][$dir] ?? 0) + ($u['session'][$dir] ?? 0));
+        $info   = ['upload=' . $sum('upload'), 'download=' . $sum('download')];
+        if (!empty($client['trafficlimit'])) {
+            $info[] = 'total=' . (int) $client['trafficlimit'];
+        }
+        if (!empty($client['time'])) {
+            $info[] = 'expire=' . (int) $client['time'];
+        }
+        return implode('; ', $info);
     }
 
 public function addClashRuleSet($c)
