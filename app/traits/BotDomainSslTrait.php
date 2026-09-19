@@ -376,19 +376,32 @@ public function expireCert()
     {
         // Сертификата может не быть вовсе: домен задан, а SSL ещё не выпущен
         // (или удалён через /deletessl) — это нормальное состояние, а не сбой.
-        if (!file_exists("/certs/cert_public")) {
+        $pem = $this->certPem();
+        if ($pem === '') {
             return false;
         }
-        $c = openssl_x509_read(file_get_contents("/certs/cert_public"));
+        $c = openssl_x509_read($pem);
         return $c ? (openssl_x509_parse($c)["validTo_time_t"] ?? null) ?: false : false;
+    }
+
+// Сертификат из /certs/cert_public, если он там действительно есть, иначе ''.
+// Файла может не быть (SSL не выпускали или удалили), а может быть и пустой:
+// самоподписанный SSL при неудачной генерации записывает пустую строку.
+// openssl_x509_read() на пустом файле пишет warning — и так на каждое открытие
+// меню, поэтому проверяем заранее.
+public function certPem()
+    {
+        $pem = (string) @file_get_contents("/certs/cert_public");
+        return str_contains($pem, 'BEGIN CERTIFICATE') ? $pem : '';
     }
 
 public function domainsCert()
     {
-        if (!file_exists("/certs/cert_public")) {
+        $pem = $this->certPem();
+        if ($pem === '') {
             return false;
         }
-        $c = openssl_x509_read(file_get_contents("/certs/cert_public"));
+        $c = openssl_x509_read($pem);
         if (!$c) {
             return false;
         }
