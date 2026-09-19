@@ -762,7 +762,7 @@
             "type": "RULE-SET",
             "list": "~block~",
             "action": "REJECT",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "block"
         },
@@ -770,7 +770,7 @@
             "type": "RULE-SET",
             "list": "~process~",
             "action": "Proxy",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "process"
         },
@@ -778,7 +778,7 @@
             "type": "RULE-SET",
             "list": "~package~",
             "action": "Proxy",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "package"
         },
@@ -786,7 +786,7 @@
             "type": "RULE-SET",
             "list": "~warp~",
             "action": "Proxy",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "warp"
         },
@@ -794,7 +794,7 @@
             "type": "RULE-SET",
             "list": "~domains~",
             "action": "Proxy",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "domains"
         },
@@ -802,7 +802,7 @@
             "type": "RULE-SET",
             "list": "~subnet~",
             "action": "Proxy",
-            "interval": 60,
+            "interval": 3600,
             "behavior": "classical",
             "name": "subnet"
         },

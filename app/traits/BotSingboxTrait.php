@@ -2379,33 +2379,44 @@ public function addClashRuleSet($c)
     {
         $p = $this->getPacConf();
         if (!empty($p['rulessetlist']) && $c['add-rule-providers']) {
+            // Имена провайдеров — короткие, как у sing-box (см. ruleSetTags()),
+            // а не сам адрес.
+            $sets = [];
             foreach ($p['rulessetlist'] as $k => $v) {
-                if (!empty($v)) {
-                    [$type, $behavior, $time, $url] = explode(':', $k, 4);
-                    if (preg_match('~\.(mrs|yaml|yml)$~', $url, $m)) {
-                        $c['rule-providers'][$url] = [
-                            'type'     => 'http',
-                            'url'      => $url,
-                            'interval' => (int) $time,
-                            'behavior' => $behavior,
-                            'format'   => $m[1],
-                        ];
-                        // Регистр имени политики НЕ меняем: mihomo ищет её точным
-                        // совпадением (config/config.go: proxies[target]) и, не найдя,
-                        // отвергает конфиг целиком. strtoupper() превращал группу
-                        // "🎥YouTube" в "🎥YOUTUBE" — такой группы нет. К верхнему
-                        // приводим только встроенные политики mihomo, чтобы введённое
-                        // строчными "reject" продолжало работать как раньше.
-                        $builtin = ['direct', 'reject', 'reject-drop', 'pass', 'pass-rule', 'compatible'];
-                        $lower   = strtolower($type);
-                        $action  = in_array($lower, $builtin, true) ? strtoupper($type) : $type;
-                        if ($lower === 'reject' || $lower === 'reject-drop') {
-                            // Блокировки — в начало списка, иначе их перехватит
-                            // правило, стоящее выше.
-                            array_unshift($c['rules'], ['RULE-SET', $url, $action]);
-                        } else {
-                            array_splice($c['rules'], count($c['rules']) - 1, 0, [['RULE-SET', $url, $action]]);
-                        }
+                [$type, $behavior, , $url] = explode(':', $k, 4) + [1 => '', 2 => '', 3 => ''];
+                if (!empty($v) && preg_match('~\.(mrs|yaml|yml)$~', $url)) {
+                    // Вид списка у mihomo известен точно — из behavior.
+                    $kind       = ['ipcidr' => 'geoip', 'domain' => 'geosite'][strtolower($behavior)] ?? null;
+                    $sets[$k] = [$type, $url, $kind];
+                }
+            }
+            $names = $this->ruleSetTags($sets);
+            foreach (array_keys($sets) as $k) {
+                [$type, $behavior, $time, $url] = explode(':', $k, 4);
+                $name = $names[$k];
+                if (preg_match('~\.(mrs|yaml|yml)$~', $url, $m)) {
+                    $c['rule-providers'][$name] = [
+                        'type'     => 'http',
+                        'url'      => $url,
+                        'interval' => (int) $time,
+                        'behavior' => $behavior,
+                        'format'   => $m[1],
+                    ];
+                    // Регистр имени политики НЕ меняем: mihomo ищет её точным
+                    // совпадением (config/config.go: proxies[target]) и, не найдя,
+                    // отвергает конфиг целиком. strtoupper() превращал группу
+                    // "🎥YouTube" в "🎥YOUTUBE" — такой группы нет. К верхнему
+                    // приводим только встроенные политики mihomo, чтобы введённое
+                    // строчными "reject" продолжало работать как раньше.
+                    $builtin = ['direct', 'reject', 'reject-drop', 'pass', 'pass-rule', 'compatible'];
+                    $lower   = strtolower($type);
+                    $action  = in_array($lower, $builtin, true) ? strtoupper($type) : $type;
+                    if ($lower === 'reject' || $lower === 'reject-drop') {
+                        // Блокировки — в начало списка, иначе их перехватит
+                        // правило, стоящее выше.
+                        array_unshift($c['rules'], ['RULE-SET', $name, $action]);
+                    } else {
+                        array_splice($c['rules'], count($c['rules']) - 1, 0, [['RULE-SET', $name, $action]]);
                     }
                 }
             }
@@ -2454,7 +2465,7 @@ public function clashRules($c, $uid, $domain)
                             's' => $uid,
                             'r' => $v['name'],
                         ])),
-                        'interval' => $v['interval'],
+                        'interval' => $this->botListInterval($v['interval'] ?? 0, true),
                         'behavior' => $v['behavior'],
                         'format'   => 'yaml',
                     ];
@@ -3178,6 +3189,59 @@ public function replaceTags($subject, $tags)
         return str_replace(array_keys($tags), array_values($tags), $subject);
     }
 
+// Короткие имена внешних списков правил в подписке: [ключ => [политика, url,
+// вид]] -> [ключ => имя]. Раньше именем служил сам ключ из «Списков правил»
+// ("Proxy:72h:https://github.com/.../telegram.srs"), а sing-box на каждое
+// совпадение правила собирает его описание из имён всех его списков: 23 адреса
+// в одном правиле давали строку в пару КБ на соединение — в дампах iPhone это
+// ~14% всех аллокаций.
+//
+// Имя — "политика:вид/файл", где вид — geosite (домены) или geoip (адреса),
+// если его можно определить: у mihomo по behavior (передаётся третьим
+// элементом), у обоих — по каталогу geosite/geoip в адресе. Так
+// "Proxy:geosite/telegram" и "Proxy:geoip/telegram" не путаются, и по имени
+// видно, что "Proxy:geoip/facebook" — список адресов. Вид не определился, а
+// имя файла повторяется — вместо вида каталог: "block:main/ads". Совпало и
+// так — номер: "block:main/ads#2".
+public function ruleSetTags(array $sets)
+    {
+        $path  = fn ($url) => (string) parse_url($url, PHP_URL_PATH);
+        $names = [];
+        foreach ($sets as $k => $v) {
+            $url  = $v[1];
+            $base = preg_replace('~\.(srs|mrs|ya?ml)$~i', '', basename($path($url)));
+            $dir  = basename(dirname($path($url)));
+            $kind = $v[2] ?? null;
+            if (empty($kind) && in_array(strtolower($dir), ['geosite', 'geoip'], true)) {
+                $kind = strtolower($dir);
+            }
+            $names[$k] = [
+                'base' => $base !== '' ? $base : substr(md5($url), 0, 8),
+                'dir'  => $dir,
+                'kind' => $kind,
+            ];
+        }
+        $plain = array_count_values(array_map(
+            fn ($n) => strtolower($n['base']),
+            array_filter($names, fn ($n) => empty($n['kind']))
+        ));
+        $tags = [];
+        $used = [];
+        foreach ($sets as $k => $v) {
+            $n    = $names[$k];
+            $name = !empty($n['kind'])
+                ? "{$n['kind']}/{$n['base']}"
+                : (($plain[strtolower($n['base'])] ?? 0) > 1 ? "{$n['dir']}/{$n['base']}" : $n['base']);
+            $tag = "{$v[0]}:$name";
+            for ($i = 2; isset($used[strtolower($tag)]); $i++) {
+                $tag = "{$v[0]}:$name#$i";
+            }
+            $used[strtolower($tag)] = true;
+            $tags[$k] = $tag;
+        }
+        return $tags;
+    }
+
 public function addRuleSet($route)
     {
         if (!empty($route['rules'])) {
@@ -3188,19 +3252,31 @@ public function addRuleSet($route)
             }
             $p = $this->getPacConf();
             if (!empty($p['rulessetlist'])) {
+                $sets = [];
                 foreach ($p['rulessetlist'] as $k => $v) {
-                    if (!empty($v)) {
-                        [$type, $time, $url] = explode(':', $k, 3);
-                        if (preg_match('~\.srs$~', $url) && !empty($route['rules'][$t[$type]])) {
-                            $route['rule_set'][] = [
-                                "tag"             => $k,
-                                "type"            => "remote",
-                                "format"          => "binary",
-                                "url"             => $url,
-                                "update_interval" => $time
-                            ];
-                            $route['rules'][$t[$type]]['rule_set'][] = $k;
-                        }
+                    [$type, $time, $url] = explode(':', $k, 3) + [1 => '', 2 => ''];
+                    if (!empty($v) && preg_match('~\.srs$~', $url)) {
+                        $sets[$k] = [$type, $url];
+                    }
+                }
+                $tags = $this->ruleSetTags($sets);
+                foreach ($sets as $k => [$type, $url]) {
+                    $time = explode(':', $k, 3)[1];
+                    // sing-box ждёт длительность с единицей ("72h"); голое число
+                    // секунд (так пишут для mihomo) он отвергает вместе со всем
+                    // конфигом — дописываем "s".
+                    if (ctype_digit($time)) {
+                        $time .= 's';
+                    }
+                    if (!empty($route['rules'][$t[$type] ?? -1])) {
+                        $route['rule_set'][] = [
+                            "tag"             => $tags[$k],
+                            "type"            => "remote",
+                            "format"          => "binary",
+                            "url"             => $url,
+                            "update_interval" => $time
+                        ];
+                        $route['rules'][$t[$type]]['rule_set'][] = $tags[$k];
                     }
                 }
             }
@@ -3302,6 +3378,27 @@ public function createSrs(string $name, array $rules)
         exit;
     }
 
+// Списки бота (~domains~, ~block~ и т. п.) клиент обновляет не чаще раза в
+// час, что бы ни стояло в шаблоне (было 600 с у sing-box и 60 с у mihomo).
+// Каждое обновление — повторная загрузка и разбор списка, и пока он
+// разбирается, в памяти лежат обе копии: в дампах iPhone это заметная доля
+// аллокаций. Правки списков в боте доходят до клиентов в течение часа.
+// sing-box: строка длительности ("600s", "1h", "72h"), mihomo: секунды.
+public function botListInterval($interval, $clash = false)
+    {
+        if ($clash) {
+            return max(3600, (int) $interval);
+        }
+        $seconds = 0;
+        $units   = ['ms' => 0.001, 's' => 1, 'm' => 60, 'h' => 3600, 'd' => 86400];
+        if (preg_match_all('~(\d+(?:\.\d+)?)(ms|s|m|h|d)~', (string) $interval, $m, PREG_SET_ORDER)) {
+            foreach ($m as [, $n, $unit]) {
+                $seconds += $n * $units[$unit];
+            }
+        }
+        return $seconds >= 3600 ? $interval : '1h';
+    }
+
 public function createRuleSet($route, $uid, $domain)
     {
         $scheme = empty($this->nginxGetTypeCert()) ? 'http' : 'https';
@@ -3321,7 +3418,7 @@ public function createRuleSet($route, $uid, $domain)
                             's' => $uid,
                             'r' => $r['name'],
                         ])),
-                        "update_interval" => $r['interval'],
+                        "update_interval" => $this->botListInterval($r['interval'] ?? ''),
                         "type"            => "remote",
                         "format"          => "binary",
                     ];

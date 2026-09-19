@@ -787,7 +787,7 @@
                 "createruleset": [
                     {
                         "name": "domains",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "domain_suffix": "~domains~"
@@ -802,7 +802,7 @@
                 "createruleset": [
                     {
                         "name": "subnet",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "ip_cidr": "~subnet~"
@@ -817,7 +817,7 @@
                 "createruleset": [
                     {
                         "name": "package",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "package_name": "~package~"
@@ -832,7 +832,7 @@
                 "createruleset": [
                     {
                         "name": "process",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "process_name": "~process~"
@@ -847,7 +847,7 @@
                 "createruleset": [
                     {
                         "name": "block",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "domain_suffix": "~block~"
@@ -862,7 +862,7 @@
                 "createruleset": [
                     {
                         "name": "warp",
-                        "interval": "600s",
+                        "interval": "1h",
                         "rules": [
                             {
                                 "domain_suffix": "~warp~"

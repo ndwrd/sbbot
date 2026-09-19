@@ -110,13 +110,14 @@ IP, и DNS настраивать не нужно.
   `🎥YouTube`) или встроенное значение (`reject`, `direct`). Имя пишется как
   есть: mihomo сверяет его точно, `PROXY` и `Proxy` — разные политики.
 - **behavior** — только для mihomo: `domain`, `ipcidr` или `classical`.
-- **интервал** — как часто клиент обновляет список, в секундах.
+- **интервал** — как часто клиент обновляет список: для sing-box — длительность
+  с единицей (`72h`, `24h`), для mihomo — секунды (`86400`).
 
 Формат файла определяет, в какую подписку попадёт список:
 
 | подписка | файл | пример |
 |---|---|---|
-| sing-box | `.srs` | `Proxy:86400:https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/youtube.srs` |
+| sing-box | `.srs` | `Proxy:72h:https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/youtube.srs` |
 | mihomo | `.mrs`, `.yaml`, `.yml` | `🎥YouTube:domain:86400:https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geosite/youtube.mrs` |
 | mihomo, блокировка | `.mrs` | `reject:domain:86400:https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geosite/category-ads-all.mrs` |
 
@@ -131,6 +132,16 @@ IP, и DNS настраивать не нужно.
 
 Если политики с таким именем в шаблоне нет, правило выбрасывается из подписки —
 пропадёт только оно, а конфиг останется рабочим.
+
+В подписке список получает короткое имя `политика:вид/файл` — его видно в логах
+и интерфейсе клиента: `Proxy:geosite/telegram` и `Proxy:geoip/telegram` —
+списки доменов и адресов с одинаковым именем файла. Вид берётся из каталога
+`geosite`/`geoip` в адресе, у mihomo — из behavior (`domain` → geosite, `ipcidr`
+→ geoip). Не определился, а имя файла повторяется — вместо вида каталог из
+адреса, совпало и так — номер: `block:main/ads#2`.
+
+Собственные списки бота (домены, подсети, блокировки, Warp и т. п.) клиент
+обновляет раз в час: правка в боте доходит до клиентов в течение часа.
 
 ## Telegram Proxy: MTProto и Web Proxy
 
