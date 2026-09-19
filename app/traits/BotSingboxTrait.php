@@ -2016,6 +2016,11 @@ public function subscription($return = false)
             // block по доменам и IP) едет отдельным HTTP-заголовком
             // routing: happ://routing/onadd/<base64> поверх того же ответа.
             header('routing: happ://routing/onadd/' . $this->buildHappRouting($pac));
+            // Трафик, лимит и срок в карточке подписки (как у mihomo, см.
+            // subscriptionUserinfo()) и автообновление подписки раз в 12 часов
+            // (единица — часы).
+            header('profile-update-interval: 12');
+            header('subscription-userinfo: ' . $this->subscriptionUserinfo($index));
             header('Content-type: text/plain; charset=utf-8');
             echo base64_encode($this->buildHappLinks($domain, $hash, $uid, $password));
             return;
@@ -2448,9 +2453,9 @@ public function userTrafficLines($i)
     }
 
 // Заголовок subscription-userinfo: графические клиенты mihomo (Clash Verge и
-// подобные) показывают по нему в карточке профиля потраченный трафик, лимит и
-// срок. Приложение sing-box его не читает, поэтому отдаём только в подписке
-// mihomo. Трафик — тот же, что бот считает для лимита и показывает на странице
+// подобные), Happ и INCY показывают по нему в карточке подписки потраченный
+// трафик, лимит и срок. Приложение sing-box его не читает, поэтому отдаём
+// только в подписках mihomo и Happ/INCY. Трафик — тот же, что бот считает для лимита и показывает на странице
 // подписки: Бот и ноды вместе (userTraffic()). total — только при заданном лимите, иначе клиент рисует шкалу
 // «использовано из нуля»; expire — только при заданном сроке. Цифры — на
 // момент загрузки подписки: клиент видит их при её обновлении (раз в 6 часов
