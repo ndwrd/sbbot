@@ -3264,8 +3264,9 @@ public function addRuleSet($route)
                     $time = explode(':', $k, 3)[1];
                     // sing-box ждёт длительность с единицей ("72h"); голое число
                     // секунд (так пишут для mihomo) он отвергает вместе со всем
-                    // конфигом — дописываем "s".
-                    if (ctype_digit($time)) {
+                    // конфигом — дописываем "s". preg_match, а не ctype_digit():
+                    // расширения ctype в PHP контейнера нет.
+                    if (preg_match('~^\d+$~', $time)) {
                         $time .= 's';
                     }
                     if (!empty($route['rules'][$t[$type] ?? -1])) {
