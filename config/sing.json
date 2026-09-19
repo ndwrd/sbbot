@@ -688,7 +688,7 @@
                 "Naive",
                 "AnyTLS"
             ],
-            "interval": "5m",
+            "interval": "2m",
             "tolerance": 150,
             "interrupt_exist_connections": false
         },
