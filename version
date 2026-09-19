@@ -1,3 +1,7 @@
+19.09.2026 v1.4.1
+- Исправление статистики пользователей.
+- Корректировка Mihomo Happ/Incy headers (userinfo, profile-update-interval)
+
 18.09.2026 v1.4.0
 - Telegram Web Proxy на Боте и нодах: Telegram ходит к серверу обычным HTTPS
   через свой поддомен, без узнаваемого рукопожатия MTProxy. Включается в
