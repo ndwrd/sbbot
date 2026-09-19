@@ -50,6 +50,7 @@ class Bot
     public $admin;
     public $ports;
     public $time_nodes_status;
+    public $time_nodes_traffic;
 
     public function __construct($key, $i18n)
     {

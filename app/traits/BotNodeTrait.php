@@ -2059,10 +2059,174 @@ public function nodeSyncUsers($id)
         $this->nodeMenu($id);
     }
 
+// Статистика пользователей на ноде хранится по номеру пользователя в списке
+// (как и на главном, см. singboxStatsUser()). Главный присылает список целиком,
+// и номера в нём сдвигаются, когда пользователя удаляют или добавляют в
+// середину, — без пересчёта трафик уезжал к соседу. Переносим записи по имени.
+public function remapUserStats(array $old, array $new)
+    {
+        $st = $this->getSingboxStats();
+        if (empty($st['users'])) {
+            return;
+        }
+        $byName = [];
+        foreach ($old as $i => $c) {
+            if (isset($c['username'], $st['users'][$i])) {
+                $byName[$c['username']] = $st['users'][$i];
+            }
+        }
+        $users = [];
+        foreach ($new as $i => $c) {
+            if (isset($c['username'], $byName[$c['username']])) {
+                $users[$i] = $byName[$c['username']];
+            }
+        }
+        $st['users'] = $users;
+        $this->setSingboxStats($st);
+    }
+
+// Трафик пользователей этого сервера по именам — для главного
+// (collectNodesTraffic() зовёт это на ноде через console.php).
+public function trafficReport()
+    {
+        $st    = $this->getSingboxStats();
+        $users = [];
+        foreach ($this->getPacConf()['singboxClients'] ?? [] as $i => $c) {
+            $u = $st['users'][$i] ?? null;
+            if (!isset($c['username']) || !$u) {
+                continue;
+            }
+            $users[$c['username']] = [
+                'download' => (int) (($u['global']['download'] ?? 0) + ($u['session']['download'] ?? 0)),
+                'upload'   => (int) (($u['global']['upload'] ?? 0) + ($u['session']['upload'] ?? 0)),
+            ];
+        }
+        return ['users' => $users];
+    }
+
+// Сброс трафика на этом сервере по команде главного: всех пользователей или
+// одного (по имени). Счётчики sing-box обнуляются перезагрузкой (SIGHUP); у
+// остальных пользователей прошлая сессия не теряется — singboxStatsUser()
+// увидит, что счётчик стал меньше, и перенесёт её в накопленное.
+public function resetUserTraffic($username = '')
+    {
+        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
+        $st = $this->getSingboxStats();
+        if ($username === '') {
+            $st = [];
+        } else {
+            foreach ($this->getPacConf()['singboxClients'] ?? [] as $i => $c) {
+                if (($c['username'] ?? null) === $username) {
+                    unset($st['users'][$i]);
+                }
+            }
+        }
+        $this->setSingboxStats($st);
+        return 'ok';
+    }
+
+// Сбор трафика пользователей с нод (из cron, раз в 5 минут) в
+// /config/nodes_traffic.json: [id ноды => ['users' => [имя => [download,
+// upload]], 'time' => ..., 'pending' => ...]]. Из него userTraffic() считает
+// «Бот + ноды». Недоступная нода сохраняет последние цифры. Сброс, который не
+// дошёл до ноды (pending), повторяется здесь; пока он не прошёл, цифры ноды не
+// учитываются — они до сброса.
+public function collectNodesTraffic()
+    {
+        if (!empty($this->time_nodes_traffic) && time() - $this->time_nodes_traffic < 300) {
+            return;
+        }
+        $this->time_nodes_traffic = time();
+        $nodes  = $this->getNodes();
+        $status = $this->readJsonLocked('/config/nodes_status.json') ?: [];
+        $cache  = $this->readJsonLocked('/config/nodes_traffic.json') ?: [];
+        $fresh  = [];
+        foreach ($nodes as $id => $node) {
+            $entry = $cache[$id] ?? [];
+            // Опрос статусов (раз в 30 с) уже знает, что нода недоступна, —
+            // не ждём на ней SSH-таймаут.
+            if (!empty($node['off']) || empty($node['ip']) || empty($status[$id]['online'])) {
+                $fresh[$id] = $entry;
+                continue;
+            }
+            if (!empty($entry['pending'])) {
+                $entry['pending'] = $this->nodeTrafficApplyReset($node['ip'], $entry['pending']);
+            }
+            if (empty($entry['pending'])) {
+                unset($entry['pending']);
+                $r = $this->nodeConsole($node['ip'], 'trafficReport');
+                if (is_array($r) && isset($r['users'])) {
+                    $entry['users'] = $r['users'];
+                    $entry['time']  = time();
+                }
+            }
+            $fresh[$id] = $entry;
+        }
+        // Под блокировкой и поверх свежего файла: пока шёл опрос, админ мог
+        // сбросить статистику (pending/обнулённые users) — это не затираем.
+        $this->updateJsonLocked('/config/nodes_traffic.json', function ($c) use ($fresh, $cache) {
+            $out = [];
+            foreach ($fresh as $id => $entry) {
+                $out[$id] = ($c[$id] ?? []) != ($cache[$id] ?? []) ? ($c[$id] ?? []) : $entry;
+            }
+            return $out;
+        });
+    }
+
+// Сбросить трафик на нодах: всех (без имени) или одного пользователя. Нода не
+// ответила — сброс запоминается (pending) и повторяется в collectNodesTraffic().
+public function nodesTrafficReset($username = '')
+    {
+        foreach ($this->getNodes() as $id => $node) {
+            $ok = empty($node['off']) && !empty($node['ip'])
+                && $this->nodeConsole($node['ip'], 'resetUserTraffic', $username) === 'ok';
+            $this->updateJsonLocked('/config/nodes_traffic.json', function ($c) use ($id, $username, $ok) {
+                $e = $c[$id] ?? [];
+                if ($username === '') {
+                    $e['users'] = [];
+                } else {
+                    unset($e['users'][$username]);
+                }
+                if (!$ok) {
+                    $e['pending'] = $this->mergeTrafficReset($e['pending'] ?? [], $username);
+                }
+                $c[$id] = $e;
+                return $c;
+            });
+        }
+    }
+
+// Отложенные сбросы: ['all' => true] или ['users' => [имена]].
+public function mergeTrafficReset(array $pending, $username)
+    {
+        if ($username === '' || !empty($pending['all'])) {
+            return ['all' => true];
+        }
+        $pending['users'] = array_values(array_unique(array_merge($pending['users'] ?? [], [$username])));
+        return $pending;
+    }
+
+// Выполнить отложенный сброс на ноде. Возвращает то, что осталось невыполненным.
+public function nodeTrafficApplyReset($ip, array $pending)
+    {
+        if (!empty($pending['all'])) {
+            return $this->nodeConsole($ip, 'resetUserTraffic', '') === 'ok' ? [] : $pending;
+        }
+        $left = [];
+        foreach ($pending['users'] ?? [] as $name) {
+            if ($this->nodeConsole($ip, 'resetUserTraffic', $name) !== 'ok') {
+                $left[] = $name;
+            }
+        }
+        return $left ? ['users' => $left] : [];
+    }
+
 public function applyUsers($json)
     {
         $data = json_decode($json, true) ?: [];
         $pac  = $this->getPacConf();
+        // До замены списка — пока старые номера пользователей ещё известны.
+        $this->remapUserStats($pac['singboxClients'] ?? [], $data['singboxClients'] ?? []);
         $pac['singboxClients'] = $data['singboxClients'] ?? [];
         $pac['transport']      = $data['transport'] ?? 'Websocket';
         $pac['reality']        = $data['reality'] ?? [];

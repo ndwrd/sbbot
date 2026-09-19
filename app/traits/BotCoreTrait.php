@@ -538,6 +538,7 @@ public function cron()
             $this->resetPacCache();
             $this->checkMenuStatus();
             $this->checkNodesStatus();
+            $this->collectNodesTraffic();
             $this->shutdownClientXr();
             $this->checkVersion();
             $this->checkBackup();

@@ -341,17 +341,32 @@ public function singboxStatsUser()
 
         // Счётчики sing-box именованы по username, а $p['users'] (как уже читают
         // userXr()/sub()) индексирован числовой позицией клиента — сопоставляем.
+        //
+        // Счётчик sing-box меньше сохранённой сессии — значит, sing-box
+        // перезапускали, и сохранить сессию перед этим было некому (перезапуск
+        // контейнера, обновление бота, SIGHUP на ноде при синхронизации
+        // пользователей). Раньше сессия просто затиралась новым, маленьким
+        // значением, и её трафик пропадал; теперь переносится в накопленное.
+        $take = function (array $entry, array $counters) {
+            foreach (['download', 'upload'] as $dir) {
+                $new = (int) ($counters[$dir] ?? 0);
+                $old = (int) ($entry['session'][$dir] ?? 0);
+                if ($new < $old) {
+                    $entry['global'][$dir] = ($entry['global'][$dir] ?? 0) + $old;
+                }
+                $entry['session'][$dir] = $new;
+            }
+            return $entry;
+        };
         foreach ($clients as $i => $client) {
             $name = $client['username'] ?? null;
             if ($name === null || !isset($stats['users'][$name])) {
                 continue;
             }
-            $p['users'][$i]['session']['download'] = $stats['users'][$name]['download'] ?? 0;
-            $p['users'][$i]['session']['upload']   = $stats['users'][$name]['upload'] ?? 0;
+            $p['users'][$i] = $take($p['users'][$i] ?? [], $stats['users'][$name]);
         }
         foreach ($stats['inbounds'] as $tag => $v) {
-            $p['inbounds'][$tag]['session']['download'] = $v['download'] ?? 0;
-            $p['inbounds'][$tag]['session']['upload']   = $v['upload'] ?? 0;
+            $p['inbounds'][$tag] = $take($p['inbounds'][$tag] ?? [], $v);
         }
         $this->setSingboxStats($p);
 
@@ -364,12 +379,9 @@ public function singboxStatsUser()
             if (empty($client['trafficlimit'])) {
                 continue;
             }
-            $stat = $p['users'][$i] ?? null;
-            if (!$stat) {
-                continue;
-            }
-            $total = ($stat['global']['download'] ?? 0) + ($stat['session']['download'] ?? 0)
-                   + ($stat['global']['upload']   ?? 0) + ($stat['session']['upload']   ?? 0);
+            // Трафик — по всем серверам: Бот и ноды (userTraffic()).
+            [$down, $up] = $this->userTraffic($i);
+            $total        = $down + $up;
             if ($total >= $client['trafficlimit'] && empty($client['limitNotified'])) {
                 $label = $client['description'] ?? ($client['username'] ?? $i);
                 foreach ($c['admin'] as $admin) {
@@ -1023,6 +1035,11 @@ public function resetXrUser($i)
         $c = $this->getSingboxStats();
         unset($c['users'][$i]);
         $this->setSingboxStats($c);
+        // И на нодах — там пользователь ищется по имени.
+        $name = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i]['username'] ?? null;
+        if ($name !== null) {
+            $this->nodesTrafficReset($name);
+        }
         $this->restartSingbox($this->getSingbox());
         $this->userXr($i);
     }
@@ -1031,6 +1048,8 @@ public function resetXrStats($nomenu = false)
     {
         $this->restartSingbox($this->getSingbox());
         $this->setSingboxStats([]);
+        // И на нодах: итог пользователя — сумма Бота и нод.
+        $this->nodesTrafficReset();
         if (empty($nomenu)) {
             $this->statsMenu();
         }
@@ -1434,8 +1453,7 @@ public function users($page = 0)
         foreach ($clients as $k => $v) {
             $time     = !empty($v['time']) ? $this->getTime($v['time']) : '';
             $limit    = !empty($v['trafficlimit']) ? '| ' . round($v['trafficlimit'] / (1024 ** 3), 2) . ' GB' : '';
-            $download = ($st['users'][$k]['global']['download'] ?? 0) + ($st['users'][$k]['session']['download'] ?? 0);
-            $upload   = ($st['users'][$k]['global']['upload']   ?? 0) + ($st['users'][$k]['session']['upload']   ?? 0);
+            [$download, $upload] = $this->userTraffic($k);
             $data[]   = [
                 [
                     'text'          => (!empty($v['description']) ? "{$v['description']} — " : '') . "{$v['username']}" . ($time ? ": $time" : '') . $limit . " ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}",
@@ -1645,6 +1663,7 @@ public function userXr($i)
         if (file_exists(dirname(__DIR__) . '/subscription.php')) {
             $text[] = "<b><a href='$scheme://{$domain}/pac$hash/sub?id={$c['id']}'>Subscription</a></b>";
         }
+        $text = array_merge($text, $this->userTrafficLines($i));
         $text[] = "";
         $text[] = "<pre><code>{$this->linkVless($i)}</code></pre>";
         $text[] = "";
@@ -1697,8 +1716,10 @@ public function userXr($i)
         // ?? 0 на каждом уровне: записи для пользователя может не быть вовсе
         // (ещё не было трафика), а 'session' появляется только после первого
         // сбора статистики. sub() тут уже считал так же — приводим к одному виду.
-        $download = $this->getBytes(($st['users'][$i]['global']['download'] ?? 0) + ($st['users'][$i]['session']['download'] ?? 0));
-        $upload   = $this->getBytes(($st['users'][$i]['global']['upload']   ?? 0) + ($st['users'][$i]['session']['upload']   ?? 0));
+        // Всего по Боту и нодам — сброс тоже уходит на ноды (resetXrUser()).
+        [$down, $up] = $this->userTraffic($i);
+        $download     = $this->getBytes($down);
+        $upload       = $this->getBytes($up);
         $data[]   = [
             [
                 'text'          => $this->i18n('reset stats') . ": ↓$download  ↑$upload",
@@ -1853,8 +1874,8 @@ public function sub()
             exit;
         }
 
-        $download = ($st['users'][$i]['global']['download'] ?? 0) + ($st['users'][$i]['session']['download'] ?? 0);
-        $upload   = ($st['users'][$i]['global']['upload']   ?? 0) + ($st['users'][$i]['session']['upload']   ?? 0);
+        // Всего по Боту и нодам.
+        [$download, $upload] = $this->userTraffic($i);
 
         $link = function ($type) use ($scheme, $domain, $hash, $uid) {
             return "$scheme://{$domain}/pac$hash/" . base64_encode(serialize([
@@ -2377,21 +2398,68 @@ public function subscription($return = false)
         echo json_encode($c);
     }
 
+// Трафик пользователя по всем серверам: [download, upload, [сервер => [d, u]]],
+// где сервер — 'main' или id ноды. Свой — из статистики sing-box этого
+// сервера, нод — из кэша, который собирает collectNodesTraffic() (раз в 5
+// минут). На нодах пользователь ищется по имени: номера в списке на главном и
+// на ноде могут расходиться. Нода со сбросом, который до неё ещё не дошёл
+// (pending), не учитывается: её цифры — до сброса.
+public function userTraffic($i)
+    {
+        $client = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i] ?? [];
+        $u      = $this->getSingboxStats()['users'][$i] ?? [];
+        $down   = (int) (($u['global']['download'] ?? 0) + ($u['session']['download'] ?? 0));
+        $up     = (int) (($u['global']['upload'] ?? 0) + ($u['session']['upload'] ?? 0));
+        $by     = ['main' => [$down, $up]];
+        $name   = $client['username'] ?? null;
+        if ($name !== null) {
+            $nodes = $this->getNodes();
+            foreach ($this->readJsonLocked('/config/nodes_traffic.json') ?: [] as $id => $n) {
+                $t = $n['users'][$name] ?? null;
+                if (!isset($nodes[$id]) || !empty($n['pending']) || !$t) {
+                    continue;
+                }
+                $by[$id] = [(int) ($t['download'] ?? 0), (int) ($t['upload'] ?? 0)];
+                $down   += $by[$id][0];
+                $up     += $by[$id][1];
+            }
+        }
+        return [$down, $up, $by];
+    }
+
+// Трафик пользователя для его карточки: всего и по серверам — Бот первым,
+// дальше ноды в порядке списка «Ноды», серверы без его трафика — с нулями.
+// Без нод разбивка повторяла бы итог — тогда только итог.
+public function userTrafficLines($i)
+    {
+        [$down, $up, $by] = $this->userTraffic($i);
+        $lines = ["Traffic: ↓{$this->getBytes($down)} ↑{$this->getBytes($up)}"];
+        $nodes = $this->getNodes();
+        if (empty($nodes)) {
+            return $lines;
+        }
+        $tag  = fn ($geo) => $geo ? $this->countryFlag(preg_replace('~\d+$~', '', $geo)) . $geo . ' ' : '';
+        $line = fn ($name, $t) => "{$name}: ↓{$this->getBytes($t[0])} ↑{$this->getBytes($t[1])}";
+        $lines[] = $line($tag($this->ensureMainGeoTag()) . '(' . $this->i18n('bot server') . ')', $by['main']);
+        foreach ($nodes as $id => $node) {
+            $lines[] = $line($tag($node['geoTag'] ?? '') . ($node['label'] ?? $id), $by[$id] ?? [0, 0]);
+        }
+        return $lines;
+    }
+
 // Заголовок subscription-userinfo: графические клиенты mihomo (Clash Verge и
 // подобные) показывают по нему в карточке профиля потраченный трафик, лимит и
 // срок. Приложение sing-box его не читает, поэтому отдаём только в подписке
 // mihomo. Трафик — тот же, что бот считает для лимита и показывает на странице
-// подписки: статистика sing-box этого сервера (трафик через ноды в неё не
-// входит). total — только при заданном лимите, иначе клиент рисует шкалу
+// подписки: Бот и ноды вместе (userTraffic()). total — только при заданном лимите, иначе клиент рисует шкалу
 // «использовано из нуля»; expire — только при заданном сроке. Цифры — на
 // момент загрузки подписки: клиент видит их при её обновлении (раз в 6 часов
 // или по кнопке).
 public function subscriptionUserinfo($i)
     {
         $client = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i] ?? [];
-        $u      = $this->getSingboxStats()['users'][$i] ?? [];
-        $sum    = fn ($dir) => (int) (($u['global'][$dir] ?? 0) + ($u['session'][$dir] ?? 0));
-        $info   = ['upload=' . $sum('upload'), 'download=' . $sum('download')];
+        [$down, $up] = $this->userTraffic($i);
+        $info        = ["upload=$up", "download=$down"];
         if (!empty($client['trafficlimit'])) {
             $info[] = 'total=' . (int) $client['trafficlimit'];
         }

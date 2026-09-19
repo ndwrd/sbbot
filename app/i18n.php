@@ -373,6 +373,10 @@ $i = [
         'en' => 'Node %label% did not answer — it may need an update (Update in its card).',
         'ru' => 'Нода %label% не ответила — возможно, её нужно обновить (Update в карточке ноды).',
     ],
+    'bot server' => [
+        'en' => 'Bot',
+        'ru' => 'Бот',
+    ],
     'web proxy' => [
         'en' => 'Web Proxy',
         'ru' => 'Web Proxy',
