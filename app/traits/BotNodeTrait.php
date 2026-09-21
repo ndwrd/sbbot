@@ -1714,10 +1714,24 @@ public function nodeSecretSet($secret, $id)
             return;
         }
         $secret = trim($secret);
-        if (preg_match('~^(?:dd|ee)?([0-9a-f]{32})~i', $secret, $m)) {
-            $secret = strtolower($m[1]);
+        // «0» — остановить прокси на ноде, как secretSet() у Бота; секрет в
+        // записи ноды не трогаем. Раньше «0» записывался вместо секрета, а
+        // nodeRestartTG() пропускал его как невалидный — Telemt на ноде
+        // продолжал работать.
+        if ($secret === '0') {
+            $this->nodeConsole($node['ip'], 'tgStop');
+            $this->nodeMtprotoMenu($id);
+            return;
         }
-        $node['mtprotosecret'] = $secret;
+        // Мусор не записываем — иначе ссылка ноды пропадёт («not configured»),
+        // а прокси на ноде продолжит работать со старым секретом.
+        if (!preg_match('~^(?:dd|ee)?([0-9a-f]{32})~i', $secret, $m)) {
+            $this->update($this->input['chat'], $this->input['message_id'], 'wrong secret');
+            sleep(2);
+            $this->nodeMtprotoMenu($id);
+            return;
+        }
+        $node['mtprotosecret'] = strtolower($m[1]);
         $this->setNode($id, $node);
         $this->nodeRestartTG($id);
         $this->nodeMtprotoMenu($id);
@@ -2387,6 +2401,9 @@ public function nodeLinkMtproto($id)
             $tg = ($this->readJsonLocked('/config/nodes_status.json') ?: [])[$id]['services']['ports']['tg'] ?? [];
             $p  = !empty($tg['enable']) && !empty($tg['port']) ? $tg['port'] : 443;
         }
-        return "https://t.me/proxy?server={$node['ip']}&port=$p&secret=ee$s$d";
+        // Домен ноды, а без него IP — как getDomain() в linkMtproto() у Бота.
+        // Домен в записи ноды — из кэша nodeCacheDomain(), SSH не нужен.
+        $host = ($node['domain'] ?? null) ?: $node['ip'];
+        return "https://t.me/proxy?server=$host&port=$p&secret=ee$s$d";
     }
 }
