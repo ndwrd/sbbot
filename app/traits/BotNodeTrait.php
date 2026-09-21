@@ -1473,8 +1473,10 @@ public function nodeMtprotoMenu($id)
         $node       = $this->getNode($id);
         $secret     = $node['mtprotosecret'] ?? '';
         $fakedomain = $node['mtprotodomain'] ?? 'yandex.ru';
-        $st         = ($report['status'] ?? '') === 'on' ? 'on' : 'off';
-        $web        = $st == 'on' && !empty($node['tgWeb']);
+        // 'on', 'user off' (Telemt работает ради WEB, пользователь MTProto
+        // отключён) или 'off' — см. tgStatus(). WEB жив, пока работает Telemt.
+        $st         = in_array($report['status'] ?? '', ['on', 'user off'], true) ? $report['status'] : 'off';
+        $web        = $st != 'off' && !empty($node['tgWeb']);
         $host       = $this->nodeWebHost($node);
 
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('telegram proxy');
@@ -1687,6 +1689,7 @@ public function nodeGenerateSecret($id)
             return;
         }
         $node['mtprotosecret'] = bin2hex(random_bytes(16));
+        unset($node['mtprotoUserOff']);
         $this->setNode($id, $node);
         $this->nodeRestartTG($id);
         $this->nodeMtprotoMenu($id);
@@ -1714,12 +1717,14 @@ public function nodeSecretSet($secret, $id)
             return;
         }
         $secret = trim($secret);
-        // «0» — остановить прокси на ноде, как secretSet() у Бота; секрет в
-        // записи ноды не трогаем. Раньше «0» записывался вместо секрета, а
-        // nodeRestartTG() пропускал его как невалидный — Telemt на ноде
-        // продолжал работать.
+        // «0» — отключить пользователя MTProto на ноде, как secretSet() у Бота:
+        // Telemt работает дальше ради WEB-прокси, секрет не трогаем. Флаг живёт
+        // в записи ноды на главном — nodeRestartTG() отдаёт его ноде вместе с
+        // секретом и доменом.
         if ($secret === '0') {
-            $this->nodeConsole($node['ip'], 'tgStop');
+            $node['mtprotoUserOff'] = true;
+            $this->setNode($id, $node);
+            $this->nodeRestartTG($id);
             $this->nodeMtprotoMenu($id);
             return;
         }
@@ -1732,6 +1737,7 @@ public function nodeSecretSet($secret, $id)
             return;
         }
         $node['mtprotosecret'] = strtolower($m[1]);
+        unset($node['mtprotoUserOff']);
         $this->setNode($id, $node);
         $this->nodeRestartTG($id);
         $this->nodeMtprotoMenu($id);
@@ -1776,7 +1782,7 @@ public function nodeRestartTG($id)
         // Telemt нет sshd. Отдаём секрет и домен её же боту через
         // console.php, дальше нода применяет их своим applyMtproto().
         if (preg_match('~^[0-9a-f]{32}$~i', $secret)) {
-            $this->nodeConsole($node['ip'], 'applyMtproto', $secret, $fakedomain);
+            $this->nodeConsole($node['ip'], 'applyMtproto', $secret, $fakedomain, !empty($node['mtprotoUserOff']) ? '1' : '0');
         }
     }
 
@@ -2384,7 +2390,9 @@ public function nodeDnsttDownload($id)
 public function nodeLinkMtproto($id)
     {
         $node = $this->getNode($id);
-        if (empty($node) || empty($node['mtprotosecret'])) {
+        // Пользователь MTProto отключён «0» — ссылки нет нигде: ни в меню, ни в
+        // QR (nodeSecretSet()).
+        if (empty($node) || empty($node['mtprotosecret']) || !empty($node['mtprotoUserOff'])) {
             return '';
         }
         $s  = $node['mtprotosecret'];

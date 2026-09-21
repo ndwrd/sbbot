@@ -49,10 +49,15 @@ public function secretSet($secret)
         // сюда, а не сырой 32-символьный ключ, он не пройдёт проверку и
         // mtproto молча не поднимется. Достаём чистый ключ сами.
         $secret = trim($secret);
-        // «0» по подсказке в setSecret() — остановить прокси; секрет не трогаем,
-        // чтобы следующий «Сгенерировать»/«Установить» поднял его заново.
+        // «0» по подсказке в setSecret() — отключить пользователя MTProto
+        // (см. tgWriteConfig()), а сам Telemt не останавливать: в нём же
+        // работает WEB-прокси. Секрет не трогаем — «Установить» с тем же ключом
+        // вернёт прежние ссылки. tgStart() — если контейнер остановил прежний
+        // «0» (раньше он гасил Telemt целиком): WEB должен вернуться.
         if ($secret === '0') {
-            $this->tgStop();
+            $this->tgSetUserOff(true);
+            $this->restartTG();
+            $this->tgStart();
             $this->mtproto();
             return;
         }
@@ -63,6 +68,7 @@ public function secretSet($secret)
             return;
         }
         file_put_contents('/config/mtprotosecret', strtolower($m[1]));
+        $this->tgSetUserOff(false);
         $this->restartTG();
         $this->tgStart();
         $this->mtproto();
@@ -114,13 +120,36 @@ public function tgDomain()
         return trim(@file_get_contents('/config/mtprotodomain') ?: '') ?: 'yandex.ru';
     }
 
-// Статус берём из состояния контейнера, а не из pgrep: в образе нет ни sshd,
-// ни shell, а healthcheck (см. docker-compose.yml) спрашивает сам Telemt через
-// его API — это честнее, чем наличие процесса.
-public function tgStatus()
+// Работает ли Telemt — по состоянию контейнера, а не по pgrep: в образе нет ни
+// sshd, ни shell, а healthcheck (см. docker-compose.yml) спрашивает сам Telemt
+// через его API — это честнее, чем наличие процесса. От этого зависит и
+// WEB-прокси.
+public function tgRunning()
     {
         $state = $this->containerState('tg');
-        return !empty($state['running']) && ($state['health'] ?? 'healthy') !== 'unhealthy' ? 'on' : 'off';
+        return !empty($state['running']) && ($state['health'] ?? 'healthy') !== 'unhealthy';
+    }
+
+// Статус обычного MTProto: 'on'; 'user off' — Telemt работает, но пользователь
+// MTProto отключён «0» вместо ключа; 'off' — Telemt не работает.
+public function tgStatus()
+    {
+        if (!$this->tgRunning()) {
+            return 'off';
+        }
+        return !empty($this->getPacConf()['tgUserOff']) ? 'user off' : 'on';
+    }
+
+public function tgSetUserOff($off)
+    {
+        $this->updatePacConf(function ($c) use ($off) {
+            if ($off) {
+                $c['tgUserOff'] = true;
+            } else {
+                unset($c['tgUserOff']);
+            }
+            return $c;
+        });
     }
 
 // Собрать конфиг Telemt из текущих настроек и записать, если он изменился.
@@ -235,6 +264,11 @@ public function tgWriteConfig()
             '[access.users]',
             'sbbot = ' . $q($this->tgSecret()),
             $web ? 'web = ' . $q($webKey) : null,
+            // «0» вместо ключа MTProto (secretSet()): пользователь остаётся в
+            // конфиге, но отключён. Telemt применяет это на лету и сам рвёт его
+            // сессии, WEB-пользователь продолжает работать. Секция идёт после
+            // [access.users], то есть попадает в горячую часть (tgColdPart()).
+            ...(!empty($pac['tgUserOff']) ? ['', '[access.user_enabled]', 'sbbot = false'] : []),
         ];
         $toml = implode("\n", array_filter($lines, fn ($l) => $l !== null)) . "\n";
         $old  = @file_get_contents($path);
@@ -257,8 +291,8 @@ public function tgColdPart($toml)
     }
 
 // Применить текущие настройки. Остановленный контейнер не поднимаем: его
-// остановили намеренно («0» вместо секрета) — он прочитает конфиг, когда его
-// запустят (tgStart()).
+// остановили намеренно (нода выключена кнопкой в боте) — он прочитает конфиг,
+// когда его запустят (tgStart()).
 public function restartTG()
     {
         $change = $this->tgWriteConfig();
@@ -296,7 +330,12 @@ public function tgStart()
 // своей записи о ноде, нода кладёт их к себе и применяет тем же кодом, что и
 // главный у себя. Раньше главный сам запускал процесс на ноде по SSH — в
 // контейнере с готовым образом sshd нет.
-public function applyMtproto($secret, $domain = '')
+//
+// $userOff — отключён ли пользователь MTProto («0» в меню ноды): '1' или '0'.
+// Флаг хранится в записи ноды на главном и приходит с каждым вызовом, поэтому
+// смена домена или включение ноды его не сбрасывают. Главный старее этого
+// аргумента его не шлёт — тогда флаг не трогаем.
+public function applyMtproto($secret, $domain = '', $userOff = '')
     {
         $secret = trim((string) $secret);
         if (!preg_match('~^[0-9a-f]{32}$~i', $secret)) {
@@ -305,6 +344,9 @@ public function applyMtproto($secret, $domain = '')
         file_put_contents('/config/mtprotosecret', strtolower($secret));
         if (trim((string) $domain) !== '') {
             file_put_contents('/config/mtprotodomain', trim((string) $domain));
+        }
+        if ($userOff !== '') {
+            $this->tgSetUserOff($userOff === '1');
         }
         // Сначала конфиг, потом старт: остановленный контейнер поднимется сразу
         // с новыми настройками, работающий — применит их в restartTG().
@@ -328,7 +370,7 @@ public function tgWebSecret()
 
 public function tgWebOn()
     {
-        return !empty($this->getPacConf()['tgWeb']) && $this->tgWebHost() !== '' && $this->tgStatus() == 'on';
+        return !empty($this->getPacConf()['tgWeb']) && $this->tgWebHost() !== '' && $this->tgRunning();
     }
 
 // Порт в WEB-ссылке не указывается: клиент требует 443.
@@ -586,7 +628,7 @@ public function mtproto()
             $text[] = '';
             $text[] = '<b>' . $this->i18n('telegram proxy') . " {$node['label']}</b>";
             if ($link === '') {
-                $text[] = 'MTProto: ' . $this->i18n('not configured');
+                $text[] = 'MTProto: ' . (!empty($node['mtprotoUserOff']) ? 'user off' : $this->i18n('not configured'));
             } else {
                 $text[] = 'MTProto: ' . (is_array($svc) ? (!empty($svc['mtproto']) ? 'on' : 'off') . ' · ' : '')
                     . '<code>' . trim($node['mtprotodomain'] ?? 'yandex.ru') . '</code>';

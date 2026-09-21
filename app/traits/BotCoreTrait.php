@@ -788,10 +788,15 @@ public function alignColumns(array $columns): string
 // cron() в начале каждого прохода, а меню читает готовый файл.
 public function collectMenuStatus()
     {
+        // Строка «Telegram proxy» — работает ли прокси хоть для кого-то: Telemt
+        // запущен и не отключены одновременно пользователь MTProto («0», user
+        // off) и WEB. Тот же флаг нода отдаёт главному (statusReport()), и там
+        // по нему показывают и WEB — поэтому здесь не статус одного MTProto.
+        $pac = $this->getPacConf();
         return [
             'time'    => time(),
             'singbox' => (bool) $this->ssh('pgrep sing-box', 'sbx'),
-            'mtproto' => $this->tgStatus() === 'on',
+            'mtproto' => $this->tgRunning() && (empty($pac['tgUserOff']) || (!empty($pac['tgWeb']) && $this->tgWebHost($pac) !== '')),
             'dnstt'   => !empty($this->getPacConf()['dnsttUsed']) && (bool) $this->ssh('pgrep dnstt-server', 'dnstt'),
         ] + $this->warpMenuStatus();
     }
