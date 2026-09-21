@@ -180,13 +180,23 @@ public function tgWriteConfig()
         $ip    = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE) ? $this->ip : '';
         $adtag = strtolower(trim((string) @file_get_contents('/config/mtprotoadtag')));
         $q     = fn ($s) => '"' . addcslashes((string) $s, "\\\"") . '"';
-        // WEB-прокси — только когда он включён и собран целиком: Telemt с
-        // web.enabled требует listener, vhost и профиль, а vhost — публичный
-        // IP (public_addr участвует во внутреннем маршруте relay).
+        // WEB-часть — когда её можно собрать целиком: Telemt с web.enabled
+        // требует listener, vhost и профиль, а vhost — публичный IP
+        // (public_addr участвует во внутреннем маршруте relay).
+        //
+        // Держим её и при выключенном WEB, если он хоть раз включался (ключ
+        // есть): выключение — это отключённый пользователь web (ниже), его
+        // Telemt применяет на лету. Иначе каждое вкл/выкл меняло бы холодную
+        // часть конфига и перезапускало контейнер — с обрывом обычного
+        // MTProto. Перезапуск остаётся только у первого включения. Чужой трафик
+        // при выключенном WEB к Telemt и так не доходит: nginx отдаёт WEB-имя
+        // обычному блоку домена, тому же сайту-обманке (cloakNginx()).
         $pac     = $this->getPacConf();
         $webHost = $this->tgWebHost($pac);
         $webKey  = $this->tgWebSecret();
-        $web     = !empty($pac['tgWeb']) && $webHost !== '' && $ip !== '' && $webKey !== '';
+        $web     = $webHost !== '' && $ip !== '' && $webKey !== '';
+        $webOff  = $web && empty($pac['tgWeb']);
+        $userOff = !empty($pac['tgUserOff']);
         $webLines = !$web ? [] : [
             // Не опубликован наружу: сюда ходит только ng, он же снимает TLS.
             '[[server.listeners]]',
@@ -264,11 +274,14 @@ public function tgWriteConfig()
             '[access.users]',
             'sbbot = ' . $q($this->tgSecret()),
             $web ? 'web = ' . $q($webKey) : null,
-            // «0» вместо ключа MTProto (secretSet()): пользователь остаётся в
-            // конфиге, но отключён. Telemt применяет это на лету и сам рвёт его
-            // сессии, WEB-пользователь продолжает работать. Секция идёт после
-            // [access.users], то есть попадает в горячую часть (tgColdPart()).
-            ...(!empty($pac['tgUserOff']) ? ['', '[access.user_enabled]', 'sbbot = false'] : []),
+            // «0» вместо ключа (secretSet() у MTProto, tgWebOff() у WEB):
+            // пользователь остаётся в конфиге, но отключён. Telemt применяет это
+            // на лету и сам рвёт его сессии, второй пользователь продолжает
+            // работать. Секция идёт после [access.users], то есть попадает в
+            // горячую часть (tgColdPart()).
+            ...($userOff || $webOff ? ['', '[access.user_enabled]'] : []),
+            $userOff ? 'sbbot = false' : null,
+            $webOff ? 'web = false' : null,
         ];
         $toml = implode("\n", array_filter($lines, fn ($l) => $l !== null)) . "\n";
         $old  = @file_get_contents($path);
@@ -527,6 +540,8 @@ public function tgWebCheck()
         return 'ok';
     }
 
+// Выключение — на лету: пользователь web отключается (tgWriteConfig()),
+// контейнер не перезапускается, обычный MTProto не рвётся.
 public function tgWebOff()
     {
         $this->updatePacConf(function ($c) {
