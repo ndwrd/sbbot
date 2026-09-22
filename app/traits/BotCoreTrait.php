@@ -92,6 +92,9 @@ public function action()
             case preg_match('~^/nodeMenu (\w+)$~', $this->input['callback'], $m):
                 $this->nodeMenu($m[1]);
                 break;
+            case preg_match('~^/nodeSshPort (\w+)$~', $this->input['callback'], $m):
+                $this->nodeSshPortDialog($m[1]);
+                break;
             case preg_match('~^/nodeOutbounds (\w+)$~', $this->input['callback'], $m):
                 $this->outboundsMenu($m[1]);
                 break;
@@ -530,28 +533,33 @@ public function setLang($lang)
 public function cron()
     {
         $period = 10;
+        $tasks  = [
+            'checkMenuStatus', 'checkNodesStatus', 'collectNodesTraffic', 'shutdownClientXr',
+            'checkVersion', 'checkBackup', 'checkLogs', 'checkResetSingboxStats', 'checkCert',
+            'singboxStatsUser', 'checkNodeProvisioning', 'checkNodeUpdating', 'checkNodeRestarting',
+            'checkNodeCerts', 'checkNodeAutoCleanLogs', 'checkAppDownloadLinks',
+        ];
         while (true) {
             // Граница единицы работы для кэша getPacConf(): внутри одного
             // прохода читаем согласованный снимок, но между проходами обязаны
             // увидеть всё, что записал polling() (другой процесс) — иначе
             // cron() работал бы по конфигу десятиминутной давности.
             $this->resetPacCache();
-            $this->checkMenuStatus();
-            $this->checkNodesStatus();
-            $this->collectNodesTraffic();
-            $this->shutdownClientXr();
-            $this->checkVersion();
-            $this->checkBackup();
-            $this->checkLogs();
-            $this->checkResetSingboxStats();
-            $this->checkCert();
-            $this->singboxStatsUser();
-            $this->checkNodeProvisioning();
-            $this->checkNodeUpdating();
-            $this->checkNodeRestarting();
-            $this->checkNodeCerts();
-            $this->checkNodeAutoCleanLogs();
-            $this->checkAppDownloadLinks();
+            // Проход дольше минуты — в /logs/slow, с задачами дольше 5 с: через
+            // 120 с меню считает кэш статусов устаревшим (menuStatus()) и
+            // собирает его само — пауза в однопоточном polling().
+            $pass = microtime(true);
+            $slow = [];
+            foreach ($tasks as $task) {
+                $t = microtime(true);
+                $this->$task();
+                if (($d = microtime(true) - $t) > 5) {
+                    $slow[] = sprintf('%s %.1fs', $task, $d);
+                }
+            }
+            if (($d = microtime(true) - $pass) > 60) {
+                $this->slowLog(sprintf('cron: проход %.0fs [%s]', $d, implode(', ', $slow)));
+            }
             sleep($period);
         }
     }
@@ -846,6 +854,7 @@ public function menuStatus()
             return $st + ['cron' => true];
         }
         // cron не работает или только стартует — проверяем вживую, как раньше.
+        $this->slowLog('menu: кэш статусов ' . (is_array($st) ? 'устарел на ' . (time() - ($st['time'] ?? 0)) . 's' : 'не читается') . ' — собираю вживую');
         return $this->collectMenuStatus() + ['cron' => (bool) $this->ssh('pgrep -f cron.php', 'service')];
     }
 
@@ -1250,34 +1259,42 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
             // сервиса правильно, как и было задумано.
             $cmd = 'cd ~/sbbot && docker compose exec -T ' . escapeshellarg($service) . ' sh -c ' . escapeshellarg($cmd);
         }
+        // Нода по интернету — системным клиентом OpenSSH (sshRemote()), свои
+        // контейнеры по сети Docker — через ext-ssh2, как раньше.
+        if ($host) {
+            return $this->sshRemote($host, $cmd, $wait, $log);
+        }
         // Инициализируем ДО try: внутри $data присваивается только после
         // успешного подключения, а функция всегда возвращает его в конце. Любой
         // бросок раньше (хост недоступен, ключ не подошёл) оставлял переменную
         // необъявленной — то есть на каждой неудачной попытке достучаться до
         // ноды в лог падал ещё и warning.
         $data = '';
+        // Отметки этапов — для /logs/slow (slowSsh()).
+        $marks = ['start' => microtime(true)];
         try {
             // ssh2_connect() не берёт таймаут и может зависнуть надолго, если
-            // порт фильтруется, а не сразу отвечает отказом — соседей по
-            // docker-сети это не касалось (коннект туда всегда мгновенный),
-            // а вот ноду через интернет так подвесить может — и тогда
-            // однопоточный cron() встаёт целиком, не только эта задача.
-            // Пробуем raw TCP отдельно с коротким таймаутом, чтобы быстро
-            // отвалиться, если хост недоступен, вместо зависания внутри ssh2.
+            // порт фильтруется, а не сразу отвечает отказом. Сюда теперь
+            // приходят только свои контейнеры (коннект по сети Docker
+            // мгновенный, ноды — в sshRemote()), так что проба — дешёвая
+            // страховка: быстро отвалиться, если контейнер не поднят.
             $probe = @fsockopen($target, 22, $errno, $errstr, 5);
             if (empty($probe)) {
                 throw new Exception("no connection to $target: $errstr ($errno)");
             }
             fclose($probe);
+            $marks['probe'] = microtime(true);
 
             $c = ssh2_connect($target, 22);
             if (empty($c)) {
                 throw new Exception("no connection to $target: \n$cmd\n" . var_export($c, true));
             }
+            $marks['connect'] = microtime(true);
             $a = ssh2_auth_pubkey_file($c, 'root', '/ssh/key.pub', '/ssh/key');
             if (empty($a)) {
                 throw new Exception("auth fail: \n$cmd\n" . var_export($a, true));
             }
+            $marks['auth'] = microtime(true);
 
             if (!$wait) {
                 $cmd = "nohup sh -c \"$cmd 2>&1 | tee -a $log >&3\" 3>/proc/1/fd/1 </dev/null &";
@@ -1306,6 +1323,7 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
                 usleep(100000);
             }
 
+            $marks['exec'] = microtime(true);
             fclose($s);
             ssh2_disconnect($c);
         } catch (Exception | Error $e) {
@@ -1313,7 +1331,192 @@ public function ssh($cmd, $service = 'service', $wait = true, $log = '/dev/null'
                 $this->send($this->input['chat'], $e->getMessage(), $this->input['message_id']);
             }
         }
+        $this->slowSsh($target, $cmd, $marks);
         return $data;
+    }
+
+// Журнал медленных мест — /logs/slow: апдейты Telegram, SSH, запросы к API,
+// проходы cron. Пишется только то, что превысило порог, так что в обычной
+// работе файл почти пустой. Нужен, чтобы по жалобе «долго не отвечает» было
+// видно, где именно ждали.
+public function slowLog($line)
+    {
+        @file_put_contents('/logs/slow', date('Y-m-d H:i:s') . " $line\n", FILE_APPEND);
+    }
+
+// SSH к ноде — системным клиентом OpenSSH, а не ext-ssh2. У ssh2_connect()
+// нет таймаута на рукопожатие: libssh2 ждёт приветствия сервера сколько
+// угодно, и сигнал (pcntl_alarm) его не прерывает — проверено на libssh2
+// 1.11.1. Нода, чей sshd принял TCP и не ответил, однажды так держала
+// однопоточный polling() 7 минут. У OpenSSH ConnectTimeout ограничивает и
+// подключение, и приветствие с обменом ключами, а ServerAlive* ловят
+// соединение, умершее посреди команды. Ключ хоста не проверяем — как и
+// ext-ssh2 раньше.
+//
+// Сорвавшееся рукопожатие повторяем один раз через секунду: sshd под
+// подборщиками паролей (MaxStartups) случайно сбрасывает новые подключения,
+// и второе обычно проходит. Команда к этому моменту не запускалась, так что
+// дважды она не выполнится. Недоступный хост (порт не отвечает), отказ по
+// ключу и обрыв уже начатой команды не повторяем.
+//
+// $sshBusy[хост] — последняя попытка сорвалась на рукопожатии: сервер
+// доступен, но sshd бота не пустил. Ноды с этим показываются 🟡, а не 🔴 —
+// SSH лишь канал управления, VPN у клиентов от него не зависит.
+public $sshBusy = [];
+
+public function sshRemote($host, $cmd, $wait, $log)
+    {
+        $port = $this->nodeSshPort($host);
+        if (!$wait) {
+            // Фоновый запуск: вывод — в $log на ноде. stdout/stderr самой
+            // обёртки закрываем, иначе ssh ждал бы конца фонового процесса
+            // (ext-ssh2 просто закрывал канал через 0,1 с).
+            $cmd = "nohup sh -c \"$cmd 2>&1 | tee -a $log >&3\" 3>/proc/1/fd/1 </dev/null >/dev/null 2>&1 &";
+        }
+        $start = microtime(true);
+        for ($attempt = 1; ; $attempt++) {
+            [$out, $err, $code] = $this->sshExec($host, $port, $cmd);
+            // «Permanently added … to the list of known hosts» ssh пишет, только
+            // когда принял ключ хоста, — рукопожатие прошло, команда могла
+            // запуститься, повторять нельзя. В журнал эта строка не нужна.
+            $passed      = str_contains($err, 'Permanently added');
+            $err         = trim(preg_replace('~^Warning: Permanently added .*$\R?~m', '', $err));
+            $unreachable = (bool) preg_match('~connect to host .*: (Connection timed out|Connection refused|No route to host|Network is unreachable)~', $err);
+            $handshake   = $code === 255 && $out === '' && !$passed && !$unreachable && !str_contains($err, 'client_loop')
+                && preg_match('~banner exchange|kex_exchange_identification|port \d+ timed out|Connection closed by \S+ port \d+|Connection reset by~', $err);
+            if (!$handshake || $attempt > 1) {
+                break;
+            }
+            sleep(1);
+        }
+        $took                  = microtime(true) - $start;
+        $this->sshBusy[$host] = (bool) $handshake;
+        // Недоступный хост не пишем: это и так видно как офлайн, а cron
+        // спрашивает такую ноду каждые 30 с.
+        if (!$unreachable && ($attempt > 1 || $took >= 2)) {
+            $last = $code !== 0 && $err !== '' ? ' [' . substr(strrchr("\n$err", "\n"), 1) . ']' : '';
+            $this->slowLog(sprintf(
+                'ssh %s:%d %.1fs%s%s %s',
+                $host,
+                $port,
+                $took,
+                $attempt > 1 ? ($passed ? ', повтор помог' : ', повтор не помог') : '',
+                $last,
+                $this->maskCmd($cmd)
+            ));
+        }
+        if ($code !== 0 && $err !== '' && !empty($GLOBALS['debug'])) {
+            $this->send($this->input['chat'], "ssh $host:$port: $err", $this->input['message_id']);
+        }
+        return $out;
+    }
+
+// Один запуск ssh: [stdout, stderr, код выхода]. Читаем, пока ssh не закроет
+// вывод; 20 с тишины обрываем — как fread-таймаут у ext-ssh2: команда на ноде
+// может так и не закрыть вывод.
+public function sshExec($host, $port, $cmd)
+    {
+        $args = [
+            'ssh', '-n', '-p', (string) $port, '-i', '/ssh/key',
+            '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
+            '-o', 'ConnectTimeout=10',
+            '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3',
+            '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
+            // INFO, а не ERROR: на ERROR ssh молчит о сбросе подключения
+            // («Connection closed by … port …») и отличить его от команды,
+            // вышедшей с кодом 255 (PHP так выходит при фатальной ошибке),
+            // было бы нечем. Проверено на OpenSSH 10.0.
+            '-o', 'LogLevel=INFO',
+            "root@$host", $cmd,
+        ];
+        $p = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        if (!is_resource($p)) {
+            return ['', 'proc_open failed', -1];
+        }
+        $out  = [1 => '', 2 => ''];
+        $open = [1 => $pipes[1], 2 => $pipes[2]];
+        foreach ($open as $s) {
+            stream_set_blocking($s, false);
+        }
+        $heard = microtime(true);
+        while ($open) {
+            $read  = array_values($open);
+            $write = $except = null;
+            if (@stream_select($read, $write, $except, 1) === false) {
+                break;
+            }
+            foreach ($open as $k => $s) {
+                $chunk = fread($s, 8192);
+                if ($chunk !== false && $chunk !== '') {
+                    $out[$k] .= $chunk;
+                    $heard    = microtime(true);
+                }
+                if (feof($s)) {
+                    fclose($s);
+                    unset($open[$k]);
+                }
+            }
+            if ($open && microtime(true) - $heard > 20) {
+                proc_terminate($p);
+                $out[2] .= "\nsbbot: 20 s without output, ssh terminated";
+                break;
+            }
+        }
+        foreach ($open as $s) {
+            fclose($s);
+        }
+        return [$out[1], $out[2], proc_close($p)];
+    }
+
+// Длинные токены в команде (ключи, секреты в аргументах console.php) — под
+// маску: журнал уходит в чат.
+public function maskCmd($cmd)
+    {
+        return mb_substr(preg_replace(['~[A-Za-z0-9+/=_-]{16,}~', '~\s+~'], ['…', ' '], $cmd), 0, 90);
+    }
+
+// SSH к своему контейнеру дольше 2 с — по этапам: проба порта, рукопожатие,
+// ключ, команда. Хост, где проба не прошла, не пишем: контейнер не поднят,
+// это видно и так.
+public function slowSsh($target, $cmd, array $marks)
+    {
+        $total = microtime(true) - $marks['start'];
+        if ($total < 2 || !isset($marks['probe'])) {
+            return;
+        }
+        $parts = [];
+        $prev  = $marks['start'];
+        foreach (array_slice($marks, 1, null, true) as $stage => $at) {
+            $parts[] = sprintf('%s %.1f', $stage, $at - $prev);
+            $prev    = $at;
+        }
+        if (!isset($marks['exec'])) {
+            $parts[] = 'не завершилось';
+        }
+        $this->slowLog(sprintf('ssh %s %.1fs [%s] %s', $target, $total, implode(', ', $parts), $this->maskCmd($cmd)));
+    }
+
+// Апдейт обрабатывался дольше 2 с или пришёл позже 5 с после отправки.
+// Опоздание видно только у сообщений (у них есть date): в нажатии кнопки
+// времени нажатия нет. Текст сообщения пишем, только если это команда — в
+// ответах на запросы бота бывают ключи.
+public function slowUpdate(array $v, $started)
+    {
+        $took  = microtime(true) - $started;
+        $sent  = $v['message']['date'] ?? null;
+        $delay = $sent ? $started - $sent : 0;
+        if ($took < 2 && $delay < 5) {
+            return;
+        }
+        $text = $v['message']['text'] ?? null;
+        $what = $v['callback_query']['data']
+            ?? ($text !== null ? (str_starts_with($text, '/') ? $text : 'message') : implode(',', array_diff(array_keys($v), ['update_id'])));
+        $this->slowLog(sprintf(
+            'update %s: обработка %.1fs%s',
+            mb_substr(preg_replace('~\s+~', ' ', (string) $what), 0, 40),
+            $took,
+            $sent ? sprintf(', пришло через %.0fs после отправки', $delay) : ''
+        ));
     }
 
 public function polling()
@@ -1325,6 +1528,7 @@ public function polling()
                 'limit'   => 3,
                 'timeout' => 5,
             ]);
+            $received = microtime(true);
             if (!empty($r['description'])) {
                 error_log('getUpdates error: ' . $r['description']);
                 sleep(3);
@@ -1346,6 +1550,8 @@ public function polling()
                     } finally {
                         session_write_close();
                     }
+                    $this->slowUpdate($v, $received);
+                    $received = microtime(true);
                     $offset = max($offset, $v['update_id']);
                 }
                 $offset++;

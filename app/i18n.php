@@ -318,8 +318,12 @@ $i = [
         'ru' => 'введите имя ноды',
     ],
     'enter node ip'     => [
-        'en' => 'enter node IP',
-        'ru' => 'введите IP ноды',
+        'en' => 'enter node IP (IP:port if SSH is not on 22)',
+        'ru' => 'введите IP ноды (IP:порт, если SSH не на 22)',
+    ],
+    'wrong ssh port'    => [
+        'en' => 'ERROR: SSH port must be a number from 1 to 65535',
+        'ru' => 'ERROR: порт SSH — число от 1 до 65535',
     ],
     'choose auth method' => [
         'en' => 'choose auth method',
@@ -488,6 +492,26 @@ $i = [
     'node offline' => [
         'en' => 'offline',
         'ru' => 'недоступна',
+    ],
+    'node ssh busy' => [
+        'en' => 'SSH not responding (server reachable, VPN may work)',
+        'ru' => 'SSH не отвечает (сервер доступен, VPN может работать)',
+    ],
+    'ssh port' => [
+        'en' => 'SSH port',
+        'ru' => 'Порт SSH',
+    ],
+    'enter ssh port' => [
+        'en' => 'enter the node SSH port (now %port%). Move sshd on the node first — the bot only remembers the port',
+        'ru' => 'введите порт SSH ноды (сейчас %port%). Сначала перенесите sshd на самой ноде — бот только запоминает порт',
+    ],
+    'ssh port saved' => [
+        'en' => 'SSH port %port% saved, the node answers',
+        'ru' => 'порт SSH %port% сохранён, нода отвечает',
+    ],
+    'ssh port no answer' => [
+        'en' => 'SSH port %port% saved, but the node does not answer on it',
+        'ru' => 'порт SSH %port% сохранён, но нода по нему не отвечает',
     ],
     'node off' => [
         'en' => 'off',

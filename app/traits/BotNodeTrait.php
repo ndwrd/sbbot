@@ -19,9 +19,42 @@ public function setNode($id, array $node)
         $this->setPacConf($conf);
     }
 
+// SSH-порт ноды: 22, если при добавлении не указали другой (IP:порт). Ищем
+// по IP — ssh() получает именно его.
+public function nodeSshPort($ip)
+    {
+        foreach ($this->getNodes() as $node) {
+            if (($node['ip'] ?? null) === $ip) {
+                return (int) (($node['sshPort'] ?? null) ?: 22);
+            }
+        }
+        return 22;
+    }
+
+// IP ноды для показа — с портом SSH, если он не 22.
+public function nodeAddress(array $node)
+    {
+        $port = (int) ($node['sshPort'] ?? 22);
+        return ($node['ip'] ?? '') . ($port !== 22 ? ":$port" : '');
+    }
+
 public function nodeIsOnline($ip)
     {
         return trim((string) $this->ssh('echo ok', null, true, '/dev/null', $ip)) === 'ok';
+    }
+
+// Сразу после nodeIsOnline() === false: сервер доступен, но SSH-рукопожатие
+// не прошло даже с повтором (sshRemote()) — обычно sshd занят подборщиками
+// паролей. Это 🟡, а не 🔴.
+public function nodeSshBusy($ip)
+    {
+        return !empty($this->sshBusy[$ip]);
+    }
+
+// Точка статуса ноды: 🟢 работает, 🟡 SSH не отвечает, 🔴 недоступна.
+public function nodeDot($online, $busy)
+    {
+        return $online ? '🟢' : ($busy ? '🟡' : '🔴');
     }
 
 // Статусы нод для экрана «Ноды». Раньше список делал SSH-подключение на каждую
@@ -40,7 +73,7 @@ public function checkNodesStatus()
         foreach ($this->getNodes() as $id => $node) {
             if (empty($node['off']) && !empty($node['ip'])) {
                 $online      = $this->nodeIsOnline($node['ip']);
-                $status[$id] = ['online' => $online, 'time' => time()];
+                $status[$id] = ['online' => $online, 'sshBusy' => !$online && $this->nodeSshBusy($node['ip']), 'time' => time()];
                 // Сервисы и порты для карточки ноды — тот же блок, что в
                 // главном меню Бота. Нода на старой версии statusReport() не
                 // знает и ответит не массивом — тогда блока просто нет.
@@ -68,7 +101,7 @@ public function checkNodesStatus()
                 if (($c[$id]['time'] ?? 0) > $v['time']) {
                     // Онлайн — из карточки (свежее), сервисы — из опроса:
                     // карточка их не собирает.
-                    $status[$id] = ['online' => !empty($c[$id]['online']), 'time' => $c[$id]['time']] + $v;
+                    $status[$id] = ['online' => !empty($c[$id]['online']), 'sshBusy' => !empty($c[$id]['sshBusy']), 'time' => $c[$id]['time']] + $v;
                 }
             }
             return $status;
@@ -96,11 +129,11 @@ public function statusReport()
 
 // Живой результат из карточки ноды — чтобы список сразу показывал то же самое
 // (например, 🟢 сразу после перепривязки), не дожидаясь следующего опроса.
-public function nodeStatusRemember($id, $online)
+public function nodeStatusRemember($id, $online, $busy = false)
     {
-        $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($id, $online) {
+        $this->updateJsonLocked('/config/nodes_status.json', function ($c) use ($id, $online, $busy) {
             // Сервисы не трогаем — их собирает только checkNodesStatus().
-            $c[$id] = ['online' => (bool) $online, 'time' => time()] + ($c[$id] ?? []);
+            $c[$id] = ['online' => (bool) $online, 'sshBusy' => !$online && $busy, 'time' => time()] + ($c[$id] ?? []);
             return $c;
         });
     }
@@ -132,11 +165,13 @@ public function nodesMenu()
                 $st = $cache[$id] ?? null;
                 if (!is_array($st) || time() - ($st['time'] ?? 0) > 120) {
                     $online = $this->nodeIsOnline($node['ip']);
-                    $this->nodeStatusRemember($id, $online);
+                    $busy   = !$online && $this->nodeSshBusy($node['ip']);
+                    $this->nodeStatusRemember($id, $online, $busy);
                 } else {
                     $online = !empty($st['online']);
+                    $busy   = !$online && !empty($st['sshBusy']);
                 }
-                $dot = $online ? '🟢' : '🔴';
+                $dot = $this->nodeDot($online, $busy);
             }
             $label = $node['label'] . (!empty($node['geoTag']) ? " | {$this->nodeTagPrefix($node)}" : '');
             $data[] = [
@@ -182,9 +217,10 @@ public function nodeMenu($id)
         }
         $off    = !empty($node['off']);
         $online = $this->nodeIsOnline($node['ip']);
-        $this->nodeStatusRemember($id, $online);
-        $dot    = $off ? '⚪' : ($online ? '🟢' : '🔴');
-        $status = $off ? $this->i18n('node off') : ($online ? $this->i18n('node online') : $this->i18n('node offline'));
+        $busy   = !$online && $this->nodeSshBusy($node['ip']);
+        $this->nodeStatusRemember($id, $online, $busy);
+        $dot    = $off ? '⚪' : $this->nodeDot($online, $busy);
+        $status = $off ? $this->i18n('node off') : $this->i18n($online ? 'node online' : ($busy ? 'node ssh busy' : 'node offline'));
         // Версия, сервисы и порты — как в главном меню Бота. Из кэша
         // checkNodesStatus() (опрос раз в 30 с), не вживую: это SSH-вызов с
         // запуском PHP на ноде на каждое открытие карточки. Старше двух минут
@@ -198,7 +234,7 @@ public function nodeMenu($id)
         if (!empty($svc['version'])) {
             $text[] = trim("v{$svc['version']} " . ($svc['branch'] ?? ''));
         }
-        $text[] = "IP: {$node['ip']}";
+        $text[] = 'IP: ' . $this->nodeAddress($node);
         $text[] = "$dot $status";
         if ($svc !== null) {
             $text[] = '<code>';
@@ -276,6 +312,12 @@ public function nodeMenu($id)
             ],
             [
                 [
+                    'text'          => $this->i18n('ssh port') . ': ' . $this->nodeSshPort($node['ip']),
+                    'callback_data' => "/nodeSshPort $id",
+                ],
+            ],
+            [
+                [
                     'text'          => "{$this->i18n('delete')} {$node['label']}",
                     'callback_data' => "/delNode $id",
                 ],
@@ -287,7 +329,9 @@ public function nodeMenu($id)
                 ],
             ],
         ];
-        if (!$online) {
+        // При 🟡 ключ ни при чём (sshd просто не пустил) — перепривязка там
+        // не поможет, кнопку не показываем.
+        if (!$online && !$busy) {
             // Нода есть в конфиге, но не отвечает. Частая причина —
             // восстановление бота из бэкапа на другом сервере: /ssh/key в
             // бэкап не входит, а нода доверяет ключу старого сервера. Кнопка
@@ -300,6 +344,52 @@ public function nodeMenu($id)
             ]]);
         }
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+// Порт SSH уже добавленной ноды. Бот его только запоминает: сам sshd на ноде
+// переносят руками — сначала там, потом здесь. После сохранения сразу
+// проверяем связь по новому порту и говорим, отвечает ли нода.
+public function nodeSshPortDialog($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $r = $this->send(
+            $this->input['chat'],
+            "@{$this->input['username']} " . str_replace('%port%', $this->nodeSshPort($node['ip']), $this->i18n('enter ssh port')),
+            $this->input['message_id'],
+            reply: $this->i18n('ssh port'),
+        );
+        $_SESSION['reply'][$r['result']['message_id']] = [
+            'start_message' => $this->input['message_id'],
+            'callback'      => 'nodeSetSshPort',
+            'args'          => [$id],
+        ];
+    }
+
+public function nodeSetSshPort($port, $id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $port = trim($port);
+        if (!preg_match('~^\d{1,5}$~', $port) || (int) $port < 1 || (int) $port > 65535) {
+            $this->send($this->input['chat'], $this->i18n('wrong ssh port'));
+            $this->nodeMenu($id);
+            return;
+        }
+        $port = (int) $port;
+        if ($port === 22) {
+            unset($node['sshPort']);
+        } else {
+            $node['sshPort'] = $port;
+        }
+        $this->setNode($id, $node);
+        $online = $this->nodeIsOnline($node['ip']);
+        $this->send($this->input['chat'], "{$node['label']}: " . str_replace('%port%', $port, $this->i18n($online ? 'ssh port saved' : 'ssh port no answer')));
+        $this->nodeMenu($id);
     }
 
 public function nodeStopSingbox($ip)
@@ -795,7 +885,20 @@ public function addNodeLabel($label)
 
 public function addNodeIp($ip, $label)
     {
-        $ip = trim($ip);
+        $ip   = trim($ip);
+        $port = 22;
+        // «IP:порт» — если SSH на ноде слушает не 22 (например, его перенесли
+        // от подборщиков паролей). Порт хранится в записи ноды (sshPort), по
+        // нему ходят ssh() и nodeBootstrap().
+        if (preg_match('~^([^:\s]+):(\d{1,5})$~', $ip, $m)) {
+            [$ip, $port] = [$m[1], (int) $m[2]];
+            if ($port < 1 || $port > 65535) {
+                $this->send($this->input['chat'], $this->i18n('wrong ssh port'));
+                $r = $this->nodesMenu();
+                $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
+                return;
+            }
+        }
         // Одна и та же нода, заведённая дважды, ломает синхронизацию: две
         // записи пушат пользователей на один сервер, обе считают себя его
         // хозяином, а в подписке он появляется двумя серверами с разными
@@ -813,7 +916,7 @@ public function addNodeIp($ip, $label)
         // по одному из двух способов ниже не пройдёт успешно.
         $tmpId = bin2hex(random_bytes(4));
         $conf  = $this->getPacConf();
-        $conf['nodesPending'][$tmpId] = ['label' => $label, 'ip' => $ip];
+        $conf['nodesPending'][$tmpId] = ['label' => $label, 'ip' => $ip] + ($port !== 22 ? ['sshPort' => $port] : []);
         $this->setPacConf($conf);
 
         $data = [
@@ -831,7 +934,7 @@ public function addNodeIp($ip, $label)
         $this->update(
             $this->input['chat'],
             $this->input['message_id'],
-            "$label ({$conf['nodesPending'][$tmpId]['ip']})\n" . $this->i18n('choose auth method'),
+            "$label (" . $this->nodeAddress($conf['nodesPending'][$tmpId]) . ")\n" . $this->i18n('choose auth method'),
             $data,
         );
     }
@@ -901,7 +1004,7 @@ public function finishAddNode($tmpId, $authType, $secret)
         }
 
         $login  = 'root';
-        $result = $this->nodeBootstrap($pending['ip'], $login, $authType, $secret);
+        $result = $this->nodeBootstrap($pending['ip'], $login, $authType, $secret, $pending['sshPort'] ?? 22);
         if (empty($result['ok'])) {
             $this->send($this->input['chat'], "ERROR\n{$result['error']}");
             return;
@@ -921,7 +1024,7 @@ public function finishAddNode($tmpId, $authType, $secret)
             'login'        => $login,
             'geoTag'       => $geoTag,
             'outboundsOff' => $this->defaultOutboundsOff(),
-        ];
+        ] + (!empty($pending['sshPort']) ? ['sshPort' => (int) $pending['sshPort']] : []);
         $this->setPacConf($conf);
 
         // Доступ есть, но sbbot на ноде ещё не установлен — гоняем init.sh
@@ -973,7 +1076,7 @@ public function nodeRebind($id)
             return;
         }
         $text[] = "Menu -> " . $this->i18n('nodes') . " -> {$node['label']} -> " . $this->i18n('rebind node');
-        $text[] = "IP: {$node['ip']}";
+        $text[] = 'IP: ' . $this->nodeAddress($node);
         $text[] = '';
         $text[] = $this->i18n('rebind node hint');
         $text[] = '';
@@ -1018,7 +1121,7 @@ public function finishRebindNode($id, $authType, $secret)
             $this->update($this->input['chat'], $this->input['message_id'], $r['text'], $r['data']);
             return;
         }
-        $result = $this->nodeBootstrap($node['ip'], ($node['login'] ?? null) ?: 'root', $authType, $secret);
+        $result = $this->nodeBootstrap($node['ip'], ($node['login'] ?? null) ?: 'root', $authType, $secret, $this->nodeSshPort($node['ip']));
         if (empty($result['ok'])) {
             $this->send($this->input['chat'], "ERROR\n{$result['error']}");
             return;
@@ -1410,7 +1513,7 @@ public function correctClashOriginTags($tagPrefix)
         }
     }
 
-public function nodeBootstrap($ip, $login, $authType, $secret)
+public function nodeBootstrap($ip, $login, $authType, $secret, $port = 22)
     {
         // Пароль/ключ, введённые тут, используются только один раз — чтобы
         // поставить на ноду тот же публичный ключ, которым main уже управляет
@@ -1418,9 +1521,12 @@ public function nodeBootstrap($ip, $login, $authType, $secret)
         // этим общим ключом, введённый секрет никуда не сохраняется.
         $tmpPriv = null;
         try {
-            $c = @ssh2_connect($ip, 22);
+            // Разовое подключение по паролю или своему ключу — ext-ssh2:
+            // системному ssh для пароля нужен sshpass, которого в образе нет.
+            // Таймаута на рукопожатие тут нет (см. sshRemote()).
+            $c = @ssh2_connect($ip, (int) $port);
             if (empty($c)) {
-                return ['ok' => false, 'error' => "no connection to $ip"];
+                return ['ok' => false, 'error' => "no connection to $ip:$port"];
             }
             if ($authType === 'password') {
                 $a = @ssh2_auth_password($c, $login, $secret);

@@ -85,18 +85,21 @@ public function request($method, $data, $json_header = 0)
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => 20,
         ]);
-        $res = curl_exec($ch);
-        $r   = json_decode($res, true);
-        if (!empty($res['description']) || is_null($res)) {
-            file_put_contents('/logs/requests_error', var_export([
-                'r' => [
-                    'method' => $method,
-                    'data'   => $data,
-                ],
-                'a' => $res,
-            ], true) . "\n", FILE_APPEND);
+        $started = microtime(true);
+        $res     = curl_exec($ch);
+        $took    = microtime(true) - $started;
+        // Сбой транспорта (таймаут, обрыв) — в /logs/slow. curl_exec() при нём
+        // возвращает false; прежняя проверка ждала null и is_array-ответ в
+        // строке, так что такие сбои не записывались никуда. getUpdates
+        // медленный по природе — долгий опрос до 5 с.
+        if ($res === false) {
+            $this->slowLog(sprintf('telegram %s: сбой через %.1fs — %s', $method, $took, curl_error($ch)));
+            return null;
         }
-        return $r;
+        if ($took > ($method === 'getUpdates' ? 10 : 3)) {
+            $this->slowLog(sprintf('telegram %s: %.1fs', $method, $took));
+        }
+        return json_decode($res, true);
     }
 
 public function setcommands()
