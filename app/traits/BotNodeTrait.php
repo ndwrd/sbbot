@@ -312,12 +312,6 @@ public function nodeMenu($id)
             ],
             [
                 [
-                    'text'          => $this->i18n('ssh port') . ': ' . $this->nodeSshPort($node['ip']),
-                    'callback_data' => "/nodeSshPort $id",
-                ],
-            ],
-            [
-                [
                     'text'          => "{$this->i18n('delete')} {$node['label']}",
                     'callback_data' => "/delNode $id",
                 ],
@@ -377,7 +371,7 @@ public function nodeSetSshPort($port, $id)
         $port = trim($port);
         if (!preg_match('~^\d{1,5}$~', $port) || (int) $port < 1 || (int) $port > 65535) {
             $this->send($this->input['chat'], $this->i18n('wrong ssh port'));
-            $this->nodeMenu($id);
+            $this->nodeDomains($id);
             return;
         }
         $port = (int) $port;
@@ -389,7 +383,7 @@ public function nodeSetSshPort($port, $id)
         $this->setNode($id, $node);
         $online = $this->nodeIsOnline($node['ip']);
         $this->send($this->input['chat'], "{$node['label']}: " . str_replace('%port%', $port, $this->i18n($online ? 'ssh port saved' : 'ssh port no answer')));
-        $this->nodeMenu($id);
+        $this->nodeDomains($id);
     }
 
 public function nodeStopSingbox($ip)
@@ -485,6 +479,8 @@ public function nodeDomains($id, $restart = false)
             $text[] = "SSL: " . (!empty($node['cert']) && !empty($node['certExpiry']) ? date('Y-m-d H:i:s', $node['certExpiry']) : $this->i18n('not configured'));
         }
 
+        $text[] = $this->i18n('ssh port') . ': ' . $this->nodeSshPort($node['ip']);
+
         $data = [
             [
                 [
@@ -514,6 +510,10 @@ public function nodeDomains($id, $restart = false)
             [
                 'text'          => "MTProto Port",
                 'callback_data' => "/nodePortsDialog $id",
+            ],
+            [
+                'text'          => $this->i18n('ssh port') . ': ' . $this->nodeSshPort($node['ip']),
+                'callback_data' => "/nodeSshPort $id",
             ],
         ];
         if ($restart) {
