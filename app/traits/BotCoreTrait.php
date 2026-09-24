@@ -578,7 +578,15 @@ public function checkVersion()
                 $this->time = time();
                 $current    = file_get_contents('/version');
                 $b          = exec('git -C / rev-parse --abbrev-ref HEAD');
-                $last       = file_get_contents("https://raw.githubusercontent.com/ndwrd/sbbot/$b/version");
+                // Без таймаута PHP ждёт ответа default_socket_timeout (60 с), и
+                // всё это время стоит проход cron() — в том числе сбор статусов
+                // для меню, которое после 120 с считает кэш устаревшим и
+                // собирает их само, уже в процессе опроса Telegram.
+                $last       = file_get_contents(
+                    "https://raw.githubusercontent.com/ndwrd/sbbot/$b/version",
+                    false,
+                    stream_context_create(['http' => ['timeout' => 10]])
+                );
                 if (!empty($last) && $last != $this->last && $last != $current) {
                     $this->last = $last;
                     $diff       = array_slice(explode("\n", $last), 0, count(explode("\n", $last)) - count(explode("\n", $current)));
@@ -1019,7 +1027,13 @@ public function dockerApi($url, $method = 'GET', $data = [])
             CURLOPT_POSTFIELDS       => !empty($data) ? json_encode($data) : null,
             CURLOPT_URL              => "http://localhost$url",
             CURLOPT_RETURNTRANSFER   => true,
-            CURLOPT_UNIX_SOCKET_PATH => '/var/run/docker.sock'
+            CURLOPT_UNIX_SOCKET_PATH => '/var/run/docker.sock',
+            // Сокет локальный, но без таймаута зависший dockerd остановил бы и
+            // опрос Telegram: containerState() зовётся на каждую отрисовку меню.
+            // Действиям (стоп, старт, перезапуск) даём больше — docker ждёт,
+            // пока контейнер действительно остановится.
+            CURLOPT_CONNECTTIMEOUT   => 2,
+            CURLOPT_TIMEOUT          => $method === 'GET' ? 5 : 30,
         ]);
         $r = json_decode(curl_exec($ch), true);
         curl_close($ch);
@@ -1084,6 +1098,8 @@ public function containerLogs($service, $tail = 200)
             CURLOPT_URL              => "http://localhost/containers/$id/logs?stdout=1&stderr=1&tail=" . (int) $tail,
             CURLOPT_RETURNTRANSFER   => true,
             CURLOPT_UNIX_SOCKET_PATH => '/var/run/docker.sock',
+            CURLOPT_CONNECTTIMEOUT   => 2,
+            CURLOPT_TIMEOUT          => 10,
         ]);
         $raw = (string) curl_exec($ch);
         curl_close($ch);
