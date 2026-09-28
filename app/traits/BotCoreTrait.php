@@ -607,7 +607,7 @@ public function checkVersion()
                                 ]
                             ]);
                         }
-                        if ($this->getPacConf()['autoupdate']) {
+                        if (!empty($this->getPacConf()['autoupdate'])) {
                             $this->input['chat'] = $this->input['from'] = $c['admin'][0];
                             $this->applyupdatebot();
                         }
@@ -1248,7 +1248,7 @@ public function debug()
 public function autoupdate()
     {
         $p = $this->getPacConf();
-        $p['autoupdate'] = !$p['autoupdate'];
+        $p['autoupdate'] = !($p['autoupdate'] ?? false);
         $this->setPacConf($p);
         $this->menu('config');
     }
