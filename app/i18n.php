@@ -179,7 +179,7 @@ $i = [
     ],
     'restart'  => [
         'en' => 'Restart',
-        'ru' => 'Перезагрузка',
+        'ru' => 'Перезагрузить',
     ],
     'set key'  => [
         'en' => 'Set key',
@@ -247,7 +247,7 @@ $i = [
     ],
     'outbounds'  => [
         'en' => 'Outbounds',
-        'ru' => 'Outbounds',
+        'ru' => 'Протоколы',
     ],
     'rulesset'  => [
         'en' => 'Rulesset',
@@ -486,12 +486,12 @@ $i = [
         'ru' => 'Включить',
     ],
     'node online' => [
-        'en' => 'online',
-        'ru' => 'работает',
+        'en' => 'Online',
+        'ru' => 'Работает',
     ],
     'node offline' => [
-        'en' => 'offline',
-        'ru' => 'недоступна',
+        'en' => 'Offline',
+        'ru' => 'Недоступна',
     ],
     'node ssh busy' => [
         'en' => 'SSH not responding (server reachable, VPN may work)',
@@ -514,8 +514,8 @@ $i = [
         'ru' => 'порт SSH %port% сохранён, но нода по нему не отвечает',
     ],
     'node off' => [
-        'en' => 'off',
-        'ru' => 'выключена',
+        'en' => 'Off',
+        'ru' => 'Выключена',
     ],
     'system' => [
         'en' => 'System',
@@ -528,6 +528,34 @@ $i = [
     'node updating' => [
         'en' => 'updating...',
         'ru' => 'обновление...',
+    ],
+    'Domains' => [
+        'en' => 'Domains',
+        'ru' => 'Домены',
+    ],
+    'Ports' => [
+        'en' => 'Ports',
+        'ru' => 'Порты',
+    ],
+    'domains and ports' => [
+        'en' => 'Domains & Ports',
+        'ru' => 'Домены и Порты',
+    ],
+    'stats' => [
+        'en' => 'Stats',
+        'ru' => 'Статистика',
+    ],
+    'total' => [
+        'en' => 'Total',
+        'ru' => 'Всего',
+    ],
+    'port unset' => [
+        'en' => 'Port unset',
+        'ru' => 'Порт не задан',
+    ],
+    'MTProto port' => [
+        'en' => 'MTProto Port',
+        'ru' => 'Порт MTProto',
     ],
 ];
 

@@ -451,11 +451,14 @@ public function menuLang()
             $lang = array_merge($lang, array_keys($v));
         }
         $lang = array_unique($lang);
+        // Кнопка показывает название языка, а не код: "ru" ничего не говорит
+        // тому, кто не знает обозначений. Незнакомый код остаётся как есть.
+        $names = ['en' => 'English', 'ru' => 'Russian'];
         foreach ($lang as $v) {
             if ($v != $this->language) {
                 $data[] = [
                     [
-                        'text'          => $v,
+                        'text'          => $names[$v] ?? $v,
                         'callback_data' => "/lang $v",
                     ],
                 ];
@@ -468,7 +471,7 @@ public function menuLang()
             ],
         ];
         return [
-            'text' => 'Language',
+            'text' => $this->i18n('lang'),
             'data' => $data,
         ];
     }
@@ -518,7 +521,7 @@ public function domainsMenu()
             $certs      = $this->domainsCert() ?: [];
 
             $text[] = "<blockquote>";
-            $text[] = "Domains:";
+            $text[] = $this->i18n('Domains') . ':';
             $text[] = "General: {$conf['domain']}";
             if (!empty($conf['naiveSubdomain'])) {
                 $text[] = "Naive: {$conf['naiveSubdomain']}.{$conf['domain']}";
@@ -718,7 +721,7 @@ public function ports()
                 'callback_data' => "/changePort tg",
             ]],
             [[
-                'text'          => $this->i18n(empty($c['dnstt']) ? 'off' : 'on') . ' 53 dnstt',
+                'text'          => $this->i18n(empty($c['dnstt']) ? 'off' : 'on') . ' 53 Dnstt',
                 'callback_data' => "/hidePort dnstt",
             ]],
         ];

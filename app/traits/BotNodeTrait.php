@@ -272,7 +272,7 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeOutbounds $id",
                 ],
                 [
-                    'text'          => "{$this->i18n('Domains')} & {$this->i18n('Ports')}",
+                    'text'          => $this->i18n('domains and ports'),
                     'callback_data' => "/nodeDomains $id",
                 ],
             ],
@@ -282,7 +282,7 @@ public function nodeMenu($id)
                     'callback_data' => "/nodeMtproto $id",
                 ],
                 [
-                    'text'          => 'Stats',
+                    'text'          => $this->i18n('stats'),
                     'callback_data' => "/nodeStats $id",
                 ],
             ],
@@ -508,7 +508,7 @@ public function nodeDomains($id, $restart = false)
         }
         $data[] = [
             [
-                'text'          => "MTProto Port",
+                'text'          => $this->i18n('MTProto port'),
                 'callback_data' => "/nodePortsDialog $id",
             ],
             [
@@ -742,7 +742,7 @@ public function nodeStats($id)
             $download += $st['inbounds'][$tag]['download'] ?? 0;
             $upload   += $st['inbounds'][$tag]['upload']   ?? 0;
         }
-        $text[] = "Total: ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}";
+        $text[] = "{$this->i18n('total')}: ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}";
         foreach ([
             'vless-in'     => 'Vless',
             'naive-in'     => 'Naive',

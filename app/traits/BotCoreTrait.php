@@ -829,15 +829,15 @@ public function statusColumns(array $st, array $ports, $dnsttUsed)
         ];
         $col2 = [
             $this->i18n('on') . ' 443',
-            $this->i18n(!empty($tg['enable']) ? 'on' : 'off') . (!empty($tg['enable']) ? ' ' . $tg['port'] : ' port unavailable'),
+            $this->i18n(!empty($tg['enable']) ? 'on' : 'off') . (!empty($tg['enable']) ? ' ' . $tg['port'] : ' ' . $this->i18n('port unset')),
             '',
         ];
         // Статус dnstt появляется насовсем после первой настройки (dnsttUsed,
         // см. setdnsttDomain()/setdnsttPassword()) — до этого dnstt никак себя
         // не проявляет. Порт у него всегда 53 (сменить нельзя, в отличие от
-        // tg), поэтому без ветки "port unavailable" — только on/off.
+        // tg), поэтому без ветки «порт не задан» — только on/off.
         if ($dnsttUsed) {
-            $col1[] = $this->i18n(!empty($st['dnstt']) ? 'on' : 'off') . ' dnstt';
+            $col1[] = $this->i18n(!empty($st['dnstt']) ? 'on' : 'off') . ' Dnstt';
             $col2[] = $this->i18n(!empty($ports['dnstt']['enable']) ? 'on' : 'off') . ' 53';
         }
         return $this->alignColumns([$col1, $col2]);
@@ -950,7 +950,7 @@ public function menu($type = false, $arg = false, $return = false)
         // setdnsttDomain()/setdnsttPassword(); до этого в меню её нет.
         if (!empty($conf['dnsttUsed'])) {
             $protocols[] = [
-                'text'          => 'DNSTT',
+                'text'          => 'Dnstt',
                 'callback_data' => "/dnstt",
             ];
         }

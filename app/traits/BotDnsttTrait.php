@@ -85,7 +85,7 @@ public function dnstt($update = false)
     {
         $c      = $this->getPacConf();
         $pubkey = @file_get_contents('/config/dnstt/server.pub') ?: '';
-        $text[] = "dnstt";
+        $text[] = "Dnstt";
         if (!empty($c['dnsttDomain']) && !empty($c['dnsttPassword'])) {
             $text[] = "<pre>set the NS record for {$c['dnsttDomain']}: tns.{$c['domain']}\nset A record for tns.{$c['domain']}: {$this->ip}</pre>";
             $text[] = "account: <code>vpnbot:{$c['dnsttPassword']}</code>";

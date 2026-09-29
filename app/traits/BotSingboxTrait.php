@@ -1103,7 +1103,7 @@ public function statsMenu()
         $text[] = '<blockquote>';
         $text[] = '<b>Traffic</b>';
         [$totalDownload, $totalUpload] = $this->getSingboxTotalTraffic($st);
-        $text[] = "Total: ↓{$this->getBytes($totalDownload)} ↑{$this->getBytes($totalUpload)}";
+        $text[] = "{$this->i18n('total')}: ↓{$this->getBytes($totalDownload)} ↑{$this->getBytes($totalUpload)}";
         foreach ([
             'vless-in'     => 'Vless',
             'naive-in'     => 'Naive',
@@ -1438,7 +1438,7 @@ public function singbox()
                 'callback_data' => "/routes",
             ],
             [
-                'text'          => 'Stats',
+                'text'          => $this->i18n('stats'),
                 'callback_data' => "/statsMenu",
             ],
         ];
