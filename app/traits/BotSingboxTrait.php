@@ -230,6 +230,15 @@ public function buildSingboxConfig($pac)
             'tag'         => 'hysteria2-in',
             'listen'      => '0.0.0.0',
             'listen_port' => 443,
+            // Чужой HTTP/3-запрос получает ответ сайта-обманки, а не отказ: тот
+            // же внутренний сайт, что ng отдаёт Telemt как decoy (8088, обычный
+            // HTTP — TLS здесь уже снял sing-box). По IP, а не по имени: в наших
+            // сетях включён IPv6, и DNS Docker отдал бы AAAA.
+            'masquerade'  => 'http://10.10.0.2:8088',
+            // Полосу, объявленную клиентом, не принимаем. Иначе sing-box
+            // переключается с BBR на Brutal, а тот намеренно игнорирует сигналы
+            // перегрузки — достаточно дописать её в ссылку руками.
+            'ignore_client_bandwidth' => true,
             'users'       => $protocolUsers,
             'tls'         => [
                 'enabled'          => true,
