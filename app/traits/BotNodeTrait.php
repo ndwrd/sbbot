@@ -756,12 +756,60 @@ public function nodeStats($id)
         $data = [
             [
                 [
+                    'text'          => $this->i18n('reset stats'),
+                    'callback_data' => "/nodeResetStats $id",
+                ],
+                [
+                    'text'          => $this->i18n(!empty($node['reset_monthly']) ? 'on' : 'off') . ' Reset monthly',
+                    'callback_data' => "/nodeSwitchMonthly $id",
+                ],
+            ],
+            [
+                [
                     'text'          => $this->i18n('back'),
                     'callback_data' => "/nodeMenu $id",
                 ],
             ],
         ];
         $this->update($this->input['chat'], $this->input['message_id'], implode("\n", $text), $data);
+    }
+
+// Сброс статистики одной ноды. Счётчики обнуляет сама нода (resetUserTraffic
+// по console.php), а накопленный по ней трафик пользователей чистится здесь —
+// в nodes_traffic.json, откуда его берёт итог "Бот + ноды". Если нода не
+// ответила, сброс остаётся в pending и повторится из collectNodesTraffic().
+public function nodeResetStats($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $ok = empty($node['off']) && !empty($node['ip'])
+            && $this->nodeConsole($node['ip'], 'resetUserTraffic', '') === 'ok';
+        $this->updateJsonLocked('/config/nodes_traffic.json', function ($c) use ($id, $ok) {
+            $e          = $c[$id] ?? [];
+            $e['users'] = [];
+            if (!$ok) {
+                $e['pending'] = $this->mergeTrafficReset($e['pending'] ?? [], '');
+            }
+            $c[$id] = $e;
+            return $c;
+        });
+        $this->nodeStats($id);
+    }
+
+// Ежемесячный сброс хранится в записи ноды у главного, а не на самой ноде: у
+// ноды нет токена бота, и уведомить админа о сбросе она бы не смогла. Сам сброс
+// делает cron главного — см. checkResetSingboxStats().
+public function nodeSwitchMonthly($id)
+    {
+        $node = $this->getNode($id);
+        if (empty($node)) {
+            return;
+        }
+        $node['reset_monthly'] = empty($node['reset_monthly']) ? 1 : 0;
+        $this->setNode($id, $node);
+        $this->nodeStats($id);
     }
 
 public function nodeRestart($id)
@@ -2234,19 +2282,27 @@ public function trafficReport()
 // одного (по имени). Счётчики sing-box обнуляются перезагрузкой (SIGHUP); у
 // остальных пользователей прошлая сессия не теряется — singboxStatsUser()
 // увидит, что счётчик стал меньше, и перенесёт её в накопленное.
+// Вызывается с главного через console.php. Раньше начиналось с pkill -HUP, то
+// есть сброс счётчиков обходился перезапуском sing-box: рвались соединения всех
+// клиентов ноды и обнулялся uptime. Теперь счётчики обнуляет сам sing-box по
+// API, не прерываясь.
 public function resetUserTraffic($username = '')
     {
-        $this->ssh('pkill -HUP sing-box || sing-box run -c /sing-box/config.json', 'sbx', false);
         $st = $this->getSingboxStats();
         if ($username === '') {
+            $this->resetSingboxCounters();
             $st = [];
         } else {
+            $this->resetSingboxCounters("user>>>{$username}>>>");
             foreach ($this->getPacConf()['singboxClients'] ?? [] as $i => $c) {
                 if (($c['username'] ?? null) === $username) {
                     unset($st['users'][$i]);
                 }
             }
         }
+        // Файл — последним: сборщик, попавший между шагами, иначе счёл бы
+        // обнулённый счётчик признаком перезапуска и перенёс старую сессию в
+        // накопленное.
         $this->setSingboxStats($st);
         return 'ok';
     }

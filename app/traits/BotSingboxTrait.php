@@ -340,6 +340,28 @@ public function queryV2raySingboxStats($host = null)
         return $result;
     }
 
+// Обнулить счётчики sing-box тем же v2ray-совместимым API, которым их читаем:
+// QueryStats с reset=true возвращает текущие значения и тут же обнуляет их.
+// Пустой pattern — все счётчики разом, "user>>>ИМЯ>>>" — только одного клиента.
+//
+// Почему не перезапуском, как было раньше: SIGHUP в sing-box 1.14 закрывает
+// экземпляр вместе с соединениями ВСЕХ клиентов и обнуляет uptime — слишком
+// дорого ради счётчиков. На Боте он к тому же не срабатывал вовсе:
+// reloadSingbox() шлёт сигнал только когда изменился конфиг, а при сбросе
+// статистики он не меняется, поэтому счётчики продолжали расти и возвращались
+// в файл при следующем сборе.
+public function resetSingboxCounters($pattern = '', $host = null)
+    {
+        $d = json_encode($pattern === '' ? ['reset' => true] : ['pattern' => $pattern, 'reset' => true]);
+        $this->ssh(
+            "grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '$d' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/QueryStats",
+            'sbx',
+            true,
+            '/dev/null',
+            $host,
+        );
+    }
+
 public function getSingboxSysStats($host = null)
     {
         $out = $this->ssh("grpcurl -plaintext -import-path /etc/singbox -proto stats.proto -d '{}' 127.0.0.1:8080 v2ray.core.app.stats.command.StatsService/GetSysStats", 'sbx', true, '/dev/null', $host);
@@ -470,32 +492,65 @@ public function checkResetSingboxStats()
         // Решение + отметка времени атомарно (см. checkBackup()): отметка тут
         // — единственное, что не даёт сбросить статистику дважды, а сам сброс
         // и рассылка админам долгие и идут уже снаружи блокировки.
-        $due = false;
-        $this->updatePacConf(function ($pac) use (&$due) {
-            if (empty($pac['reset_monthly'])) {
-                return null;
-            }
+        $due      = false;
+        $dueNodes = [];
+        $this->updatePacConf(function ($pac) use (&$due, &$dueNodes) {
             $now    = time();
             $start  = strtotime('first day of previous month midnight');
             $period = strtotime('1 month', 0);
             if (empty($start) || empty($period) || $now < $start) {
                 return null;
             }
+            // Ближайшее прошедшее первое число месяца.
             $lastScheduledReset = $start + (floor(($now - $start) / $period) * $period);
-            if (($pac['last_reset_singbox_time'] ?? 0) >= $lastScheduledReset) {
-                return null;
+            $changed = false;
+            if (!empty($pac['reset_monthly']) && ($pac['last_reset_singbox_time'] ?? 0) < $lastScheduledReset) {
+                $pac['last_reset_singbox_time'] = $now;
+                $due     = true;
+                $changed = true;
             }
-            $pac['last_reset_singbox_time'] = $now;
-            $due = true;
-            return $pac;
+            // У каждой ноды свой переключатель и своя отметка — сброс у них
+            // раздельный, как и ручной.
+            foreach ($pac['nodes'] ?? [] as $id => $node) {
+                if (empty($node['reset_monthly']) || ($node['last_reset_singbox_time'] ?? 0) >= $lastScheduledReset) {
+                    continue;
+                }
+                $pac['nodes'][$id]['last_reset_singbox_time'] = $now;
+                $dueNodes[] = $id;
+                $changed    = true;
+            }
+            return $changed ? $pac : null;
         });
+        if (empty($due) && empty($dueNodes)) {
+            return;
+        }
+        require dirname(__DIR__) . '/config.php';
         if ($due) {
             $st = $this->getSingboxStats();
             [$download, $upload] = $this->getSingboxTotalTraffic($st);
             $this->resetXrStats(1);
-            require dirname(__DIR__) . '/config.php';
             foreach ($c['admin'] ?? [] as $admin) {
                 $this->send($admin, "vless: monthly traffic ↓{$this->getBytes($download)} ↑{$this->getBytes($upload)}, stats reset");
+            }
+        }
+        foreach ($dueNodes as $id) {
+            $node = $this->getNode($id);
+            if (empty($node)) {
+                continue;
+            }
+            $ok = empty($node['off']) && !empty($node['ip'])
+                && $this->nodeConsole($node['ip'], 'resetUserTraffic', '') === 'ok';
+            $this->updateJsonLocked('/config/nodes_traffic.json', function ($t) use ($id, $ok) {
+                $e          = $t[$id] ?? [];
+                $e['users'] = [];
+                if (!$ok) {
+                    $e['pending'] = $this->mergeTrafficReset($e['pending'] ?? [], '');
+                }
+                $t[$id] = $e;
+                return $t;
+            });
+            foreach ($c['admin'] ?? [] as $admin) {
+                $this->send($admin, "{$node['label']}: monthly stats reset" . ($ok ? '' : ' (нода недоступна, сброс отложен)'));
             }
         }
     }
@@ -1069,26 +1124,33 @@ public function setSingboxStats($x)
         file_put_contents('/config/singbox.stats', json_encode($x));
     }
 
+// Сброс одного пользователя идёт и по нодам: его итог в карточке — сумма
+// "Бот + ноды", и обнулять половину слагаемых незачем. Это не противоречит
+// раздельному сбросу всей статистики: там речь про счётчики сервера, здесь —
+// про одного клиента.
 public function resetXrUser($i)
     {
+        $name = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i]['username'] ?? null;
+        if ($name !== null) {
+            $this->resetSingboxCounters("user>>>{$name}>>>");
+            $this->nodesTrafficReset($name);
+        }
         $c = $this->getSingboxStats();
         unset($c['users'][$i]);
         $this->setSingboxStats($c);
-        // И на нодах — там пользователь ищется по имени.
-        $name = $this->getSingbox()['inbounds'][0]['settings']['clients'][$i]['username'] ?? null;
-        if ($name !== null) {
-            $this->nodesTrafficReset($name);
-        }
-        $this->restartSingbox($this->getSingbox());
         $this->userXr($i);
     }
 
+// Сброс статистики только Бота: у каждой ноды своя кнопка на её экране.
 public function resetXrStats($nomenu = false)
     {
-        $this->restartSingbox($this->getSingbox());
+        // Порядок важен: сначала обнуляем счётчики, потом чистим файл. Если
+        // сделать наоборот, сборщик между двумя шагами увидит счётчик больше
+        // пустой сессии и ничего не заметит, а вот при обратном порядке он
+        // увидел бы "счётчик меньше сохранённого", счёл это перезапуском и
+        // перенёс старую сессию в накопленное — трафик вернулся бы.
+        $this->resetSingboxCounters();
         $this->setSingboxStats([]);
-        // И на нодах: итог пользователя — сумма Бота и нод.
-        $this->nodesTrafficReset();
         if (empty($nomenu)) {
             $this->statsMenu();
         }

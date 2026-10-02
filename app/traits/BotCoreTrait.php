@@ -167,6 +167,12 @@ public function action()
             case preg_match('~^/nodeStats (\w+)$~', $this->input['callback'], $m):
                 $this->nodeStats($m[1]);
                 break;
+            case preg_match('~^/nodeResetStats (\w+)$~', $this->input['callback'], $m):
+                $this->nodeResetStats($m[1]);
+                break;
+            case preg_match('~^/nodeSwitchMonthly (\w+)$~', $this->input['callback'], $m):
+                $this->nodeSwitchMonthly($m[1]);
+                break;
             case preg_match('~^/nodeRestart (\w+)$~', $this->input['callback'], $m):
                 $this->nodeRestart($m[1]);
                 break;
