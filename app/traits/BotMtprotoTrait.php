@@ -194,7 +194,29 @@ public function tgWriteConfig()
         $pac     = $this->getPacConf();
         $webHost = $this->tgWebHost($pac);
         $webKey  = $this->tgWebSecret();
-        $web     = $webHost !== '' && $ip !== '' && $webKey !== '';
+        // public_addr обязан быть тем адресом, на который указывает WEB-имя
+        // (документация Telemt): он участвует во внутреннем маршруте relay.
+        // Берём его из DNS, а не из окружения. При нескольких адресах на хосте
+        // "первый из hostname -I" и адрес WEB-имени — разные вещи, и расходятся
+        // они молча: имя переехало на второй адрес, а Telemt продолжает
+        // объявлять первый. middle_proxy_nat_ip ниже — наоборот, исходящий
+        // адрес, и он остаётся из окружения. Имя не разрешилось — откатываемся
+        // на окружение, то есть на прежнее поведение, а не пишем пустое.
+        // Запрос к DNS здесь не на каждом тике: tgWriteConfig() зовётся при
+        // старте и при смене настроек MTProto (init.php, applyMtproto()).
+        $webIp = '';
+        if ($webHost !== '') {
+            $webIp = $this->resolveA($webHost);
+            if ($webIp === '') {
+                // Имя не разрешилось — держим то, что уже записано в конфиге:
+                // иначе временный сбой DNS менял бы холодную часть и
+                // перезапускал Telemt, обрывая MTProto. Конфига ещё нет —
+                // откатываемся на окружение, то есть на прежнее поведение.
+                preg_match('~^public_addr\s*=\s*"([0-9.]+):~m', (string) @file_get_contents($path), $mm);
+                $webIp = $mm[1] ?? $ip;
+            }
+        }
+        $web     = $webHost !== '' && $webIp !== '' && $webKey !== '';
         $webOff  = $web && empty($pac['tgWeb']);
         $userOff = !empty($pac['tgUserOff']);
         $webLines = !$web ? [] : [
@@ -218,7 +240,7 @@ public function tgWriteConfig()
             '',
             '[[web.vhosts]]',
             'host = ' . $q($webHost),
-            'public_addr = ' . $q("$ip:443"),
+            'public_addr = ' . $q("$webIp:443"),
             '',
             // Всё неопознанное — на тот же сайт-обманку, что и основной домен
             // (внутренний server на 8088 в nginx_default.conf).
@@ -301,6 +323,24 @@ public function tgColdPart($toml)
     {
         $toml = preg_replace('~^ad_tag\s*=.*\R?~m', '', $toml);
         return preg_replace('~^\[access\.users\].*~ms', '', $toml);
+    }
+
+// WEB-имя может переехать на другой адрес (несколько IP на хосте, смена адреса
+// сервера, восстановление бэкапа на новый сервер до переноса DNS). public_addr
+// в конфиге Telemt обязан совпадать с ним, а конфиг пишется только при старте и
+// при смене настроек MTProto — без этой проверки расхождение держалось бы до
+// следующего перезапуска. restartTG() ничего не делает, если файл не изменился,
+// так что в обычной жизни это один запрос к DNS раз в пять минут.
+public function checkTgWebAddr()
+    {
+        if (!empty($this->time_tg_addr) && time() - $this->time_tg_addr < 300) {
+            return;
+        }
+        $this->time_tg_addr = time();
+        if ($this->tgWebHost() === '') {
+            return;
+        }
+        $this->restartTG();
     }
 
 // Применить текущие настройки. Остановленный контейнер не поднимаем: его

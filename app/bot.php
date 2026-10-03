@@ -43,6 +43,7 @@ class Bot
     public $time;
     public $time2;
     public $time_singbox_stats;
+    public $time_tg_addr;
     public $time_node_cert;
     public $time_apps_cache;
     public $time_apps_ttl;

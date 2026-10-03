@@ -544,6 +544,7 @@ public function cron()
             'checkVersion', 'checkBackup', 'checkLogs', 'checkResetSingboxStats', 'checkCert',
             'singboxStatsUser', 'checkNodeProvisioning', 'checkNodeUpdating', 'checkNodeRestarting',
             'checkNodeCerts', 'checkNodeAutoCleanLogs', 'checkAppDownloadLinks',
+            'checkTgWebAddr',
         ];
         while (true) {
             // Граница единицы работы для кэша getPacConf(): внутри одного
