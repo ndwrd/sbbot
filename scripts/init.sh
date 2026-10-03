@@ -13,7 +13,8 @@ apt install -y \
     xtables-addons-common \
     xtables-addons-dkms \
     inotify-tools \
-    ufw
+    ufw \
+    cron
 curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
 
 # Best-effort IPv6 egress for containers (lets sing-box's direct outbound reach
@@ -68,3 +69,10 @@ else
 \$c = ['key' => '$1'];" > ./app/config.php
 fi
 make u
+
+# Автозапуск после перезагрузки хоста. Без него контейнеры не поднимаются
+# сами: restart: в docker-compose.yml намеренно закомментирован, чтобы
+# остановка и обновление не воевали с докером. Нода, перезагруженная
+# хостером, иначе просто не вернётся в строй, и заметно это станет только
+# по её серому кружку в меню.
+make cron

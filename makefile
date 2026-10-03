@@ -62,6 +62,6 @@ backup:
 mtproto:
 	docker compose exec php php mtproto.php
 cron: # установка задачи в cron для автозапуска при перезагрузке
-	@(crontab -l 2>/dev/null | grep -v "cd /root/sbbot && make r"; echo "@reboot cd /root/sbbot && make r") | crontab -
+	@(crontab -l 2>/dev/null | grep -v "cd /root/sbbot && make r"; echo "@reboot until docker info >/dev/null 2>&1; do sleep 2; done; cd /root/sbbot && make r") | crontab -
 uncron: # удаление задачи из cron
 	@crontab -l 2>/dev/null | grep -v "cd /root/sbbot && make r" | crontab -
