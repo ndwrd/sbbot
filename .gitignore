@@ -22,12 +22,6 @@
 !/logs/.gitkeep
 /ssh/*
 !/ssh/.gitkeep
-/app/zaprelists/*
-!/app/zaprelists/.gitkeep
-/sftp-config.json
-/tg.pyr
-/config/wg0.conf
-/config/hwid.json
 /config/pac.json
 /config/mtprotosecret
 /config/mtprotodomain
@@ -40,7 +34,6 @@
 /todo.todo
 .vscode/
 .idea/
-mirror/.env
 update/*
 !update/update.sh
 
@@ -51,7 +44,6 @@ docker-compose.override.yml
 backup.json
 app/override/*
 !app/override/.gitkeep
-.rest
 
 subscription.override.php
 apps.override.json
@@ -60,4 +52,4 @@ override.conf
 i18n.override.php
 # Инструменты разработки — только локально, в репозиторий не идут.
 /tests/
-/.editorConfig
+/.editor[Cc]onfig

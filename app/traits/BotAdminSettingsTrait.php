@@ -538,6 +538,14 @@ public function domainsMenu()
             $text[] = "</blockquote>";
         }
 
+        // Без домена текст оставался пустым, а Telegram отклоняет
+        // editMessageText с пустым текстом (400). request() такие отказы не
+        // логирует, поэтому кнопка Domains просто "не отвечала" — ровно в том
+        // состоянии, из которого домен и добавляют (свежая установка, /deldomain).
+        if (empty($text)) {
+            $text[] = $this->i18n('Domains') . ': ' . $this->i18n('not configured');
+        }
+
         $data = [
             [
                 [
