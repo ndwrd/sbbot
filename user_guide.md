@@ -514,6 +514,28 @@ Origin-шаблоны (Шаблоны → Origin) — это файлы `config/
 cd ~/sbbot && mkdir -p /root/origin_keep && cp config/sing.json config/clash.json config/xray.json config/sing-server.json /root/origin_keep/ && make c && git pull && cp /root/origin_keep/*.json config/ && make r
 ```
 
+## Восстановление из бэкапа в консоли
+
+Если бот ещё не отвечает в Telegram (например, сразу после переустановки),
+бэкап можно вернуть с сервера. Файл — тот, что присылает бот (`export`) или что
+делает `make backup`; бэкап vpnbot тоже подойдёт, он переведётся сам.
+
+Сначала проверка без изменений — покажет тип бэкапа и разделы:
+
+```bash
+cd ~/sbbot && make restore-check FILE=backup.json
+```
+
+Затем само восстановление:
+
+```bash
+cd ~/sbbot && make restore FILE=backup.json
+```
+
+Прогресс печатается в консоль: сертификаты, `pac`, MTProto, sing-box, перенос
+nginx. Без `FILE` берётся `backup.json` из каталога бота. После восстановления
+бот в Telegram работает с теми же настройками, что и до переустановки.
+
 ## Переезд с vpnbot
 
 Бэкап vpnbot восстанавливается в sbbot так же, как собственный: бот сам

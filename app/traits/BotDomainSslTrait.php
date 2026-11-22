@@ -346,6 +346,8 @@ public function cloakNginx()
         }
         $h = $this->getHashBot();
         $template = preg_replace('~(/webapp|/pac|/ws)~', '${1}' . $h, $template);
+        // Прежний файл — для отката, если nginx новый не примет (см. ниже).
+        $previous = @file_get_contents('/config/nginx.conf');
         file_put_contents('/config/nginx.conf', $template);
         // путь /ws$hash считается заново в buildSingboxConfig() из getHashBot() при каждом
         // restartSingbox() — достаточно один раз перегенерировать конфиг после смены hash.
@@ -361,11 +363,23 @@ public function cloakNginx()
 
         $test = $this->ssh('nginx -t 2>&1', 'ng');
         if (stripos($test, 'successful') === false) {
-            // Не шлём reload на заведомо битый конфиг — nginx просто продолжит молча
-            // работать со старым, и ошибка останется незамеченной (как уже было).
+            // Не шлём reload на заведомо битый конфиг — nginx продолжит работать со
+            // старым. Но файл на диске уже новый: пока контейнер не перезапустят,
+            // этого не видно, а после перезапуска ng не поднимется, и up, который
+            // ждёт его здоровым, тоже. Поэтому при отказе возвращаем прежний файл.
+            // Откат — только если nginx действительно ответил ошибкой ([emerg]):
+            // пустой ответ значит, что ng не запущен и проверять было некому, и
+            // затирать только что собранный конфиг старым тогда незачем.
+            // Запись через file_put_contents, не через rename: контейнер смонтировал
+            // файл, а не каталог, и новый inode он бы не увидел.
+            $rolledBack = false;
+            if ($previous !== false && stripos($test, '[emerg]') !== false) {
+                file_put_contents('/config/nginx.conf', $previous);
+                $rolledBack = true;
+            }
             require dirname(__DIR__) . '/config.php';
             foreach ($c['admin'] ?? [] as $admin) {
-                $this->send($admin, "nginx config test failed, reload skipped:\n$test");
+                $this->send($admin, 'nginx config test failed, ' . ($rolledBack ? 'previous config restored' : 'reload skipped') . ":\n$test");
             }
             return $test;
         }

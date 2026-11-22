@@ -59,6 +59,12 @@ reset:
 	make u
 backup:
 	docker compose exec php php backup.php > backup.json
+restore: # восстановление из backup.json (make restore FILE=путь/к/backup.json)
+	@test -f "$(or $(FILE),backup.json)" || (echo "file not found: $(or $(FILE),backup.json)" && exit 1)
+	docker compose exec -T php php restore.php < "$(or $(FILE),backup.json)"
+restore-check: # проверка файла бэкапа без восстановления
+	@test -f "$(or $(FILE),backup.json)" || (echo "file not found: $(or $(FILE),backup.json)" && exit 1)
+	docker compose exec -T php php restore.php --check < "$(or $(FILE),backup.json)"
 mtproto:
 	docker compose exec php php mtproto.php
 cron: # установка задачи в cron для автозапуска при перезагрузке
